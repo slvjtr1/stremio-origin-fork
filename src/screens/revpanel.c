@@ -56,7 +56,7 @@ static struct {
   int zone; /* 0 options, 1 comments, 2 the switch */ int optIdx, nopt, cIdx, expanded; Opt opt[MAXOPT]; FPill pill, cpill; Nudge nudge; QT listY; double openAt;
   /* laid out once per change (the answers, the language, the library, what is opened): never per frame */
   unsigned lay, rvVer, lg, lv; int layExp, laySel;
-  char tag[64], chip[MAXSW][40],  title[300], info[200], syn[1100], still[512], logo[512], spost[160]; int logoOn, layLogo; int synN, synMax, nShown; const RevTile *tiles[6];
+  char tag[64], chip[MAXSW][40],  title[300], info[200], syn[1100], still[512], logo[512], spost[160]; int logoOn, layLogo, spoil; int synN, synMax, nShown; const RevTile *tiles[6];
   char scoreS[16], votesS[64], when[REV_MAXC][48]; int pct[10], nl[REV_MAXC], more[REV_MAXC]; float cy[REV_MAXC], ch[REV_MAXC], listH; QT cyA[REV_MAXC]; int animN; double tileAt[6]; int tileN; double apAt[8]; unsigned apSig[8]; char tileV[6][16]; /* when each part first had something to show (it fades in from then) */ int tab, ntab, layTab, vis[REV_MAXC], nvis; char tabSrc[4][12]; int tabN[4]; Tween tbF[4]; FPill tpill; float tabX[4], tabW[4]; double tabAt; int tabDir; /* the comments' tabs: all, then each source; the highlight glides between them, the list slides in */ Tween chF[MAXSW]; FPill spill; int ns, seasonList[MAXSW - 1]; QT swX; /* the seasons the switch steps through, its scroll */ /* the comments' places as they slide, the chips' focus as it fades */
   char optLbl[MAXOPT][64]; const char *optIcon[MAXOPT]; float optW[MAXOPT]; float ttlW; int ttlN;
 } R;
@@ -164,6 +164,11 @@ static int key(int k) {
 }
 /* ---- the layout: strings and heights, made again when something they show changed ---- */
 static void tiles_pick(void) { R.nShown = 0; for (int i = 0; i < R.rv->ntiles && R.nShown < 6; i++) R.tiles[R.nShown++] = &R.rv->tiles[i]; } /* every source, the main score's too */
+/* an episode seen (the account's library says so) */
+static int ep_seen(const cJSON *m, const cJSON *v) {
+  const cJSON *lit = lib_get(R.it.id), *videos = js_arr(m, "videos"), *x; int n = videos ? cJSON_GetArraySize(videos) : 0, seen = 0, i = 0;
+  if (!lit || n <= 0 || !v) return 0; int *f = calloc((size_t)n, sizeof(int)); if (!f) return 0; lib_ep_watched_map(lit, videos, f);
+  cJSON_ArrayForEach(x, videos) { if (x == v) { seen = f[i]; break; } i++; } free(f); return seen; }
 static void layout(void) {
   unsigned lg = i18n_gen(), lv = lib_version();
   if (R.lay && R.rvVer == R.rv->ver && R.lg == lg && R.lv == lv && R.layExp == R.expanded && R.laySel == R.sel && R.layTab == R.tab && R.layLogo == (R.logo[0] && !img_failed(R.logo))) return;
@@ -176,6 +181,7 @@ static void layout(void) {
     char d[64], rt[32] = ""; date_of(js_str(v, "released", js_str(v, "firstAired", NULL)), d, sizeof d); int mn = sb_runtime_min(js_str(v, "runtime", "")); if (mn) sb_fmt_runtime(mn, rt, sizeof rt);
     snprintf(R.info, sizeof R.info, "%s%s%s", rt, rt[0] && d[0] ? "  \xc2\xb7  " : "", d);
     snprintf(R.syn, sizeof R.syn, "%s", js_str(v, "overview", js_str(v, "description", "")));
+    R.spoil = spoiler_on() && !ep_seen(m, v); if (R.spoil && R.syn[0]) snprintf(R.syn, sizeof R.syn, "%s", T("The story shows once you watch it")); /* (no spoilers: Settings > Playback) */
     const char *th = js_str(v, "thumbnail", NULL); if (th && *th) snprintf(R.still, sizeof R.still, "%s", th); else if (sb_is_imdb(R.it.id)) snprintf(R.still, sizeof R.still, "https://episodes.metahub.space/%s/%d/%d/w780.jpg", R.it.id, R.season, R.episode); else R.still[0] = 0; }
   else { snprintf(R.chip[0], sizeof R.chip[0], "%s", T(!strcmp(R.it.type, "series") ? "Series" : "Movie"));
     for (int i = 0; i < R.ns; i++) { snprintf(s, sizeof s, "%d", R.seasonList[i]); snprintf(R.chip[i + 1], sizeof R.chip[i + 1], "%s", T1("Season {n}", "n", s)); }
@@ -353,10 +359,12 @@ static void draw_left(float x, float top, int rtl) {
   int al = rtl ? ALIGN_RIGHT : ALIGN_LEFT; float tx = rtl ? x + LW : x, y = top;
   /* the still (an episode) or the backdrop, the poster when there is none */
   { GLuint t = 0; float u0 = 0, v0 = 0, u1 = 1, v1 = 1, rad = 0;
+    if (R.still[0] && is_ep() && R.spoil && !spoiler_failed(R.still)) { if (!spoiler_draw(R.still, x, y, LW, STILL_H, 18)) ph_box(x, y, LW, STILL_H, 18); goto stillDone; } /* not seen yet: blurred */
     if (R.still[0] && is_ep()) { t = img_get_shaped(R.still, 589, 331, 18, 1); } /* the episode list's own cut of the still */
     else if (R.still[0]) { float asp; t = img_get(R.still, 1280, 720, &asp); if (t) { img_cover_uv(asp, LW / STILL_H, 0, &u0, &v0, &u1, &v1); rad = 18; } } /* the page's backdrop, as decoded for it */
     float sa = ap(AP_STILL, t != 0); if (sa < 1) ph_surface(x, y, LW, STILL_H, 18); if (t) gfx_image(t, x, y, LW, STILL_H, rad, WHITE_A((int)(255 * sa)), u0, v0, u1, v1); /* (the picture fades in over the waiting look) */
-    if (t) gfx_rrect_v(x, y + STILL_H * 0.6f, LW, STILL_H * 0.4f, 0, BLACK_A(0), BLACK_A((int)(110 * sa))); }
+    if (t) gfx_rrect_v(x, y + STILL_H * 0.6f, LW, STILL_H * 0.4f, 0, BLACK_A(0), BLACK_A((int)(110 * sa)));
+    stillDone:; }
   /* a season: its own poster on the picture, crossfading as the season changes */
   { float pa = 0; GLuint pt = 0; if (R.spost[0]) { pt = img_get_shaped(R.spost, 170, 255, 12, 1); pa = ap_sig(AP_SPOST, pt != 0, hsh(R.spost)); } else ap(AP_SPOST, 0);
     if (pt && pa > 0) { float pw = 170, ph2 = 255, px = rtl ? x + 20 : x + LW - 20 - pw, py = y + STILL_H - 20 - ph2 + 10 * (1 - pa);

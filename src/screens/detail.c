@@ -577,10 +577,13 @@ static void draw_ep(int i, float x, float y) {
   int unrel = r->unrel, w = r->w; const char *src = r->src;
   float TW = 589, TH = 331;
   /* stills cut to the card with their corners once (the plain image program draws them) */
-  GLuint t = src[0] ? img_get_shaped(src, (int)TW, (int)TH, 18, 1) : 0; int fb = !src[0] || img_shaped_failed(src, (int)TW, (int)TH, 18, 1);
+  int blur = spoiler_on() && !w && !unrel && !r->res; /* (Settings > Playback: not seen yet, no spoilers; the one under way is seen) */
+  GLuint t = src[0] && !blur ? img_get_shaped(src, (int)TW, (int)TH, 18, 1) : 0; int fb = blur ? spoiler_failed(src) : !src[0] || img_shaped_failed(src, (int)TW, (int)TH, 18, 1);
   if (ph_hold() && !fb) t = 0;
   float tf = t ? gfx_tex_fade(t) : 0, shade = 1;
-  if (fb && !t) ph_surface(x, y, TW, TH, 18);
+  if (blur && !fb && !ph_hold() && spoiler_draw(src, x, y, TW, TH, 18)) shade = 1;
+  else if (blur && !fb) ph_box(x, y, TW, TH, 18); /* (its blur on the way: the waiting look) */
+  else if (fb && !t) ph_surface(x, y, TW, TH, 18);
   else { ph_picture(t, x, y, TW, TH, 18, WHITE_A(255)); shade = tf; } /* waiting: the app's waiting look; the lower shade waits too */
   if (!t && fb) { const char *bu = DC.fb; GLuint bt = *bu ? img_get_shaped(bu, (int)TW, (int)TH, 18, 1) : 0;
     if (bt) gfx_image(bt, x, y, TW, TH, 0, WHITE_A(107), 0, 0, 1, 1); } /* the show's backdrop, dimmed */
@@ -598,7 +601,8 @@ static void draw_ep(int i, float x, float y) {
   const char *info = r->info;
   if (info[0]) { text_draw(info, tx, ty, 24, 600, WHITE_A(184), 0, TW, al); ty += text_line_height(24); }
   const char *ov = r->ov;
-  if (*ov) text_draw_wrapped(ov, tx, ty + 8 + (34 - text_line_height(25)) / 2, TW, 3, 25, 400, WHITE_A(196), 0, al, 34);
+  if (blur && *ov) text_draw(T("The story shows once you watch it"), tx, ty + 8 + (34 - text_line_height(25)) / 2, 25, 400, WHITE_A(120), 0, TW, al);
+  else if (*ov) text_draw_wrapped(ov, tx, ty + 8 + (34 - text_line_height(25)) / 2, TW, 3, 25, 400, WHITE_A(196), 0, al, 34);
 }
 /* best stream on, the focus resting 3 s on an episode: a small glass chip on its still says Down lists all its streams;
    it fades and rises in softly, then breathes very gently and a faint sheen crosses it now and then, for as long as it shows */

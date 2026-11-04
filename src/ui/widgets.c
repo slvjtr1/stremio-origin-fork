@@ -446,3 +446,23 @@ void pill_to(Pill *p, float x, float y, float w, float h) {
 }
 void pill_hide(Pill *p) { if (p->shown) { p->shown = 0; tween_to(&p->a, 0, 0.2f, EASE_OUT); } }
 void pill_tick(Pill *p, float dt) { tween_tick(&p->x, dt); tween_tick(&p->y, dt); tween_tick(&p->w, dt); tween_tick(&p->h, dt); tween_tick(&p->a, dt); }
+
+/* unwatched episodes blurred (Settings > Playback): the still drawn from a tiny copy of itself (24 x 14), stretched
+   smooth, then the same copy eight more times a little apart around it, each weighed so all nine count the same (a
+   wide, even blur: shapes and faces melt into colour), under a light veil; the story under it is not shown either */
+#include "core/store.h"
+#define SP_W 24
+#define SP_H 14
+int spoiler_on(void) { static unsigned ser = ~0u; static int on; if (store_serial() != ser) { ser = store_serial(); on = !strcmp(store_get("blurUnseen", "false"), "true"); } return on; }
+int spoiler_failed(const char *src) { return !src || !*src || img_shaped_failed(src, SP_W, SP_H, 0, 1); }
+int spoiler_draw(const char *src, float x, float y, float w, float h, float r) {
+  if (!src || !*src) return 0; GLuint t = img_get_shaped(src, SP_W, SP_H, 0, 1); if (!t) return 0;
+  static const float D[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 0.7f, 0.7f }, { -0.7f, 0.7f }, { 0.7f, -0.7f }, { -0.7f, -0.7f } };
+  const float du = 1.4f / SP_W, dv = 1.4f / SP_H; /* about a texel and a half of the tiny copy */
+  gfx_opacity_push(gfx_tex_fade(t));
+  gfx_image(t, x, y, w, h, r, WHITE_A(255), 0, 0, 1, 1);
+  for (int k = 0; k < 8; k++) { float ou = D[k][0] * du, ov = D[k][1] * dv; /* layer k+2 of k+2: 1/(k+2) keeps every layer's share equal */
+    gfx_image(t, x, y, w, h, r, WHITE_A((int)(255.0f / (k + 2) + 0.5f)), ou, ov, 1 + ou, 1 + ov); }
+  gfx_rrect(x, y, w, h, r, BLACK_A(56));
+  gfx_opacity_pop(); return 1;
+}

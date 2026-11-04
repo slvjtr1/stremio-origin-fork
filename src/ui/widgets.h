@@ -85,4 +85,9 @@ typedef struct { Tween x, y, w, h, a; int shown; float dur; } Pill;
 void pill_to(Pill *p, float x, float y, float w, float h);
 void pill_hide(Pill *p);
 void pill_tick(Pill *p, float dt);
+/* unwatched episodes blurred (Settings > Playback: "blurUnseen"); draw: 0 while the picture is not there yet;
+   failed: there is no picture to blur (none, or it could not be had) */
+int  spoiler_on(void);
+int  spoiler_failed(const char *src);
+int  spoiler_draw(const char *src, float x, float y, float w, float h, float r);
 #endif
