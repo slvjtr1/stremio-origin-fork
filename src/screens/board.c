@@ -1,4 +1,5 @@
 #include "screens/board.h"
+#include "core/tmdbcat.h"
 #include "screens/btrailer.h"
 #include "core/keys.h"
 #include "core/i18n.h"
@@ -157,6 +158,9 @@ static void on_feat(ItemList *l, int cached, void *ud) {
 static void feat_fill(Board *b) {
   if (b->kind != 1 || b->nfeat || b->featLoad) return; b->featLoad = 1; b->featGotM = b->featGotS = 0;
   time_t t = time(NULL); struct tm tm; localtime_r(&t, &tm); char u[200];
+  if (tmdb_has_key()) { /* TMDB's trending of the day, in your language */
+    tmdbcat_make("trending/movie/day.json", u, sizeof u); sb_catalog_url(u, "movie", 20, on_feat, (void *)0);
+    tmdbcat_make("trending/tv/day.json", u, sizeof u); sb_catalog_url(u, "series", 20, on_feat, (void *)1); return; }
   snprintf(u, sizeof u, CINEMETA "/catalog/movie/year/genre=%d.json", tm.tm_year + 1900); sb_catalog_url(u, "movie", 20, on_feat, (void *)0);
   sb_catalog_url(CINEMETA "/catalog/series/top.json", "series", 20, on_feat, (void *)1);
 }

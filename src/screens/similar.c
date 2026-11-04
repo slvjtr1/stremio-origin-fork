@@ -2,6 +2,8 @@
    the most notable first, from Wikidata (cast, director, writer, with their IMDb ids; ranked by how many wikis
    cover each). */
 #include "screens/similar.h"
+#include "core/tmdbcat.h"
+#include "core/tmdb.h"
 #include "core/keys.h"
 #include "core/i18n.h"
 #include "core/json.h"
@@ -61,7 +63,12 @@ static void on_meta(cJSON *m, void *ud) {
   const char *g = gs && cJSON_GetArraySize(gs) && cJSON_IsString(cJSON_GetArrayItem(gs, 0)) ? cJSON_GetArrayItem(gs, 0)->valuestring : "";
   for (const char *q = g; *q; q++) if ((unsigned char)*q >= 0x80) { g = ""; break; } /* a translated name: the top titles instead */
   char u[512], ge[128] = ""; if (*g) { const char *s = g; char *d = ge; while (*s && d < ge + 120) { if ((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9') || *s == '-') *d++ = *s; else { snprintf(d, 4, "%%%02X", (unsigned char)*s); d += 3; } s++; } *d = 0; }
-  if (ge[0]) snprintf(u, sizeof u, CINEMETA "/catalog/%s/top/genre=%s.json", G.p.it.type, ge); else snprintf(u, sizeof u, CINEMETA "/catalog/%s/top.json", G.p.it.type);
+  if (tmdb_has_key()) { int tid = (int)js_num(m, "moviedb_id", 0), tv = !strcmp(G.p.it.type, "series"), gid = tmdbcat_genre(G.p.it.type, g); char p[200]; /* TMDB: in your language */
+    if (tid) snprintf(p, sizeof p, "%s/%d/recommendations.json", tv ? "tv" : "movie", tid);
+    else if (gid) snprintf(p, sizeof p, "discover/%s?with_genres=%d&sort_by=popularity.desc.json", tv ? "tv" : "movie", gid);
+    else snprintf(p, sizeof p, "%s/popular.json", tv ? "tv" : "movie");
+    tmdbcat_make(p, u, sizeof u); }
+  else if (ge[0]) snprintf(u, sizeof u, CINEMETA "/catalog/%s/top/genre=%s.json", G.p.it.type, ge); else snprintf(u, sizeof u, CINEMETA "/catalog/%s/top.json", G.p.it.type);
   sb_catalog_url(u, G.p.it.type, 31, on_cat, (void *)(uintptr_t)G.gen);
 }
 static void enter(const void *pp) {

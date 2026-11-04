@@ -1,4 +1,6 @@
 #include "core/stremio.h"
+#include "core/tmdbcat.h"
+#include "core/tmdb.h"
 #include "core/net.h"
 #include "core/store.h"
 #include "core/json.h"
@@ -112,8 +114,9 @@ static void def_set(CatalogDef *d, const char *title, const char *type, const ch
    or with the first option of each required property (Cinemeta's "year" with this year); never one that needs a
    search or a list of ids. from: how many to pass over first */
 static int board_defs(CatalogDef *out, int max, int from) {
-  int n = 0, seen = 0; cJSON *a = sb_addons(); const cJSON *ad; if (!a) return 0; int ai = 0;
+  int n = 0, seen = 0; cJSON *a = sb_addons(); const cJSON *ad; if (!a) return 0; int ai = 0, noCine = tmdb_has_key();
   cJSON_ArrayForEach(ad, a) { if (!sb_addon_on(ad)) { ai++; continue; } const cJSON *cats = js_arr(js_obj(ad, "manifest"), "catalogs"), *cat; char base[512]; addon_base(ad, base, sizeof base); int ci = 0;
+    if (noCine && !strncmp(base, CINEMETA, strlen(CINEMETA))) { ai++; continue; } /* Cinemeta's lists: TMDB's instead, in your language */
     if (cats) cJSON_ArrayForEach(cat, cats) {
       const char *ctype = js_str(cat, "type", NULL), *cid = js_str(cat, "id", NULL); char ex[200];
       if (ctype && cid && *ctype && *cid && addon_cat_default_extra(cat, ex, sizeof ex) == 0 && seen++ >= from && n < max) {
@@ -133,29 +136,41 @@ static int board_defs(CatalogDef *out, int max, int from) {
 int sb_home_rows(void) { int n = atoi(store_get("homeRows", "8")); return n < 4 ? 8 : n > 24 ? 24 : n; }
 static int home_rows(void) { return sb_home_rows(); }
 static int def_has(const CatalogDef *d, int n, const char *url) { for (int i = 0; i < n; i++) if (!strcmp(d[i].url, url)) return 1; return 0; }
+/* a TMDB list as a catalog row: its address in the language titles are shown in */
+static void tm_def(CatalogDef *d, const char *title, const char *type, const char *path, const char *key) { char u[400]; tmdbcat_make(path, u, sizeof u); def_set(d, title, type, u, NULL, 1, key); }
 int sb_home_defs(CatalogDef *out, int max) {
   int want = home_rows() + HOME_SPARE; if (want > max) want = max;
   int n = board_defs(out, want, 0);
+  if (tmdb_has_key()) { /* TMDB's lists, in the language titles are shown in */
+    static const char *base[6][4] = { { "Trending", "movie", "trending/movie/week", "tm_m_tr" }, { "Trending", "series", "trending/tv/week", "tm_s_tr" },
+      { "Popular", "movie", "movie/popular", "tm_m_pop" }, { "Popular", "series", "tv/popular", "tm_s_pop" },
+      { "Top Rated", "movie", "movie/top_rated", "tm_m_tr2" }, { "Top Rated", "series", "tv/top_rated", "tm_s_tr2" } };
+    for (int i = 0; i < 6 && n < want; i++) { CatalogDef d; char t[96]; snprintf(t, sizeof t, "%s \xc2\xb7 %s", T(base[i][0]), type_label(base[i][1])); tm_def(&d, t, base[i][1], base[i][2], base[i][3]); if (!def_has(out, n, d.url)) out[n++] = d; }
+    static const char *gm[] = { "Thriller", "Animation", "Adventure", "Crime", "Mystery", "Romance", "Fantasy", "Family", "Documentary", "History", "War", "Western" }; /* (Discover has Action, Comedy, Sci-Fi, Drama, Horror) */
+    static const char *gs[] = { "Drama", "Comedy", "Crime", "Animation", "Action", "Sci-Fi", "Mystery", "Documentary", "Family", "Reality-TV", "War", "Western" };
+    for (int i = 0; i < 12 && n < want; i++) for (int k = 0; k < 2 && n < want; k++) {
+      const char *g = k ? gs[i] : gm[i], *ty = k ? "series" : "movie"; int gid = tmdbcat_genre(ty, g); if (!gid) continue;
+      CatalogDef d; char t[96], p[120], key[24]; snprintf(t, sizeof t, "%s \xc2\xb7 %s", T(g), type_label(ty)); snprintf(key, sizeof key, "tm_g_%d_%d", k, i);
+      snprintf(p, sizeof p, "discover/%s?with_genres=%d&sort_by=popularity.desc&vote_count.gte=50", k ? "tv" : "movie", gid); tm_def(&d, t, ty, p, key); if (!def_has(out, n, d.url)) out[n++] = d; }
+    return n; }
   static const char *base[4][4] = { { "Popular", "movie", CINEMETA "/catalog/movie/top", "cin_m_top" }, { "Popular", "series", CINEMETA "/catalog/series/top", "cin_s_top" },
-    { "Top Rated", "movie", CINEMETA "/catalog/movie/imdbRating", "cin_m_ir" }, { "Top Rated", "series", CINEMETA "/catalog/series/imdbRating", "cin_s_ir" } };
+    { "Top Rated", "movie", CINEMETA "/catalog/movie/imdbRating", "cin_m_ir" }, { "Top Rated", "series", CINEMETA "/catalog/series/imdbRating", "cin_s_ir" } }; /* (no TMDB key: Cinemeta's) */
   for (int i = 0; i < 4 && n < want; i++) { CatalogDef d; char t[96]; snprintf(t, sizeof t, "%s \xc2\xb7 %s", T(base[i][0]), type_label(base[i][1]));
     def_set(&d, t, base[i][1], base[i][2], NULL, 1, base[i][3]); if (!def_has(out, n, d.url)) out[n++] = d; }
-  static const char *gm[] = { "Thriller", "Animation", "Adventure", "Crime", "Mystery", "Romance", "Fantasy", "Family", "Documentary", "History", "War", "Western" }; /* (Discover has Action, Comedy, Sci-Fi, Drama, Horror) */
-  static const char *gs[] = { "Drama", "Comedy", "Crime", "Animation", "Action", "Sci-Fi", "Mystery", "Thriller", "Fantasy", "Documentary", "Reality-TV", "Family" };
-  for (int i = 0; i < 12 && n < want; i++) for (int k = 0; k < 2 && n < want; k++) {
-    const char *g = k ? gs[i] : gm[i], *ty = k ? "series" : "movie"; CatalogDef d; char t[96], ex[64] = "", key[24];
-    addon_extra_add(ex, sizeof ex, "genre", g); snprintf(t, sizeof t, "%s \xc2\xb7 %s", T(g), type_label(ty)); snprintf(key, sizeof key, "h_g_%d_%d", k, i);
-    def_set(&d, t, ty, k ? CINEMETA "/catalog/series/top" : CINEMETA "/catalog/movie/top", ex, 1, key); if (!def_has(out, n, d.url)) out[n++] = d; }
   return n;
 }
 /* Discover: Cinemeta's trending and top rated, its genres (the ones its manifest offers), then the installed catalogs
    Home has no room for */
 int sb_disc_defs(CatalogDef *out, int max) {
-  const char *defs[3][4] = { { "Trending · Movies", "movie", CINEMETA "/catalog/movie/top", "d_m_top" }, { "Trending · Series", "series", CINEMETA "/catalog/series/top", "d_s_top" }, { "Top Rated · Movies", "movie", CINEMETA "/catalog/movie/imdbRating", "d_m_ir" } };
-  const char *genres[5] = { "Action", "Comedy", "Sci-Fi", "Drama", "Horror" };
-  int n = 0;
-  for (int i = 0; i < 3 && n < max; i++) def_set(&out[n++], defs[i][0], defs[i][1], defs[i][2], NULL, 1, defs[i][3]);
-  for (int i = 0; i < 5 && n < max; i++) { char ex[64] = "", key[16]; addon_extra_add(ex, sizeof ex, "genre", genres[i]); snprintf(key, sizeof key, "d_g_%d", i); def_set(&out[n++], genres[i], "movie", CINEMETA "/catalog/movie/top", ex, 1, key); }
+  int n = 0; const char *genres[5] = { "Action", "Comedy", "Sci-Fi", "Drama", "Horror" };
+  if (tmdb_has_key()) {
+    static const char *defs[3][4] = { { "Trending \xc2\xb7 Movies", "movie", "trending/movie/day", "td_m_tr" }, { "Trending \xc2\xb7 Series", "series", "trending/tv/day", "td_s_tr" }, { "Top Rated \xc2\xb7 Movies", "movie", "movie/top_rated", "td_m_ir" } };
+    for (int i = 0; i < 3 && n < max; i++) tm_def(&out[n++], T(defs[i][0]), defs[i][1], defs[i][2], defs[i][3]);
+    for (int i = 0; i < 5 && n < max; i++) { char p[120], key[16]; snprintf(p, sizeof p, "discover/movie?with_genres=%d&sort_by=popularity.desc&vote_count.gte=100", tmdbcat_genre("movie", genres[i])); snprintf(key, sizeof key, "td_g_%d", i); tm_def(&out[n++], T(genres[i]), "movie", p, key); }
+  } else {
+    const char *defs[3][4] = { { "Trending \xc2\xb7 Movies", "movie", CINEMETA "/catalog/movie/top", "d_m_top" }, { "Trending \xc2\xb7 Series", "series", CINEMETA "/catalog/series/top", "d_s_top" }, { "Top Rated \xc2\xb7 Movies", "movie", CINEMETA "/catalog/movie/imdbRating", "d_m_ir" } };
+    for (int i = 0; i < 3 && n < max; i++) def_set(&out[n++], defs[i][0], defs[i][1], defs[i][2], NULL, 1, defs[i][3]);
+    for (int i = 0; i < 5 && n < max; i++) { char ex[64] = "", key[16]; addon_extra_add(ex, sizeof ex, "genre", genres[i]); snprintf(key, sizeof key, "d_g_%d", i); def_set(&out[n++], genres[i], "movie", CINEMETA "/catalog/movie/top", ex, 1, key); } }
   if (n < max) n += board_defs(out + n, max - n, home_rows());
   return n;
 }
@@ -237,13 +252,13 @@ static void on_catalog(int st, const unsigned char *b, size_t len, void *ud) {
   net_json_free(j); free(r->cachedJson); free(r);
 }
 void sb_catalog_url(const char *url, const char *type, int n, void (*cb)(ItemList *, int, void *), void *ud) {
-  CatReq *r = calloc(1, sizeof *r); copy_str(r->url, sizeof r->url, url); copy_str(r->type, sizeof r->type, type); snprintf(r->key, sizeof r->key, "cat:%s", url); r->n = n; r->cb = cb; r->ud = ud; r->clean = strstr(url, "search=") != NULL; /* a search: the clean list */
+  CatReq *r = calloc(1, sizeof *r); copy_str(r->url, sizeof r->url, url); copy_str(r->type, sizeof r->type, type); snprintf(r->key, sizeof r->key, "cat:%s", url); r->n = n; r->cb = cb; r->ud = ud; r->clean = strstr(url, "search=") != NULL || (tmdbcat_is(url) && strstr(url, ":search/")); /* a search: the clean list */
   size_t cl; unsigned char *t = cache_read(r->key, 0, &cl);
   if (t) { cJSON *c = cJSON_Parse((const char *)t); if (cJSON_IsArray(c) && cJSON_GetArraySize(c)) { r->cachedJson = (char *)t; cb(list_from_metas_c(c, type, n, r->clean), 1, ud); } else free(t); cJSON_Delete(c); }
   /* the addon's own cacheMaxAge: a copy younger than that is the answer (no request) */
   if (r->cachedJson) { char hk[620], cp[1200]; snprintf(hk, sizeof hk, "cah:%s", url); size_t hl; unsigned char *h = cache_read(hk, 0, &hl); long age = h ? atol((const char *)h) : 0; free(h);
     if (age > 0 && cache_file(r->key, age, cp, sizeof cp)) { free(r->cachedJson); free(r); return; } }
-  net_get(url, on_catalog, r);
+  if (tmdbcat_is(url)) tmdbcat_url(url, 1, on_catalog, r); else net_get(url, on_catalog, r);
 }
 void sb_catalog(const CatalogDef *d, void (*cb)(ItemList *, int, void *), void *ud) { sb_catalog_url(d->url, d->type, 16, cb, ud); }
 /* a further page: the extra the catalog is shown with, and skip */
@@ -256,6 +271,7 @@ static void on_page(int st, const unsigned char *b, size_t len, void *ud) {
   net_json_free(j); free(r);
 }
 void sb_catalog_page(const CatalogDef *d, int skip, void (*cb)(ItemList *, int, void *), void *ud) {
+  if (tmdbcat_is(d->url)) { PageReq *r = calloc(1, sizeof *r); copy_str(r->type, sizeof r->type, d->type); r->cb = cb; r->ud = ud; tmdbcat_url(d->url, skip / 20 + 1, on_page, r); return; } /* TMDB: 20 a page */
   char ex[260], sk[16], url[800]; copy_str(ex, sizeof ex, d->extra); snprintf(sk, sizeof sk, "%d", skip); addon_extra_add(ex, sizeof ex, "skip", sk);
   snprintf(url, sizeof url, "%s/%s.json", d->path, ex);
   PageReq *r = calloc(1, sizeof *r); copy_str(r->type, sizeof r->type, d->type); r->cb = cb; r->ud = ud; net_get(url, on_page, r);
@@ -263,7 +279,11 @@ void sb_catalog_page(const CatalogDef *d, int skip, void (*cb)(ItemList *, int, 
 /* every catalog that takes a search (and needs nothing else), in addon order */
 int sb_search_defs(const char *q, CatalogDef *out, int max) {
   int n = 0; cJSON *a = sb_addons(); const cJSON *ad; if (!a) return 0; static const char *const SN[1] = { "search" };
+  if (tmdb_has_key() && n + 2 <= max) { char enc[300], p[400]; addon_urlenc(q, enc, sizeof enc); /* TMDB's search first: Arabic or English names, in your language */
+    snprintf(p, sizeof p, "search/movie?query=%s", enc); tm_def(&out[n++], "TMDB", "movie", p, "");
+    snprintf(p, sizeof p, "search/tv?query=%s", enc); tm_def(&out[n++], "TMDB", "series", p, ""); }
   cJSON_ArrayForEach(ad, a) { if (!sb_addon_on(ad)) continue; const cJSON *cats = js_arr(js_obj(ad, "manifest"), "catalogs"), *cat; char base[512]; addon_base(ad, base, sizeof base);
+    if (tmdb_has_key() && !strncmp(base, CINEMETA, strlen(CINEMETA))) continue; /* (TMDB's search instead) */
     if (cats) cJSON_ArrayForEach(cat, cats) { const char *ctype = js_str(cat, "type", NULL), *cid = js_str(cat, "id", NULL);
       if (!ctype || !cid || !addon_cat_accepts(cat, SN, 1) || n >= max) continue;
       char path[512], te[96], ie[300], ex[300] = ""; addon_urlenc(ctype, te, sizeof te); addon_urlenc(cid, ie, sizeof ie); snprintf(path, sizeof path, "%s/catalog/%s/%s", base, te, ie);
@@ -775,7 +795,21 @@ static void on_sug(int st, const unsigned char *b, size_t n, void *ud) {
   if (!d) l->total = -1; /* no answer */
   net_json_free(j); r->cb(l, names, nn, r->ud); free(r);
 }
+/* TMDB's: names in your language, Arabic typed or English */
+static void on_tsug(int st, const unsigned char *b, size_t n, void *ud) {
+  (void)n; SugReq *r = ud; cJSON *j = st == 200 ? net_json(b) : NULL; const cJSON *ms = js_arr(j, "metas"), *x;
+  ItemList *l = calloc(1, sizeof *l); l->items = calloc(16, sizeof(Item)); char names[6][128]; int nn = 0;
+  if (ms) cJSON_ArrayForEach(x, ms) { if (l->n >= 12) break; const char *nm = js_str(x, "name", ""), *ds = js_str(x, "description", "");
+    if (!*nm || !js_str(x, "poster", NULL) || sb_text_blocked(nm) || sb_text_blocked(ds)) continue;
+    Item *it = &l->items[l->n++]; memset(it, 0, sizeof *it); copy_str(it->id, sizeof it->id, js_str(x, "id", "")); copy_str(it->type, sizeof it->type, js_str(x, "type", "movie"));
+    copy_str(it->name, sizeof it->name, nm); copy_str(it->poster, sizeof it->poster, js_str(x, "poster", "")); copy_str(it->metaLine, sizeof it->metaLine, js_str(x, "releaseInfo", ""));
+    if (nn < 6) { int dup = 0; for (int i = 0; i < nn; i++) if (!strcasecmp(names[i], nm)) dup = 1; if (!dup) copy_str(names[nn++], 128, nm); } }
+  if (!ms) l->total = -1;
+  net_json_free(j); r->cb(l, names, nn, r->ud); free(r);
+}
 void sb_suggest(const char *q, void (*cb)(ItemList *, char[6][128], int, void *), void *ud) {
+  if (tmdb_has_key()) { char enc[400], p[460], u[560]; addon_urlenc(q, enc, sizeof enc); snprintf(p, sizeof p, "search/multi?query=%s", enc); tmdbcat_make(p, u, sizeof u);
+    SugReq *r = malloc(sizeof *r); r->cb = cb; r->ud = ud; tmdbcat_url(u, 1, on_tsug, r); return; }
   char s[128]; copy_str(s, sizeof s, q); for (char *p = s; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 32;
   char first = (s[0] >= 'a' && s[0] <= 'z') || (s[0] >= '0' && s[0] <= '9') ? s[0] : 'x'; char enc[400]; urlenc(s, enc, sizeof enc);
   char url[600]; snprintf(url, sizeof url, "https://v3.sg.media-imdb.com/suggestion/%c/%s.json", first, enc);
