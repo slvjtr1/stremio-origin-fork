@@ -1,6 +1,6 @@
 {
   "id": "tv.stremioorigin.app",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "vendor": "Stremio Origin",
   "type": "native",
   "main": "stremioorigin",

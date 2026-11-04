@@ -1,25 +1,25 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "items": [
     {
       "icon": "set_lang",
-      "title": "Arabic titles, built in",
-      "text": "Titles and descriptions come in Arabic or English with nothing to add. Switch any time in Settings › Language."
+      "title": "Everything in Arabic",
+      "text": "Home, the spotlight, Discover, Similar, the Library and the screensaver: names, posters, logos and descriptions in Arabic or English, from TMDB."
     },
     {
-      "icon": "g_phone",
-      "title": "Links open on your phone",
-      "text": "A link from an addon shows a code: scan it and the app's site tells you where it goes, then opens it with one tap."
+      "icon": "nav_search",
+      "title": "Search in Arabic",
+      "text": "Type a name in Arabic or English: suggestions and results come in your language."
     },
     {
-      "icon": "set_logs",
-      "title": "Help in one scan",
-      "text": "Settings › About › Share logs opens a page with your code and a report ready to send."
+      "icon": "similar",
+      "title": "Picks that fit",
+      "text": "Watch something similar shows TMDB's recommendations for that very title."
     },
     {
       "icon": "g_sync",
-      "title": "Updates that get through",
-      "text": "The app checks GitHub, then its site. Rooted TVs can also install and update it from Homebrew Channel."
+      "title": "Fixes install themselves",
+      "text": "Small updates install quietly while the TV is left alone, so you always have the latest fixes."
     }
   ],
   "support": {

@@ -16,22 +16,22 @@
       "fullDescriptionUrl": "apps/tv.stremioorigin.app/full_description.html",
       "manifest": {
         "id": "tv.stremioorigin.app",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "type": "native",
         "title": "Stremio Origin",
         "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
         "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
         "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
         "rootRequired": false,
-        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.2.0/tv.stremioorigin.app_1.2.0_arm.ipk",
+        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.2.1/tv.stremioorigin.app_1.2.1_arm.ipk",
         "ipkHash": {
-          "sha256": "c0ae3a6baf18d5b82f48d0b002ea584e962c4ab844ad873e84fae0f21b98fa1c"
+          "sha256": "ea0ef75f193c782c2bcd7147381d8a02a903bee618354647a2d1a56c4c36d8b3"
         },
         "notes": [
-          "Arabic titles, built in: Titles and descriptions come in Arabic or English with nothing to add. Switch any time in Settings › Language.",
-          "Links open on your phone: A link from an addon shows a code: scan it and the app's site tells you where it goes, then opens it with one tap.",
-          "Help in one scan: Settings › About › Share logs opens a page with your code and a report ready to send.",
-          "Updates that get through: The app checks GitHub, then its site. Rooted TVs can also install and update it from Homebrew Channel."
+          "Everything in Arabic: Home, the spotlight, Discover, Similar, the Library and the screensaver: names, posters, logos and descriptions in Arabic or English, from TMDB.",
+          "Search in Arabic: Type a name in Arabic or English: suggestions and results come in your language.",
+          "Picks that fit: Watch something similar shows TMDB's recommendations for that very title.",
+          "Fixes install themselves: Small updates install quietly while the TV is left alone, so you always have the latest fixes."
         ]
       }
     }
