@@ -23,12 +23,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#define PKG_SUF "_arm.ipk"
 #ifndef SB_APP_ID
 #define SB_APP_ID "tv.stremioorigin.app"
 #endif
 
-#define UPD_GH "https://api.github.com/repos/stremio-origin/webos/releases?per_page=8"
-#define UPD_MAN "https://stremio-origin.github.io/webos/api/apps/" SB_APP_ID "/manifest.json"
+#define UPD_GH "https://api.github.com/repos/slvjtr1/stremio-origin-fork/releases?per_page=8" /* this build's own releases */
 typedef struct { char ver[24], url[512], sha[72]; char notes[5][256]; int nnotes; } Rel;
 static struct {
   char cur[24], appinfo[1200]; int read; Rel avail; int has, state; char msg[240]; unsigned serial;
@@ -118,21 +118,6 @@ static void done(const Rel *best, int manual) {
   }
   changed();
 }
-static void on_manifest(int st, const unsigned char *body, size_t len, void *ud) {
-  (void)len; int manual = (int)(size_t)ud; Rel r; memset(&r, 0, sizeof r); int ok = 0;
-  cJSON *m = st == 200 ? cJSON_Parse((const char *)body) : NULL; if (cJSON_IsObject(m)) reached = 1;
-  cJSON *v = cJSON_GetObjectItemCaseSensitive(m, "version"), *u = cJSON_GetObjectItemCaseSensitive(m, "ipkUrl"), *h = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(m, "ipkHash"), "sha256");
-  if (cJSON_IsString(v) && cJSON_IsString(u) && cJSON_IsString(h) && *v->valuestring && *u->valuestring && *h->valuestring) {
-    size_t ul = strlen(u->valuestring);
-    if (ul > 8 && !strcmp(u->valuestring + ul - 8, "_arm.ipk")) { /* the listing may name another build under the same id: only this package's kind */
-      ok = 1; snprintf(r.ver, sizeof r.ver, "%s", v->valuestring); snprintf(r.url, sizeof r.url, "%s", u->valuestring); snprintf(r.sha, sizeof r.sha, "%s", h->valuestring);
-      cJSON *ns = cJSON_GetObjectItemCaseSensitive(m, "notes"), *x;
-      if (cJSON_IsArray(ns)) { cJSON_ArrayForEach(x, ns) if (r.nnotes < 5 && cJSON_IsString(x)) snprintf(r.notes[r.nnotes++], 256, "%s", x->valuestring); }
-      else { cJSON *rn = cJSON_GetObjectItemCaseSensitive(m, "releaseNotes"); r.nnotes = notes_from(cJSON_IsString(rn) ? rn->valuestring : NULL, r.notes); } }
-  }
-  cJSON_Delete(m);
-  done(ok ? &r : NULL, manual);
-}
 static int is_hex64(const char *s) { for (int i = 0; i < 64; i++) if (!((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f'))) return 0; return !s[64]; }
 static void on_releases(int st, const unsigned char *body, size_t len, void *ud) {
   (void)len; int manual = (int)(size_t)ud; Rel best; int has = 0; memset(&best, 0, sizeof best);
@@ -145,7 +130,7 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
       cJSON *nm = cJSON_GetObjectItemCaseSensitive(a, "name"), *dg = cJSON_GetObjectItemCaseSensitive(a, "digest"), *du = cJSON_GetObjectItemCaseSensitive(a, "browser_download_url");
       if (!cJSON_IsString(nm) || !cJSON_IsString(dg) || !cJSON_IsString(du)) continue;
       const char *n = nm->valuestring; int x, y, z, used = 0;
-      if (strncmp(n, pre, pl) || sscanf(n + pl, "%d.%d.%d%n", &x, &y, &z, &used) != 3 || strcmp(n + pl + used, "_arm.ipk")) continue; /* ^<appid>_(\d+\.\d+\.\d+)_arm\.ipk$ */
+      if (strncmp(n, pre, pl) || sscanf(n + pl, "%d.%d.%d%n", &x, &y, &z, &used) != 3 || strcmp(n + pl + used, PKG_SUF)) continue; /* ^<appid>_(\d+\.\d+\.\d+)_arm\.ipk$ */
       { const char *q = n + pl; for (int i = 0; i < used; i++) if (!((q[i] >= '0' && q[i] <= '9') || q[i] == '.')) used = -1; if (used < 0) continue; }
       if (strncmp(dg->valuestring, "sha256:", 7) || !is_hex64(dg->valuestring + 7)) continue;
       char ver[24]; snprintf(ver, sizeof ver, "%.*s", used, n + pl);
@@ -155,7 +140,7 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
     }
   }
   cJSON_Delete(list);
-  if (has) done(&best, manual); else { const char *mf = getenv("SB_UPD_MAN"); net_get_timeout(mf ? mf : UPD_MAN, 15000, on_manifest, ud); } /* (SB_UPD_MAN: development, another manifest) */
+  done(has ? &best : NULL, manual);
 }
 void update_check(int manual) {
   read_current();

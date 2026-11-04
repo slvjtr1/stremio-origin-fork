@@ -6,46 +6,72 @@
 
 <h1 align="center">Stremio Origin</h1>
 
-<p align="center">A native TV app for Stremio addons, written in C.</p>
+<p align="center"><b>A native webOS app for Stremio addons, written in C: fast, quiet, and fully in English or Arabic.</b></p>
 
-<p align="center"><em>Stremio™ is a trademark of its owner. Stremio Origin is independent and unofficial, and is not affiliated with, endorsed by or sponsored by Stremio. The name only describes compatibility.</em></p>
+<p align="center">
+  <a href="https://github.com/slvjtr1/stremio-origin-fork/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/slvjtr1/stremio-origin-fork?label=release&color=7c5cff"></a>
+  <img alt="LG webOS 3 and later" src="https://img.shields.io/badge/LG%20webOS-3%2B-1f1d2b">
+  <img alt="Licence GPL-3.0" src="https://img.shields.io/badge/licence-GPL--3.0-1f1d2b">
+</p>
 
-<p align="center">You bring your own Stremio account and your own addons. The app ships empty, hosts and indexes nothing, and plays only the stream links your addons return.</p>
+<p align="center"><sub>Stremio™ is a trademark of its owner. Stremio Origin is independent and unofficial, and is not affiliated with, endorsed by or sponsored by Stremio. The name only describes compatibility.<br>You bring your own Stremio account and your own addons. The app ships empty, hosts and indexes nothing, and plays only the stream links your addons return.</sub></p>
 
-## Features
-- Home, Discover, Library and Search from your addons, with artwork, logos and trailers
-- The best stream for your TV and connection, picked in one press
-- Buttons and highlights take their colour from each title's logo or artwork
-- People, reviews and a spotlight of what's new on every title
-- A player with episodes, sources, subtitles and audio, skip intro and recap, and a next-episode card
-- Styled subtitles as the film made them, and subtitle sync
-- DTS sound converted on the TV, and Dolby Vision on TVs that support it
-- Torrent playback with a buffer sized to your TV, and an optional USB drive
-- Cast to the TV from your phone (the Android app is almost done)
-- Library, watched state and Continue Watching synced with your Stremio account
-- 11 languages, including Arabic (right to left)
-- Updates from inside the app
+---
+
+## Highlights
+
+| | |
+|---|---|
+| **Subtitles your way** | Outline and shadow, six fonts and bold, sizes and colours, and one press to bring them back in sync. Arabic subtitles join and read right to left. |
+| **Skip intro, recap and credits** | A button shows up at the right moment. Press OK, or let it skip by itself. |
+| **Trailers on the whole screen** | A title's trailer plays behind its page, and after five seconds it fills the screen. Any key brings the page back at once. |
+| **Clean search** | Real, released films and series only. Clips, fan uploads, adult titles and unwanted themes are left out, and results arrive sooner. |
+| **Arabic from end to end** | The whole app in Arabic or English. Titles and descriptions follow the app or a language you pick, from TMDB. |
+| **No spoilers** | Blur unwatched episodes hides their stills and stories on the title page, in the player and in reviews until you watch them. |
+| **Your Home, your rows** | Choose 8, 12, 16 or 24 catalogs on Home. Your addons come first; Cinemeta's lists fill any space left. |
+| **The best stream, in one press** | Picked for your TV and your connection, with quality tags on every source. |
+| **Your library, everywhere** | Library, watched episodes and Continue Watching stay in sync with your Stremio account. |
+| **Made for the remote** | Smooth focus and motion, the pointer hides when you use the arrows, and a 12-hour or 24-hour clock. |
+
+Also inside: DTS sound converted on the TV, Dolby Vision on TVs that support it, torrent playback with a buffer sized to your TV, cast and search from your phone, people and reviews on every title, and updates from inside the app.
 
 ## Install
-For LG TVs running webOS 3 and later (ARM). It should work on all of them, but it has only been tested on webOS 4.4. [Compatibility](docs/compatibility.md)
 
-- With the Homebrew Channel: add the repository `https://stremio-origin.github.io/webos/apps.json`,
-  then install Stremio Origin.
-- Or download the `.ipk` from Releases and install it on a TV in Developer Mode.
+For LG TVs running webOS 3 and later (ARM). Tested on webOS 4.4; see [compatibility](docs/compatibility.md).
+
+1. Download `tv.stremioorigin.app_<version>_arm.ipk` from the [latest release](https://github.com/slvjtr1/stremio-origin-fork/releases/latest).
+2. Install it with [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop) or `ares-install`, on a TV in Developer Mode or a rooted TV with Homebrew Channel.
+3. New versions install from inside the app: **Settings › About**.
+
+## Good to know
+
+- **Language:** Settings › Language. The app follows the TV's language until you choose one.
+- **Titles and descriptions in Arabic** need a free TMDB key: Settings › Keys, then scan the code with your phone and paste it. Choose *Same as the app*, *English* or *Arabic*.
+- **Blur unwatched episodes:** Settings › Playback.
+- **Catalogs on Home:** Settings › Appearance.
 
 ## Privacy
+
 - Sign-in goes directly to Stremio. Your account stays on the TV.
 - No analytics. Nothing is sent to the developer.
 - Logs stay on the TV. Sharing them is your choice: the app seals them and shows a short code.
 
-## Support
-- Issues: https://github.com/stremio-origin/webos/issues
-- Support: https://ko-fi.com/simussu
+## Building
+
+```sh
+tools/build.sh webos        # the app
+tools/release.sh 1.1.0      # version, package and checksum in dist/
+```
 
 ## Credits
+
+- Built on [Stremio Origin](https://github.com/stremio-origin/webos) by simussu.
 - Interface sounds: [Interface Sounds](https://kenney.nl/assets/interface-sounds) by Kenney (CC0).
 - The glass look: [liquid-glass-react](https://github.com/rdev/liquid-glass-react) by rdev; the app ships a modified version.
 - Torrents: [Nuvio Engine](https://github.com/NuvioMedia/nuvio-engine) (GPL-3.0); the app ships a modified version.
+- Subtitle fonts: Atkinson Hyperlegible Next, Cairo, Lora, Readex Pro and Roboto (SIL Open Font Licence, in `assets/fonts`).
+- Titles and descriptions: [TMDB](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## Licence
+
 GPL-3.0, see [LICENSE](LICENSE). Third-party components and their licences: [third_party/licenses/README.txt](third_party/licenses/README.txt).

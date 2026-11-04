@@ -11,7 +11,7 @@ sed -e "s/\"id\": \"tv.stremioorigin.app\"/\"id\": \"$APPID\"/" -e "s/\"title\":
 cp "$BIN" "$STAGE/app/stremioorigin"; chmod 755 "$STAGE/app/stremioorigin"
 if [ -f "$ROOT/build/webos/libsbengine.so" ]; then cp "$ROOT/build/webos/libsbengine.so" "$STAGE/app/"; else echo "note: no build/webos/libsbengine.so (tools/build-engine.sh webos): torrents will be unavailable"; fi
 if [ -f "$ROOT/build/webos/libsbdts.so" ]; then cp "$ROOT/build/webos/libsbdts.so" "$STAGE/app/"; else echo "note: no build/webos/libsbdts.so (tools/build-ffmpeg.sh webos): DTS-only files will play without sound"; fi
-cp "$ROOT"/assets/{icon.png,logo.png,splashicon.png,splashbg.jpg,cacert.pem,whatsnew.json} "$ROOT"/assets/icons*.json "$STAGE/app/assets/"
+cp "$ROOT"/assets/{icon.png,icon_classic.png,mark_diamond.png,mark_play.png,logo.png,splashicon.png,splashbg.jpg,cacert.pem,whatsnew.json} "$ROOT"/assets/icons*.json "$STAGE/app/assets/"
 cp "$ROOT"/pkg/icon.png "$ROOT"/pkg/largeIcon.png "$STAGE/app/"
 cp -R "$ROOT/assets/fonts" "$ROOT/assets/i18n" "$ROOT/assets/sounds" "$ROOT/assets/guide" "$STAGE/app/assets/"
 [ -d "$ROOT/third_party/licenses" ] && cp -R "$ROOT/third_party/licenses" "$STAGE/app/licenses" || true

@@ -7,6 +7,7 @@
 #include "ui/text.h"
 #include "ui/orbs.h"
 #include "platform/plat.h"
+#include "core/store.h"
 #include "screens/login.h"
 #include "screens/welcome.h"
 #include <stdio.h>
@@ -52,10 +53,18 @@ void splash_draw(void) {
   float k = ease_apply(EASE_OUT, (t - 0.05f) / 0.7f), kp = ease_apply(EASE_OUT, (t - 0.3f) / 0.5f), kt = ease_apply(EASE_OUT, (t - 0.45f) / 0.7f);
   float s = 0.96f + 0.04f * k;
   if (gone) { s = outS + (1.05f - outS) * lv; } else outS = s;
+  int classic = !strcmp(store_get("appIcon", "origin"), "classic"); float below = R; /* Settings > Appearance > App icon */
   gfx_scale_push(s, s, cx, cy);
+  if (!classic) { /* the diamond (its gradient and edge, a picture), then the play with its shadow */
+    static char du[1100], pu[1100]; if (!du[0]) { snprintf(du, sizeof du, "file://%s/mark_diamond.png", plat_asset_dir()); snprintf(pu, sizeof pu, "file://%s/mark_play.png", plat_asset_dir()); }
+    float D = 2 * R * 1.3f, asp; GLuint td = img_get(du, 512, 512, &asp), tp = img_get(pu, 512, 512, &asp); below = D / 2;
+    gfx_opacity_push(k); if (td) gfx_image(td, cx - D / 2, cy - D / 2, D, D, 0, WHITE_A(255), 0, 0, 1, 1); gfx_opacity_pop();
+    gfx_opacity_push(kp); if (tp) gfx_image(tp, cx - D / 2 + 6 * (1 - kp), cy - D / 2, D, D, 0, WHITE_A(255), 0, 0, 1, 1); gfx_opacity_pop();
+  } else {
   gfx_opacity_push(k); gfx_rrect_v(cx - R, cy - R, 2 * R, 2 * R, R, RGB(0x6a, 0x45, 0xe0), RGB(0x2f, 0x1a, 0x9e)); gfx_rrect_v(cx - R, cy - R, 2 * R, 2 * R, R, WHITE_A(26), WHITE_A(0)); /* (its light from the top, inside the circle) */ gfx_opacity_pop();
   { float S = 2 * R * 512 / 264.0f; gfx_opacity_push(kp); icon_draw("o_play", cx - S * 256 / 512 + 6 * (1 - kp), cy - S * 226 / 512, S, WHITE_A(255)); gfx_opacity_pop(); }
+  }
   gfx_scale_pop();
-  gfx_opacity_push(kt); text_draw("ORIGIN", cx + 10, cy + R + 56 + 8 * (1 - kt), 40, 700, WHITE_A(240), 20 - 6 * kt, 0, ALIGN_CENTER); gfx_opacity_pop();
+  gfx_opacity_push(kt); text_draw("ORIGIN", cx + 10, cy + below + 56 + 8 * (1 - kt), 40, 700, WHITE_A(240), 20 - 6 * kt, 0, ALIGN_CENTER); gfx_opacity_pop();
   gfx_opacity_pop();
 }
