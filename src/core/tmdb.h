@@ -32,6 +32,7 @@ void tmdb_key_clear(void);            /* "Remove the TMDB key" */
 /* changes whenever lookups start again (a key added or removed, another language): screens drop what they
    applied */
 unsigned tmdb_generation(void);
+const char *tmdb_lang(void);   /* the language titles and descriptions are shown in (Settings > Language) */
 int  tmdb_wanted(const char *id);     /* the UI is not English, there is a key, and it is an IMDb id */
 
 /* the title in the app's language: NULL while unknown (then it is asked for), when TMDB has nothing for it

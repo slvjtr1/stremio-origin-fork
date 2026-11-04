@@ -242,12 +242,14 @@ static void install(Job *j) {
   if (e->v && !e->v->pub.light && j->v->pub.light) { loc_free(j->v); e->state = S_READY; return; } /* a late row lookup never replaces a page's */
   loc_free(e->v); e->v = j->v; e->state = S_READY; if (!j->v->pub.light) e->fullAsked = 0; /* a page's lookup still on its way keeps the page waiting */
 }
+/* Settings > Language > Titles and descriptions: the app's language (auto), English or Arabic, whatever the app's */
+const char *tmdb_lang(void) { const char *v = store_get("metaLang", "auto"); return !strcmp(v, "en") ? "en" : !strcmp(v, "ar") ? "ar" : i18n_lang(); }
 static int inited;
 static void drain(void) {
   if (!inited) tmdb_init(); /* on first use: nothing to start at launch */
   unsigned f = app_frame(); if (f == lastFrame) return; lastFrame = f;
   pthread_mutex_lock(&mu); int kg = phoneKeyGen != seenKeyGen; if (kg) { seenKeyGen = phoneKeyGen; snprintf(key, sizeof key, "%s", phoneKey); } pthread_mutex_unlock(&mu);
-  if (kg || resetReq || strcmp(tabLang, i18n_lang())) { resetReq = 0; snprintf(tabLang, sizeof tabLang, "%s", i18n_lang()); reset(); }
+  if (kg || resetReq || strcmp(tabLang, tmdb_lang())) { resetReq = 0; snprintf(tabLang, sizeof tabLang, "%s", tmdb_lang()); reset(); }
   if (nent > MAX_ENT) evict();
   if (!haveDone) return;
   pthread_mutex_lock(&mu); Job *list = done; done = NULL; haveDone = 0; pthread_mutex_unlock(&mu);
@@ -256,7 +258,7 @@ static void drain(void) {
 static void enqueue(const char *type, const char *id, int light, int first) {
   Job *j = calloc(1, sizeof *j);
   snprintf(j->type, sizeof j->type, "%s", !strcmp(type, "series") ? "series" : "movie"); snprintf(j->id, sizeof j->id, "%s", id);
-  snprintf(j->lang, sizeof j->lang, "%s", i18n_lang()); snprintf(j->key, sizeof j->key, "%s", key); j->light = light; j->gen = gen;
+  snprintf(j->lang, sizeof j->lang, "%s", tmdb_lang()); snprintf(j->key, sizeof j->key, "%s", key); j->light = light; j->gen = gen;
   pthread_mutex_lock(&mu);
   if (!workersOn) { workersOn = 1; for (int i = 0; i < WORKERS; i++) { pthread_t t; if (!pthread_create(&t, NULL, worker, NULL)) pthread_detach(t); } }
   if (first) { j->next = qHead; qHead = j; if (!qTail) qTail = j; }
@@ -279,14 +281,14 @@ void tmdb_init(void) {
   if (!key_ok(builtin)) builtin[0] = 0;
   char *t = read_file(keyPath, NULL); if (t) { strip_ws(t, key, sizeof key); free(t); }
   if (!key[0]) snprintf(key, sizeof key, "%s", builtin); /* a user's own key first, else the app's */
-  snprintf(tabLang, sizeof tabLang, "%s", i18n_lang());
+  snprintf(tabLang, sizeof tabLang, "%s", tmdb_lang());
   httpd_set_key_handler(key_from_phone);
 }
 int tmdb_has_key(void) { drain(); return key[0] != 0; }
 void tmdb_key_clear(void) { remove(keyPath); snprintf(key, sizeof key, "%s", builtin); resetReq = 1; }
 int tmdb_builtin(void) { if (!inited) tmdb_init(); return builtin[0] != 0; }
 unsigned tmdb_generation(void) { drain(); return gen; }
-int tmdb_wanted(const char *id) { drain(); return key[0] && strcmp(i18n_lang(), "en") && is_imdb(id); }
+int tmdb_wanted(const char *id) { drain(); return key[0] && strcmp(tmdb_lang(), "en") && is_imdb(id); }
 static Ent *ask(const char *type, const char *id, int light) {
   if (!tmdb_wanted(id)) return NULL;
   Ent *e = find(id, 1); if (!e) return NULL;
@@ -320,7 +322,7 @@ int tmdb_episode(const TmdbLoc *L, int season, int episode, const char **name, c
 static void set_str(cJSON *o, const char *k, const char *v) { cJSON *x = cJSON_GetObjectItemCaseSensitive(o, k); if (cJSON_IsString(x)) cJSON_SetValuestring(x, v); else { cJSON_DeleteItemFromObjectCaseSensitive(o, k); cJSON_AddStringToObject(o, k, v); } }
 void tmdb_apply_meta(cJSON *m, const TmdbLoc *L) {
   if (!m || !L) return;
-  const char *ul = i18n_lang(); if (!strcmp(js_str(m, "_loc", ""), ul)) return;
+  const char *ul = tmdb_lang(); if (!strcmp(js_str(m, "_loc", ""), ul)) return;
   if (!L->light) set_str(m, "_loc", ul); /* a row's lookup (no episodes): the page's still applies later */
   if (*L->name && strcmp(L->name, js_str(m, "name", ""))) set_str(m, "locName", L->name);
   if (*L->overview) set_str(m, "description", L->overview);

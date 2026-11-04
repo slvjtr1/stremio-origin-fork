@@ -101,7 +101,7 @@ static const struct { const char *t, *l, *b[MAXB], *ic[MAXB]; int pv, ctl; } TOU
     { "TMDB: titles and descriptions in your language, and its reviews", "Trakt: the rating, how people spread theirs, and their comments" },
     { "set_lang", "reviews" }, PV_YOURKEYS, 0 },
   { "Thank you", "Made by one person in free time. No ads and no tracking.",
-    { "Something wrong? Settings \xe2\x80\xba About \xe2\x80\xba Share logs", "Enjoying it? A coffee, or a star on GitHub" },
+    { "Something wrong? Settings \xe2\x80\xba About \xe2\x80\xba Share logs", "Enjoying it? A star on GitHub" },
     { "g_bug", "g_heart" }, PV_THANKS, 0 },
 };
 #define NTOUR (int)(sizeof TOUR / sizeof TOUR[0])
@@ -248,7 +248,7 @@ static void settings_page(float a, int focus, float usbOn, int about) {
   float px = 720, py = 150, pw = 1040, ph = 810;
   gfx_rrect(px, py, pw, ph, 24, RGBA(21, 19, 28, 150)); gfx_rrect_v(px, py, pw, ph, 24, WHITE_A(10), WHITE_A(0)); gfx_ring(px, py, pw, ph, 24, 1, WHITE_A(22));
   text_draw(T(about ? "About" : "Playback"), px + 54, py + 40, 38, 700, WHITE_A(255), -0.5f, 900, ALIGN_LEFT);
-  if (about) { static const char *AL[3] = { "Check for updates", "Share logs", "Support the project" }, *AD[3] = { "You have the latest version", "Share the code and describe the issue", "A coffee, or a star on GitHub" };
+  if (about) { static const char *AL[3] = { "Check for updates", "Share logs", "Support the project" }, *AD[3] = { "You have the latest version", "Share the code and describe the issue", "A star on GitHub" };
     float ry = py + 120; for (int i = 0; i < 3; i++) { int f = i == focus;
       if (f) { float pk = ok_press(), d = 6 * pk; lit_box(px + 30, ry - 4, pw - 60, 112, 20, ACC | 0xff000000u, pk); gfx_ring_out(px + 30 + d, ry - 4 + d * 0.6f, pw - 60 - 2 * d, 112 - 1.2f * d, 20, 4, acc_a(0.3f)); }
       text_draw(T(AL[i]), px + 54, ry + 16, 28, 600, f ? ACC_FG : ACC3 | 0xff000000u, -0.2f, 900, ALIGN_LEFT); text_draw(T(AD[i]), px + 54, ry + 54, 22, 400, f ? col_alpha(ACC_FG, 0.85f) : WHITE_A(199), 0, 900, ALIGN_LEFT); ry += 118; }

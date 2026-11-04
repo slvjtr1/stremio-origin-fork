@@ -97,7 +97,7 @@ static void on_net(int st, const unsigned char *body, size_t len, void *ud) {
 }
 static void ask_tmdb(Reviews *r, int tid) {
   Who w; who_of(r, &w); char p[160]; int tv = !strcmp(w.type, "series"); Ask *a;
-  if (w.e) snprintf(p, sizeof p, "/tv/%d/season/%d/episode/%d", tid, w.s, w.e); else if (w.s) snprintf(p, sizeof p, "/tv/%d/season/%d?language=%s", tid, w.s, i18n_lang()); /* (in the app's language: its words show) */ else snprintf(p, sizeof p, "/%s/%d", tv ? "tv" : "movie", tid);
+  if (w.e) snprintf(p, sizeof p, "/tv/%d/season/%d/episode/%d", tid, w.s, w.e); else if (w.s) snprintf(p, sizeof p, "/tv/%d/season/%d?language=%s", tid, w.s, tmdb_lang()); /* (in the app's language: its words show) */ else snprintf(p, sizeof p, "/%s/%d", tv ? "tv" : "movie", tid);
   a = ask_new(r, SRC_MVOTE); sent(r, tmdb_request(p, on_net, a), a);
   if (!w.s) { snprintf(p, sizeof p, "/%s/%d/reviews", tv ? "tv" : "movie", tid); a = ask_new(r, SRC_MREV); sent(r, tmdb_request(p, on_net, a), a); /* TMDB reviews are the title's */ }
 }

@@ -1,3 +1,4 @@
+#include <string.h>
 #include "ui/support.h"
 #include "ui/gfx.h"
 #include "ui/text.h"
@@ -13,12 +14,14 @@
 static float pill_h(float Q) { return fmaxf(56, Q * 0.15f); }
 static int lab_px(float Q) { return (int)fmaxf(20, Q * 0.07f); }
 static float half_w(float Q, const char *l) { int px = lab_px(Q); return px * 1.1f + 12 + text_width(l, px, 800, 0) + 2 * px * 1.3f; }
-static const char *lab(int k) { return k ? "GitHub" : T("Coffee"); }
+static const char *coffeeUrl = "";
+/* the first code: a coffee (a donation page), or else the project's website */
+static const char *lab(int k) { return k ? "GitHub" : (strstr(coffeeUrl, "ko-fi") || strstr(coffeeUrl, "buymeacoffee") || strstr(coffeeUrl, "paypal") || strstr(coffeeUrl, "patreon")) ? T("Coffee") : T("Website"); }
 float support_w(float Q) { float h = fmaxf(half_w(Q, lab(0)), half_w(Q, lab(1))); return fmaxf(Q, 2 * h); }
 static GLuint glassTex; static int glassUp; void support_glass(unsigned int tex) { glassTex = tex; glassUp = 0; } void support_glass_picture(unsigned int tex) { glassTex = tex; glassUp = 1; }
 float support_h(float Q) { return pill_h(Q) + Q * 0.06f + Q + 14 + text_line_height(lab_px(Q) - 4); }
 float support_draw(float x, float y, float Q, float sel, int f, const char *coffee, const char *coffeeShown, const char *gh, const char *ghShown) {
-  if (sel < 0) sel = 0; if (sel > 1) sel = 1;
+  if (sel < 0) sel = 0; if (sel > 1) sel = 1; coffeeUrl = coffee ? coffee : "";
   const char *I[2] = { "g_heart", "g_star" }; float PW = support_w(Q), hw = PW / 2, PH = pill_h(Q); int px = lab_px(Q); float is = px * 1.1f;
   /* the pill: two halves, the light under the one showing */
   if (!glassTex) lglass_shell(x, y, PW, PH, PH / 2, WHITE_A(f ? 40 : 22), f ? 1.15f : 0.9f); /* over a row (Settings): clear glass, the row's colour through it */
