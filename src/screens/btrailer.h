@@ -16,4 +16,5 @@ unsigned btr_hold_gen(void); /* a key stopped the trailer: the backdrop generati
 float btr_cover(void);        /* 1 = the picture covers the video, 0 = the video is uncovered */
 float btr_zoom(void);         /* the backdrop's scale (1 .. 1.025), around (960, 400) */
 float btr_melt(void);         /* 0..1: the page's dim while it plays */
+float btr_full(void);         /* 0..1: the page fading away, the trailer alone on the whole screen (after 5 s of it) */
 #endif

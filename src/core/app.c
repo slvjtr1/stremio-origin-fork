@@ -27,6 +27,7 @@
 #include "screens/login.h"
 #include "screens/splash.h"
 #include "core/castlink.h"
+#include "platform/plat.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -277,11 +278,15 @@ static double exitAt = -10;
 void exit_ask(void) { if (NOW - exitAt < 2.5) { app_quit(); return; } exitAt = NOW; toast(T("Press again to exit"), 2500, "\001back"); }
 
 /* ---- the clock ---- */
-static char clockTxt[8], clockOld[8]; static Timer1 clockAnim; static double clockAt;
+static char clockTxt[16], clockOld[16]; static Timer1 clockAnim; static double clockAt;
+void app_time_fmt(const struct tm *tm, char *out, size_t cap, int ampm) {
+  if (strcmp(store_get("clockFmt", "24"), "12")) { snprintf(out, cap, "%02d:%02d", tm->tm_hour, tm->tm_min); return; }
+  int h = tm->tm_hour % 12; if (!h) h = 12;
+  if (ampm) snprintf(out, cap, "%d:%02d %s", h, tm->tm_min, T(tm->tm_hour < 12 ? "AM" : "PM")); else snprintf(out, cap, "%d:%02d", h, tm->tm_min); }
 static void clock_tick(void) {
   timer_tick(&clockAnim, DT);
   if (NOW - clockAt < 1) return; clockAt = NOW;
-  time_t t = time(NULL); struct tm tm; localtime_r(&t, &tm); char s[8]; snprintf(s, sizeof s, "%02d:%02d", tm.tm_hour, tm.tm_min);
+  time_t t = time(NULL); struct tm tm; localtime_r(&t, &tm); char s[16]; app_time_fmt(&tm, s, sizeof s, 0); /* (the pill: the digits alone) */
   if (strcmp(s, clockTxt)) { int first = !clockTxt[0]; snprintf(clockOld, sizeof clockOld, "%s", clockTxt); snprintf(clockTxt, sizeof clockTxt, "%s", s); if (!first) timer_start(&clockAnim, 0.6f); }
 }
 /* a new minute: only the digits that changed crossfade, drifting a few px (the rest of the time stays still); the
@@ -298,7 +303,7 @@ void app_clock_draw(float right, float y, float alpha) {
   { static float cw = -1, cwTo = -1; float tw = text_width(clockTxt, 38, 600, -0.6f); if (cw < 0) cw = tw; cwTo = tw; cw += (cwTo - cw) * fminf(1, DT * 8); x0 += (W - cw) / 2; } /* the time centred in its pill (gliding when its width changes) */
   float k = clockAnim.on ? ease_apply(EASE_IN_OUT, timer_x(&clockAnim)) : 1;
   size_t n = 0; if (k < 1) while (clockTxt[n] && clockTxt[n] == clockOld[n]) n++; else n = strlen(clockTxt);
-  char pre[8]; snprintf(pre, sizeof pre, "%.*s", (int)n, clockTxt); float pw = n ? text_width(pre, 38, 600, -0.6f) : 0;
+  char pre[16]; snprintf(pre, sizeof pre, "%.*s", (int)n, clockTxt); float pw = n ? text_width(pre, 38, 600, -0.6f) : 0;
   if (n) text_draw(pre, x0, y, 38, 600, WHITE_A(230), -0.6f, 0, ALIGN_LEFT);
   if (k < 1) {
     gfx_opacity_push(1 - k); text_draw(clockOld + n, x0 + pw, y - 5 * k, 38, 600, WHITE_A(230), -0.6f, 0, ALIGN_LEFT); gfx_opacity_pop();
@@ -309,6 +314,7 @@ static void clock_draw(void) { float W = text_width("00:00", 38, 600, -0.6f); cl
 
 /* ---- the top bar: centred tabs, the corner icons, one pill that glides to the focused tab ---- */
 TopNav topNav = { .idx = NAV_HOME };
+int app_nav_last(void) { return NAV_LIB; }
 static const char *chipLabel(int i) { return i == NAV_DISC ? T("Discover") : i == NAV_HOME ? T("Home") : T("Library"); }
 static int chipCur(int i) {
   Scr t = i == NAV_SEARCH ? SCR_SEARCH : i == NAV_SET ? SCR_SET : i == NAV_DISC ? SCR_DISC : i == NAV_HOME ? SCR_HOME : SCR_LIB;
@@ -316,10 +322,10 @@ static int chipCur(int i) {
 }
 static int chipFocused(int i) { return topNav.active && topNav.idx == i && !update_pill_focused(); } /* the update notice holds the highlight */
 static void topnav_layout(void) {
-  float w[3], tot = 0;
-  for (int i = 0; i < 3; i++) { int f = chipFocused(NAV_DISC + i) || chipCur(NAV_DISC + i); w[i] = text_width(chipLabel(NAV_DISC + i), 32, f ? 700 : 400, 0) + 80; tot += w[i] + 18; }
+  int nt = app_nav_last() - NAV_DISC + 1; float w[4], tot = 0;
+  for (int i = 0; i < nt; i++) { int f = chipFocused(NAV_DISC + i) || chipCur(NAV_DISC + i); w[i] = text_width(chipLabel(NAV_DISC + i), 32, f ? 700 : 400, 0) + 80; tot += w[i] + 18; }
   float x = SB_W / 2 - (tot - 18) / 2;
-  for (int i = 0; i < 3; i++) { int ci = app_rtl() ? NAV_DISC + 2 - i : NAV_DISC + i; topNav.chipX[ci] = x; topNav.chipW[ci] = w[ci - NAV_DISC]; x += w[ci - NAV_DISC] + 18; }
+  for (int i = 0; i < nt; i++) { int ci = app_rtl() ? NAV_DISC + nt - 1 - i : NAV_DISC + i; topNav.chipX[ci] = x; topNav.chipW[ci] = w[ci - NAV_DISC]; x += w[ci - NAV_DISC] + 18; }
   topNav.chipX[NAV_SET] = app_rtl() ? SB_W - 40 - 76 : 40; topNav.chipW[NAV_SET] = 76;
   topNav.chipX[NAV_SEARCH] = app_rtl() ? SB_W - 128 - 76 : 128; topNav.chipW[NAV_SEARCH] = 76;
   topNav.laidOut = 1;
@@ -341,9 +347,9 @@ static void topnav_paint(void) {
 static Scr chipScr(int i) { return i == NAV_SEARCH ? SCR_SEARCH : i == NAV_SET ? SCR_SET : i == NAV_DISC ? SCR_DISC : i == NAV_HOME ? SCR_HOME : SCR_LIB; }
 void topnav_focus(void) { topNav.active = 1; topnav_paint(); }
 void topnav_switch(int i) {
-  i = i < 0 ? 0 : i > 4 ? 4 : i;
+  i = i < 0 ? 0 : i > app_nav_last() ? app_nav_last() : i;
   if (i == topNav.idx && (app_is_board(SCR) || SCR == SCR_SEARCH || SCR == SCR_SET)) return;
-  { Scr c0 = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; int cs = -1; for (int j = 0; j < 5; j++) if (chipScr(j) == c0) cs = j;
+  { Scr c0 = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; int cs = -1; for (int j = 0; j <= app_nav_last(); j++) if (chipScr(j) == c0) cs = j;
     if (i == NAV_SEARCH || i == NAV_SET) { navf.kind = NAV_ZOOM; navf.x = topNav.chipX[i] + topNav.chipW[i] / 2; navf.y = 50; } else nav_slide(i >= cs ? 1 : -1); }
   topNav.idx = i; nback = 0; topNav.active = 1;
   app_go(chipScr(i), NULL, 1); topNav.active = 1; topnav_paint();
@@ -364,7 +370,7 @@ static int topnav_key(int k) {
   if (update_pill_key(k, topNav.idx == NAV_SET)) { topnav_paint(); return 1; }
   topnav_paint();
   if (k == K_LEFT || k == K_RIGHT) {
-    int i = topNav.idx + (k == K_RIGHT ? 1 : -1); if (i < 0) i = 0; if (i > 4) i = 4;
+    int i = topNav.idx + (k == K_RIGHT ? 1 : -1); if (i < 0) i = 0; if (i > app_nav_last()) i = app_nav_last();
     if (i == topNav.idx) { nudge_start(&topNav.nudge, k); return 1; } /* the end of the bar */
     Scr t = chipScr(i);
     if ((t == SCR_SEARCH || t == SCR_SET) && SCR != t) { topnav_flush(1); topNav.idx = i; topnav_paint(); return 1; }
@@ -374,7 +380,7 @@ static int topnav_key(int k) {
     if ((tg == SCR_SEARCH || tg == SCR_SET) && SCR != tg) {
       if (k == K_OK) { topNav.active = 1; app_go(tg, NULL, 1); topnav_enter_content(); return 1; }
       /* Down from a corner icon: into the page you are on */
-      Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; for (int j = 2; j < 5; j++) if (chipScr(j) == cur) topNav.idx = j; }
+      Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; for (int j = 2; j <= app_nav_last(); j++) if (chipScr(j) == cur) topNav.idx = j; }
     topnav_enter_content();
   } else if (k == K_UP) topnav_nudge();
   return 1;
@@ -388,8 +394,8 @@ void topnav_tick(float dt) {
 /* Search steps aside for a notice out of the Settings icon; when a long one would push it onto the tabs it fades away */
 static float search_fade(float sh) {
   if (sh == 0) return 1; float sx = topNav.chipX[NAV_SEARCH] + sh, room;
-  if (!app_rtl()) { float l = SB_W; for (int j = NAV_DISC; j <= NAV_LIB; j++) if (topNav.chipX[j] < l) l = topNav.chipX[j]; room = l - 16 - (sx + 76); }
-  else { float r = 0; for (int j = NAV_DISC; j <= NAV_LIB; j++) if (topNav.chipX[j] + topNav.chipW[j] > r) r = topNav.chipX[j] + topNav.chipW[j]; room = sx - 16 - r; }
+  if (!app_rtl()) { float l = SB_W; for (int j = NAV_DISC; j <= app_nav_last(); j++) if (topNav.chipX[j] < l) l = topNav.chipX[j]; room = l - 16 - (sx + 76); }
+  else { float r = 0; for (int j = NAV_DISC; j <= app_nav_last(); j++) if (topNav.chipX[j] + topNav.chipW[j] > r) r = topNav.chipX[j] + topNav.chipW[j]; room = sx - 16 - r; }
   return room >= 0 ? 1 : clampf(1 + room / 40, 0, 1);
 }
 /* liquid glass, drawn (no blur read back: the bar sits over moving backdrops and trailers): a tinted see-through
@@ -457,7 +463,7 @@ static void corner_draw(int i, const char *icon, uint32_t dot, float rot) {
   if (sf < 0.999f) gfx_opacity_pop();
 }
 static void chip_focus(int i, int b) { (void)b; if (!topNav.active || topNav.idx != i) { topnav_flush(1); if (!topNav.active) { topNav.active = 1; } topNav.idx = i; topnav_paint(); } }
-static void chip_act(int i, int b) { (void)b; Scr tg = chipScr(i); Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; int ci = -1; for (int j = 2; j < 5; j++) if (chipScr(j) == cur) ci = j;
+static void chip_act(int i, int b) { (void)b; Scr tg = chipScr(i); Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; int ci = -1; for (int j = 2; j <= app_nav_last(); j++) if (chipScr(j) == cur) ci = j;
   if (app_overlay) { app_overlay->key(K_BACK); app_overlay = NULL; }
   topnav_flush(1); topNav.active = 1; topNav.idx = i;
   if (tg == SCR_SEARCH || tg == SCR_SET) topnav_key(K_OK); /* opens it, the highlight inside */
@@ -467,22 +473,22 @@ void topnav_draw(void) {
   if (!topNav.laidOut) topnav_paint();
   int signin = SCR == SCR_LOGIN; float pg = revpanel_page_k(); /* the reviews risen into the title page: the bar goes up and away for its buttons */
   if (pg >= 0.999f) return;
-  if (!signin && pg < 0.3f) for (int i = 0; i < 5; i++) { float h = i < 2 ? 76 : 66; hit_add_nav(topNav.chipX[i] + (i == NAV_SEARCH ? update_search_shift(topNav.chipX[NAV_SEARCH], topNav.chipX[NAV_SET]) : 0), 50 - h / 2, topNav.chipW[i], h, chip_focus, chip_act, i, 0); }
+  if (!signin && pg < 0.3f) for (int i = 0; i <= app_nav_last(); i++) { float h = i < 2 ? 76 : 66; hit_add_nav(topNav.chipX[i] + (i == NAV_SEARCH ? update_search_shift(topNav.chipX[NAV_SEARCH], topNav.chipX[NAV_SET]) : 0), 50 - h / 2, topNav.chipW[i], h, chip_focus, chip_act, i, 0); }
   static float barOut, barV; { float want = btr_melt() > 0.04f ? 1.0f : 0.0f, w = 11.0f, dt = DT > 0.05f ? 0.05f : DT; barV += (w * w * (want - barOut) - 2 * w * barV) * dt; barOut += barV * dt; if (fabsf(want - barOut) < 0.002f && fabsf(barV) < 0.01f) { barOut = want; barV = 0; } } /* its own motion: a spring that starts softly, travels and settles (half a second), turning back smoothly from wherever it is */
   float mt = barOut < 0 ? 0 : barOut > 1 ? 1 : barOut, ma = mt < 0.15f ? 0 : mt > 0.75f ? 1 : (mt - 0.15f) / 0.6f, rv = ease_apply(EASE_CSS_EASE, app_reveal_x(0, 0.4f)) * (1 - ma * ma * (3 - 2 * ma)); rv *= 1 - pg; if (rv < 1) gfx_opacity_push(rv); /* the background trailer: the bar rises out of the screen, fading across the middle of its way, and comes back as it goes */ float lift = -70 * pg - 140 * mt; if (lift < 0) gfx_offset_push(0, lift);
   float nx = nudge_x(&topNav.nudge), ny = nudge_y(&topNav.nudge);
   if (!signin) {
     /* the tabs' capsule: one piece of glass behind the three, brighter while the bar has the focus */
     { static Tween lit; tween_to(&lit, topNav.active ? 1 : 0, 0.3f, EASE_CSS_EASE); tween_tick(&lit, DT);
-      float cx0 = topNav.chipX[NAV_DISC] - 8, cx1 = topNav.chipX[NAV_LIB] + topNav.chipW[NAV_LIB] + 8;
+      float cx0 = SB_W, cx1 = 0; for (int j = NAV_DISC; j <= app_nav_last(); j++) { if (topNav.chipX[j] < cx0) cx0 = topNav.chipX[j]; if (topNav.chipX[j] + topNav.chipW[j] > cx1) cx1 = topNav.chipX[j] + topNav.chipW[j]; } cx0 -= 8; cx1 += 8;
       { static float lean; float want = topNav.active && topNav.idx >= NAV_DISC ? ((topNav.px.v + topNav.pw.v / 2 - cx0) / (cx1 - cx0) - 0.5f) * 0.12f : 0; lean += (want - lean) * fminf(1, DT * 0.8f); /* the light leans a little towards the focused tab, slowly */
         lgSpotLean = lean; }
       { float gx = cx0, gy = 50 - 39, gw = cx1 - cx0, gh = 78; if (topNav.active && topNav.idx >= NAV_DISC) lg_squish(&gx, &gy, &gw, &gh, nx, ny); /* the focus pushed against the end: the capsule bulges with it */
         lg_glass(gx, gy, gw, gh, gh / 2, ACC, 0.85f + 0.3f * lit.v); }
       /* the current tab, when the focus is elsewhere: a softer piece of glass inside it */
-      static Tween mk[3]; /* (only while the focus is out of the bar: moving to Search or Settings, nothing is left lit on the tabs) */
-      for (int i = NAV_DISC; i <= NAV_LIB; i++) { tween_to(&mk[i - NAV_DISC], chipCur(i) && !topNav.active ? 1 : 0, 0.2f, EASE_CSS_EASE); tween_tick(&mk[i - NAV_DISC], DT); }
-      for (int i = NAV_DISC; i <= NAV_LIB; i++) { float a = mk[i - NAV_DISC].v; if (a > 0.01f) { gfx_opacity_push(a); gfx_rrect(topNav.chipX[i], 50 - 30, topNav.chipW[i], 60, 30, WHITE_A(20)); gfx_ring(topNav.chipX[i], 50 - 30, topNav.chipW[i], 60, 30, 1, WHITE_A(46)); gfx_opacity_pop(); } } }
+      static Tween mk[4]; /* (only while the focus is out of the bar: moving to Search or Settings, nothing is left lit on the tabs) */
+      for (int i = NAV_DISC; i <= app_nav_last(); i++) { tween_to(&mk[i - NAV_DISC], chipCur(i) && !topNav.active ? 1 : 0, 0.2f, EASE_CSS_EASE); tween_tick(&mk[i - NAV_DISC], DT); }
+      for (int i = NAV_DISC; i <= app_nav_last(); i++) { float a = mk[i - NAV_DISC].v; if (a > 0.01f) { gfx_opacity_push(a); gfx_rrect(topNav.chipX[i], 50 - 30, topNav.chipW[i], 60, 30, WHITE_A(20)); gfx_ring(topNav.chipX[i], 50 - 30, topNav.chipW[i], 60, 30, 1, WHITE_A(46)); gfx_opacity_pop(); } } }
     /* the focus: liquid accent glass that stretches as it glides and settles back round (its speed, smoothed) */
     float pa = topNav.pill.v; if (pa > 0.001f) { static float lastX, sv, dir; float x = topNav.px.v, w = topNav.pw.v, h = 62, r = 31; float x0 = lastX; lglass_stretch(&sv, &lastX, x, DT); if (fabsf(x - x0) > 0.01f) dir = x > x0 ? 1 : -1; /* 0..1, and which way */
       float sw = w * (1 + 0.22f * sv), sh = h * (1 - 0.10f * sv), px = x + w / 2 - sw / 2, py = 50 - sh / 2;
@@ -493,10 +499,10 @@ void topnav_draw(void) {
       gfx_rrect_v(px, py, sw, sh, sh / 2, WHITE_A(40), WHITE_A(0)); gfx_clip_push(px, py, sw, sh); gfx_alpha_tex(gfx_radial_tex(), px + sw * 0.15f, py - sh * 0.6f, sw * 0.7f, sh, WHITE_A(55)); gfx_clip_pop();
       gfx_ring(px, py, sw, sh, sh / 2, 1.2f, WHITE_A(70)); (void)r; /* a fine bright edge: no glint sliding across a moving pill */
       gfx_offset_pop(); gfx_opacity_pop(); }
-    for (int i = NAV_DISC; i <= NAV_LIB; i++) {
+    for (int i = NAV_DISC; i <= app_nav_last(); i++) {
       int cur = chipCur(i), f = chipFocused(i); float x = topNav.chipX[i], w = topNav.chipW[i];
       if (f) gfx_offset_push(nx, ny);
-      { static Tween em[3]; Tween *e = &em[i - NAV_DISC]; tween_to(e, f || (cur && !topNav.active) ? 1 : 0, 0.22f, EASE_CSS_EASE); tween_tick(e, DT); /* bold while focused, or the page shown with the focus elsewhere: crossfaded both ways */
+      { static Tween em[4]; Tween *e = &em[i - NAV_DISC]; tween_to(e, f || (cur && !topNav.active) ? 1 : 0, 0.22f, EASE_CSS_EASE); tween_tick(e, DT); /* bold while focused, or the page shown with the focus elsewhere: crossfaded both ways */
         float ty = 50 - text_line_height(32) / 2.0f, k = e->v;
         if (k < 0.999f) text_draw(chipLabel(i), x + w / 2, ty, 32, 400, WHITE_A((int)(184 * (1 - k))), 0, 0, ALIGN_CENTER);
         if (k > 0.001f) text_draw(chipLabel(i), x + w / 2, ty, 32, 700, WHITE_A((int)(255 * k)), 0, 0, ALIGN_CENTER); }
@@ -510,7 +516,7 @@ void topnav_draw(void) {
   if (rv < 1) gfx_opacity_pop();
   lglass_light(0); if (!welcome_is_open()) { float ck = (1 - ma * ma * (3 - 2 * ma)) * (1 - pg); if (ck < 1) gfx_opacity_push(ck); if (lift < 0) gfx_offset_push(0, lift); clock_draw(); if (lift < 0) gfx_offset_pop(); if (ck < 1) gfx_opacity_pop(); } /* the clock: never faded in with the page (it stays where it is through signing in, the start screen and the guide); away only with the bar for a trailer or the reviews */
 }
-void app_clock_top(void) { if (splash_signed_in() || welcome_is_open()) { lglass_light(0); clock_draw(); } } /* over the start screen and the guide: the same clock, in its place
+void app_clock_top(void) { if (splash_signed_in() || welcome_is_open()) { lglass_light(0); clock_draw(); } } /* over the start screen and the guide: the same clock, in its place */
 
 /* ---- the backdrop: two layers, the new one fades in over the old (never a dip to black) ---- */
 #define BGW 1280
@@ -719,11 +725,11 @@ void app_go(Scr s, const void *params, int noStack) {
   topnav_paint();
 }
 void app_back(void) {
-  if (topNav.want >= 0) { topnav_flush(1); Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; for (int j = 0; j < 5; j++) if (chipScr(j) == cur) topNav.idx = j; topnav_paint(); return; } /* Back while the pill travels: it returns */
+  if (topNav.want >= 0) { topnav_flush(1); Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; for (int j = 0; j <= app_nav_last(); j++) if (chipScr(j) == cur) topNav.idx = j; topnav_paint(); return; } /* Back while the pill travels: it returns */
   if (app_overlay) { app_overlay->key(K_BACK); return; }
   if (SCR == SCR_LOGIN) { if (screens[SCR] && screens[SCR]->key) screens[SCR]->key(K_BACK); return; }
   if (screens[SCR] && screens[SCR]->key && screens[SCR]->key(K_BACK)) return; /* the screen stepped back inside itself */
-  int ci = -1; for (int j = 0; j < 5; j++) if (chipScr(j) == SCR) ci = j;
+  int ci = -1; for (int j = 0; j <= app_nav_last(); j++) if (chipScr(j) == SCR) ci = j;
   if (topNav.active) { if (SCR != SCR_HOME) { nav_slide(NAV_HOME >= ci ? 1 : -1); topNav.idx = NAV_HOME; app_go(SCR_HOME, NULL, 1); topNav.active = 0; topnav_paint(); } else exit_ask(); return; }
   if (nback) { Scr prev = backStack[--nback]; navf.kind = NAV_BACKZ; navf.x = backX[nback]; navf.y = backY[nback]; app_go(prev, NULL, 1); return; }
   if (ci >= 0) { topnav_focus(); return; } /* inside a tab (Home, Discover, Library, Search, Settings): Back goes up to the tab bar first; from there, Home, then the exit question */
@@ -769,12 +775,18 @@ static void key_core(int k, int down, int repeat);
 #define PTR_ARROW_WIN 0.35
 #define PTR_ARROW_DIST 32
 #define PTR_ARROW_PAUSE 0.3
-static struct { int on; float x, y; Hit hv; int hasHv; float hx, hy; double movedAt; int down, downAct; Hit act; double okKeyAt, clickAt, wheelAt; int eatUp, eatOk, arrowHid; double arrowAt; int anchor; float ax, ay; double tremAt; int dirty; } PTR;
-static void ptr_show(void) { PTR.arrowHid = 0; if (PTR.on) return; PTR.on = 1; PTR.hasHv = 0; }
-static void ptr_hide(void) { if (!PTR.on) return; PTR.on = 0; PTR.hasHv = 0; }
+static struct { int on; float x, y; Hit hv; int hasHv; float hx, hy; double movedAt; int down, downAct; Hit act; double okKeyAt, clickAt, wheelAt; int eatUp, eatOk, arrowHid; double arrowAt; int anchor; float ax, ay; double tremAt; int dirty; double handAt; int still; float sx, sy; double hideAt; } PTR;
+/* handAt: when the hand last moved it (it is put away after a while: PTR_IDLE, PTR_IDLE_PLAY over a film);
+   still: the page moved under a pointer standing still, which then focuses nothing until the hand moves again
+   (PTR_STILL_DIST from sx, sy): a row or a page that scrolls under it must not walk the focus on by itself */
+#define PTR_IDLE 8.0
+#define PTR_IDLE_PLAY 3.0
+#define PTR_STILL_DIST 18
+static void ptr_show(void) { PTR.arrowHid = 0; if (PTR.on) return; PTR.on = 1; PTR.hasHv = 0; PTR.handAt = NOW; }
+static void ptr_hide(void) { if (!PTR.on) return; PTR.on = 0; PTR.hasHv = 0; PTR.still = 0; plat_cursor_hide(); } /* (the TV's own pointer too: it stayed on the screen otherwise) */
 static int ptr_tremor(double now) { if (!PTR.arrowHid) return 0; if (now - PTR.arrowAt < PTR_ARROW_WIN) return 1;
   if (!PTR.anchor || now - PTR.tremAt > PTR_ARROW_PAUSE) { PTR.anchor = 1; PTR.ax = PTR.x; PTR.ay = PTR.y; } PTR.tremAt = now; float dx = PTR.x - PTR.ax, dy = PTR.y - PTR.ay; return dx * dx + dy * dy < PTR_ARROW_DIST * PTR_ARROW_DIST; }
-static void ptr_nav_back(void) { if (topNav.want >= 0) return; Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; for (int j = 2; j < 5; j++) if (chipScr(j) == cur && topNav.idx != j) { topNav.idx = j; topnav_paint(); } }
+static void ptr_nav_back(void) { if (topNav.want >= 0) return; Scr cur = (SCR == SCR_DETAIL || SCR == SCR_SIM) ? SCR_HOME : SCR; for (int j = 2; j <= app_nav_last(); j++) if (chipScr(j) == cur && topNav.idx != j) { topNav.idx = j; topnav_paint(); } }
 static void ptr_keep(const Hit *h) { PTR.hv = *h; PTR.hasHv = 1; PTR.hx = h->x + h->w / 2; PTR.hy = h->y + h->h / 2; }
 /* the brake: the element the pointer last focused moved (a slide, a scroll) or went away -> note when */
 static void ptr_settle(double now) { if (!PTR.hasHv) return; const Hit *h = hit_at(PTR.hx, PTR.hy); int found = 0; float cx = PTR.hx, cy = PTR.hy;
@@ -786,13 +798,17 @@ static void ptr_frame(void) { if (!PTR.on || !PTR.dirty) return; PTR.dirty = 0; 
   ptr_settle(now); const Hit *d = hit_at(PTR.x, PTR.y);
   if (topNav.active && !(d && d->nav)) ptr_nav_back();
   if (!d || !d->focus || (PTR.hasHv && hit_same(d, &PTR.hv))) return;
-  if (PTR.movedAt && now - PTR.movedAt < PTR_SETTLE) { PTR.dirty = 1; return; } /* the page is still moving under the pointer */
+  if (PTR.still) return; /* the page moved under it: the hand moves first */
+  if (PTR.movedAt && now - PTR.movedAt < PTR_SETTLE) { PTR.still = 1; PTR.sx = PTR.x; PTR.sy = PTR.y; return; } /* the page is still moving under the pointer */
   d->focus(d->a, d->b); ptr_keep(d); }
-void app_pointer_move(float x, float y) { if (x == PTR.x && y == PTR.y) return; PTR.x = x; PTR.y = y; if (ptr_tremor(NOW)) return; ptr_show(); idle_touch_by("pointer moved"); PTR.dirty = 1; }
+/* the pointer left alone a while is put away: over a film sooner (it stood over the picture the whole film) */
+static void ptr_idle(void) { if (PTR.hideAt && NOW >= PTR.hideAt) { PTR.hideAt = 0; if (PTR.on && !PTR.down && NOW - PTR.handAt > 0.12) ptr_hide(); } if (!PTR.on || PTR.down) return; double idle = NOW - PTR.handAt; if (idle > (player_open() ? PTR_IDLE_PLAY : PTR_IDLE)) ptr_hide(); }
+void app_pointer_move(float x, float y) { if (x == PTR.x && y == PTR.y) return; PTR.x = x; PTR.y = y; if (ptr_tremor(NOW)) return; ptr_show(); PTR.handAt = NOW; idle_touch_by("pointer moved");
+  if (PTR.still) { float dx = x - PTR.sx, dy = y - PTR.sy; if (dx * dx + dy * dy >= PTR_STILL_DIST * PTR_STILL_DIST) PTR.still = 0; } PTR.dirty = 1; }
 void app_pointer_button(int down, float x, float y) {
   double now = NOW; PTR.x = x; PTR.y = y;
   if (saver_on()) return; /* the screensaver covers the page: nothing under it is pressed */
-  if (down) { ptr_show(); idle_touch();
+  if (down) { ptr_show(); PTR.handAt = NOW; PTR.still = 0; idle_touch();
     if (PTR.okKeyAt && now - PTR.okKeyAt < PTR_DEDUPE) { PTR.eatUp = 1; return; } /* the OK key of this same press came first */
     PTR.clickAt = now;
     if (player_open()) { extern void player_ptr(int type, float x, float y); PTR.down = 2; player_ptr(1, x, y); return; }
@@ -813,9 +829,11 @@ void app_pointer_system(int show) { if (!show) { ptr_hide(); return; } if (PTR.a
 void app_key(int k, int down, int repeat) {
   if (k == K_CURSOR_SHOW || k == K_CURSOR_HIDE) { if (down) app_pointer_system(k == K_CURSOR_SHOW); return; } /* a notice from the TV, not a key */
   if (down && k == K_OK && !repeat) { if (PTR.eatOk || PTR.down || (PTR.clickAt && NOW - PTR.clickAt < PTR_DEDUPE)) { PTR.eatOk = 1; return; } PTR.okKeyAt = NOW; } /* the click of this same press came first */
+  if (!down && k == K_OK && PTR.on) PTR.hideAt = NOW + 0.15; /* OK put away too, once its click has landed */
   if (!down && k == K_OK && PTR.eatOk) { PTR.eatOk = 0; return; }
   if (down && saver_on() && k != K_CURSOR_SHOW && k != K_CURSOR_HIDE) { saver_stop(); idle_touch(); if (k == K_OK) PTR.eatOk = 1; return; } /* the key that wakes the screensaver does nothing else */
   if (down && k >= K_LEFT && k <= K_DOWN) { ptr_hide(); PTR.arrowHid = 1; PTR.arrowAt = NOW; PTR.anchor = 0; } /* every arrow re-arms it, hidden or not */
+  else if (down && k != K_OK && PTR.on && !PTR.down) ptr_hide(); /* Back, play, the colour keys...: the remote's keys, the pointer goes */
   key_core(k, down, repeat);
 }
 /* where the focus is, as far as can be told from outside: the screen, the open sheet, the top bar, the centre of
@@ -861,7 +879,7 @@ static void key_dispatch(int k, int repeat) {
   if (k == K_EXIT) { app_quit(); return; }
   if ((k == K_RED || k == K_GREEN) && SCR != SCR_LOGIN) { if (k == K_RED && update_notice_key()) { sound_play(SND_TAB); return; } /* a notice out: red takes you to what it is about */
     int t = k == K_RED ? NAV_SET : NAV_SEARCH; sound_play(SND_TAB);
-    if (SCR == chipScr(t) && colorFromSet) { Scr p = colorFrom; colorFromSet = 0; int ci = -1; for (int j = 0; j < 5; j++) if (chipScr(j) == p) ci = j; /* pressed on its own page: back where it was opened from */
+    if (SCR == chipScr(t) && colorFromSet) { Scr p = colorFrom; colorFromSet = 0; int ci = -1; for (int j = 0; j <= app_nav_last(); j++) if (chipScr(j) == p) ci = j; /* pressed on its own page: back where it was opened from */
       topnav_flush(1); navf.kind = NAV_BACKZ; navf.x = topNav.chipX[t] + topNav.chipW[t] / 2; navf.y = 50; topNav.idx = ci >= 0 ? ci : NAV_HOME;
       app_go(p, NULL, 1); topNav.active = 0; topnav_paint(); return; } topnav_flush(1); if (chipScr(t) != SCR) { topNav.idx = -1; topnav_switch(t); } topNav.idx = t; topnav_enter_content(); return; } /* the remote's colour keys: red Settings, green Search */
   if (topNav.active) { topnav_key(k); return; }
@@ -879,14 +897,18 @@ void app_init(void) {
 static void amb_bake(void);
 void app_tick(float dt) {
   DT = dt; NOW = SDL_GetTicks() / 1000.0; FRAME++;
-  ptr_frame();
+  ptr_frame(); ptr_idle();
   { static int swelled; if (app_hold_progress() > 0 && !swelled) { swelled = 1; sound_play(SND_HOLD); } else if (!okHold.down) swelled = 0; } /* holding OK: a low swell as the line starts round */
   if (okHold.down && !okHold.menu && (NOW - okHold.at) * 1000 >= HOLD_MS) { okHold.menu = 1; menuGuard = 1; orbs_pulse(ORB_HOLD, 1); if (app_card_menu_hook) app_card_menu_hook(&okHold.item); }
   timer_tick(&xin, dt); timer_tick(&xmvT, dt); timer_tick(&xoutT, dt);
   saver_tick(dt);
-  accent_tick(dt); tint_tick(); toast_tick(dt); clock_tick(); if (SCR == SCR_LOGIN || splash_signed_in()) login_glow_bake(); /* (the sign-in's glass: the glows under it) */ amb_bake(); topnav_tick(dt); bg_tick(dt); lg_tick(); sync_tick(); update_tick(dt); best_tick();
+  accent_tick(dt); tint_tick(); toast_tick(dt); clock_tick(); if (SCR == SCR_LOGIN || splash_signed_in()) login_glow_bake(); /* (the sign-in's glass: the glows under it) */ amb_bake();
+  topnav_tick(dt); lg_tick();
+  bg_tick(dt); sync_tick(); update_tick(dt); best_tick();
   curKey = 0; /* (a page switch later in the frame is not a key's) */
-  btr_tick(dt); welcome_tick(); lift_tick(dt); tabs_warm_tick();
+  btr_tick(dt);
+  welcome_tick(); /* (the TV's guide to the remote) */
+  lift_tick(dt); tabs_warm_tick();
   { static int greeted; if (!greeted && app_splash_done) { greeted = 1; sound_play(SND_START); } } /* start-up: one very faint sound */
   { static int wasP; int po = player_open(); if (po != wasP) { wasP = po; if (po) sound_play(SND_PLAY); sound_quiet(po); } } /* into the player: one faint sound, then the film has the audio alone */
   castlink_tick(dt); /* (a phone drives the film too: before the app rests under it) */
@@ -1007,7 +1029,7 @@ void app_draw(void) {
   if (player_open() && saver_covers()) { saver_draw(); return; } /* (over a paused film: the screensaver alone) */
   if (player_open()) { if (player_page_under()) page_draw(); sx_layer(1); player_draw(); sx_layer(0); sx_flush(); toast_draw(); saver_draw(); return; }
   if (saver_covers()) { saver_draw(); return; } /* nothing under it is seen: not drawn */
-  page_draw();
+  { float fz = btr_full(); if (fz > 0.001f) gfx_opacity_push(1 - fz); page_draw(); if (fz > 0.001f) gfx_opacity_pop(); } /* the trailer on the whole screen: the page fades off it */
   sx_flush(); /* a logo or poster on its way from the last page */
   toast_draw();
   saver_draw();

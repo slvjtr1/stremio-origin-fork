@@ -45,6 +45,8 @@ extern void (*app_play_hook)(const Stream *s, const char *type, const char *id, 
 void app_play(const Stream *s, const char *type, const char *id, const char *vid, int fromStart);
 void app_play_from_start(const Item *it);
 void app_open_external(const char *url, const char *name);  /* an addon's outside link: a stremio:///detail page here, else a code for the phone */
+struct tm;
+void app_time_fmt(const struct tm *tm, char *out, size_t cap, int ampm); /* the time as Settings > Appearance > Clock says (12-hour: AM / PM when ampm) */
 void app_refresh_boards(void);        /* the library changed: the boards rebuild */
 extern int app_splash_done;
 void app_reveal_start(void);                        /* first launch: the page rises in once the splash goes */
@@ -88,7 +90,8 @@ float app_hold_k(double since);        /* 0..1 of a hold begun then, on the same
 #define NAV_DISC 2
 #define NAV_HOME 3
 #define NAV_LIB 4
-typedef struct { int idx, active; int want; double swAt; Nudge nudge; Tween px, pw, pill; float pillShown; Tween cornerF[2], cornerS[2], dotK[2]; Tween setRot; float chipX[5], chipW[5]; int laidOut; } TopNav;
+int app_nav_last(void);
+typedef struct { int idx, active; int want; double swAt; Nudge nudge; Tween px, pw, pill; float pillShown; Tween cornerF[2], cornerS[2], dotK[2]; Tween setRot; float chipX[6], chipW[6]; int laidOut; } TopNav;
 extern TopNav topNav;
 void topnav_focus(void);
 void topnav_draw(void);

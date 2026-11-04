@@ -5,6 +5,7 @@
    the device can take a moment on a TV, and the drawing never waits for that. The device is let go after a while
    without sounds and whenever the player is up, so a film always has the audio to itself. */
 #include "ui/sound.h"
+#define SOUND_DEF "true"
 #include "core/store.h"
 #include "core/app.h"
 #include "platform/plat.h"
@@ -72,7 +73,7 @@ static int run(void *u) {
 void sound_play(int which) {
   if (which == SND_PLAY || which == SND_START || which == SND_HOLD) return; /* two sounds only: the tabs' and one for everything else */
   if (which != SND_TAB) which = SND_FOCUS;
-  if (which < 0 || which >= SND_N || SDL_AtomicGet(&quiet) || !strcmp(store_get("uiSound", "true"), "false")) return;
+  if (which < 0 || which >= SND_N || SDL_AtomicGet(&quiet) || !strcmp(store_get("uiSound", SOUND_DEF), "false")) return;
   static double prev[SND_N], prevAny; double now = app_now();
   if (now - prev[which] < 0.06) return; /* asked twice for one move (the key and the drawing): once */
   SDL_AtomicSet(&softNext, which != SND_HOLD && which != SND_PLAY && which != SND_START && now - prevAny < 0.16); /* a held key: quieter */

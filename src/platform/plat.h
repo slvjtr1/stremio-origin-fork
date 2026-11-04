@@ -41,4 +41,5 @@ void plat_luna_pump(void);
 int plat_luna_send(const char *uri, const char *payload);
 /* the panel's lines (2160 on a 4K TV) from the platform itself, without a system service; 0 when unknown */
 int plat_panel_lines(void);
+void plat_cursor_hide(void);  /* puts the Magic Remote's pointer away (the TV shows it again when the remote moves) */
 #endif

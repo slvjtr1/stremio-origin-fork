@@ -147,6 +147,12 @@ const char *plat_ui_locale(void) {
   return loc[0] ? loc : NULL;
 }
 /* the TV's SDL knows the panel without a system service (a refused systemproperty call leaves 4K sets at 1080p) */
+/* the TV's own pointer: hidden through its SDL (looked up, so an SDL without it still starts) */
+void plat_cursor_hide(void) {
+  static SDL_bool (*vis)(SDL_bool) = NULL; static int looked;
+  if (!looked) { looked = 1; *(void **)(&vis) = dlsym(RTLD_DEFAULT, "SDL_webOSCursorVisibility"); }
+  if (vis) vis(SDL_FALSE);
+}
 int plat_panel_lines(void) {
   SDL_bool (*res)(int *, int *) = NULL; *(void **)(&res) = dlsym(RTLD_DEFAULT, "SDL_webOSGetPanelResolution");
   int w = 0, h = 0; if (!res || !res(&w, &h)) return 0;
