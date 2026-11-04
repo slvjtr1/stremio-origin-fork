@@ -39,8 +39,8 @@ APPID="${APPID:-tv.stremioorigin.app}"
 CFLAGS="$OPT -std=c11 -D_GNU_SOURCE -DSB_APP_ID=\"$APPID\" -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers $TFLAGS -I$ROOT/src -I$TP/freetype/include -I$TP/harfbuzz/src -I$TP/fribidi/lib -I$TP/config/fribidi -I$TP/cjson -I$TP/stb -I$TP/qrcodegen -I$TP/webp -I$TP/crypto -I$TP/libass"
 
 # ---- built-in keys ------------------------------------------------------------------------
-# The app's own keys (Trakt, TMDB) come from a private file outside the repo, KEYS=$ORIGIN_BUILD/keys.env
-# by default (TRAKT_CLIENT_ID=..., TMDB_API_KEY=...; Trakt's app signs in with PKCE: no secret). They go into build/<target>/sbkeys.h, scrambled so they are
+# The app's own TMDB key comes from a private file outside the repo, KEYS=$ORIGIN_BUILD/keys.env
+# by default (TMDB_API_KEY=...). They go into build/<target>/sbkeys.h, scrambled so they are
 # not plain text in the binary. Without the file the build still works: each then needs a user's own key.
 KEYS="${KEYS:-$ORIGIN_BUILD/keys.env}"
 python3 - "$KEYS" "$B/sbkeys.h" <<'PY'
@@ -53,9 +53,9 @@ if os.path.isfile(src):
 def arr(name):
     v = kv.get(name, '').encode(); pad = hashlib.sha256(b'sb:' + name.encode()).digest()
     return 'static const unsigned char SBK_%s[] = { %s0 }, SBK_%s_PAD[32] = { %s };\n#define SBK_%s_LEN %d\n' % (name, ''.join('%d,' % (c ^ pad[i % 32]) for i, c in enumerate(v)), name, ','.join(str(x) for x in pad), name, len(v))
-body = '/* made by tools/build.sh from the private keys file: never commit */\n' + arr('TRAKT_CLIENT_ID') + arr('TMDB_API_KEY')
+body = '/* made by tools/build.sh from the private keys file: never commit */\n' + arr('TMDB_API_KEY')
 if not os.path.isfile(out) or open(out).read() != body: open(out, 'w').write(body)
-print('== keys built in: %s' % (', '.join(n for n in ('TRAKT_CLIENT_ID', 'TMDB_API_KEY') if kv.get(n)) or 'none (%s)' % src))
+print('== keys built in: %s' % (', '.join(n for n in ('TMDB_API_KEY',) if kv.get(n)) or 'none (%s)' % src))
 PY
 CFLAGS="$CFLAGS -I$B"
 

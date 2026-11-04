@@ -24,7 +24,6 @@
 #include <time.h>
 #include "core/hit.h"
 #include "core/tmdb.h"
-#include "core/trakt.h"
 #include "screens/revpanel.h"
 #include "ui/qrcard.h"
 #include "core/update.h"
@@ -119,8 +118,8 @@ static int addon_opts(void) {
   return n;
 }
 /* the user's own keys, added from the phone: TMDB (titles and descriptions in the app's language, its reviews) and
-   Trakt (ratings, their spread, people's comments); Language points here */
-static int tmdbOn, traktOn;
+   Language points here */
+static int tmdbOn;
 static const Opt METALANG[] = { { "auto", "Same as the app" }, { "en", "English" }, { "ar", "\xd8\xa7\xd9\x84\xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a\xd8\xa9" } };
 static int lang_opts(void) {
   tmdbOn = tmdb_has_key();
@@ -131,16 +130,13 @@ static int lang_opts(void) {
   return 3;
 }
 static int keys_opts(void) {
-  int n = 0; tmdbOn = tmdb_has_key(); traktOn = trakt_has_key();
+  int n = 0; tmdbOn = tmdb_has_key();
   if (!tmdb_builtin()) set_act(&keyS[n++], "__tmdb", "Titles and descriptions", tmdbOn ? "In the app\xe2\x80\x99s language, from TMDB. OK to change the key" : "Only in English. OK to add a TMDB key from your phone");
   if (tmdbOn && !tmdb_builtin()) set_act(&keyS[n++], "__tmdbOff", "Remove the TMDB key", "Titles and descriptions go back to English");
-  if (!trakt_builtin()) set_act(&keyS[n++], "__trakt", "Ratings and reviews", traktOn ? "The rating, its spread and people\xe2\x80\x99s comments, from Trakt. OK to change the id" : "OK to add a Trakt client id from your phone");
-  if (traktOn && !trakt_builtin()) set_act(&keyS[n++], "__traktOff", "Remove the Trakt id", "Ratings and comments from the other sources alone");
   return n;
 }
 static void relang(void) { { int l = cat_of(langS); if (l >= 0) { cats[l].n = lang_opts(); if (S.cat == l && S.idx >= cats[l].n) S.idx = cats[l].n - 1; } } for (int i = 0; i < ncat; i++) if (cats[i].opts == keyS) { cats[i].n = keys_opts(); if (S.cat == i && S.idx >= cats[i].n) S.idx = cats[i].n - 1; } S.dirty = 1; }
 static void on_tmdb_card(int on, void *ud) { (void)ud; if (on == tmdbOn) return; relang(); if (on) toast(T("Titles and descriptions in your language"), 2000, NULL); }
-static void on_trakt_card(int on, void *ud) { (void)ud; if (on == traktOn) return; relang(); if (on) toast(T("Ratings and comments now come from Trakt too"), 2000, NULL); }
 /* About: the update rows (as the update stands now) and Share logs */
 static unsigned aboutSeen;
 static int about_opts(void) {
@@ -245,7 +241,7 @@ static void build(void) {
     { "Screens", "Appearance", "set_look", "Accent colour, app icon, clock, catalogs on Home", "look", lookS, 5, 0 },
     { "Screens", "Language", "set_lang", "The app, and titles and descriptions", NULL, langS, nl, 0 },
     { "Account and system", "Addons", "set_addon", "", NULL, addonS, na, 0 },
-    { "Account and system", "Keys", "set_keys", "Titles in your language, ratings and reviews", "keys", keyS, nk, 0 },
+    { "Account and system", "Keys", "set_keys", "Titles and descriptions in your language", "keys", keyS, nk, 0 },
     { "Account and system", "About", "info", "Version, updates, logs and support", "about", supS, nab, 0 },
     { "", "Log out", "set_out", "", NULL, acctS, 1, 1 } };
   ncat = 0; for (int i = 0; i < NCAT; i++) if (c[i].opts != keyS || nk) cats[ncat++] = c[i];
@@ -445,8 +441,6 @@ static int key(int k) {
     if (op->info) return 1;
     if (op->action) { if (!strcmp(op->k, "__tmdb")) { qrcard_show_tmdb(on_tmdb_card, NULL); return 1; }
       if (!strcmp(op->k, "__tmdbOff")) { tmdb_key_clear(); relang(); toast(T("Titles and descriptions in English"), 2000, NULL); return 1; }
-      if (!strcmp(op->k, "__trakt")) { qrcard_show_trakt(on_trakt_card, NULL); return 1; }
-      if (!strcmp(op->k, "__traktOff")) { trakt_key_clear(); relang(); toast(T("The Trakt id is gone"), 2000, NULL); return 1; }
       if (!strcmp(op->k, "__keys")) { settings_open_keys(); return 1; }
       if (!strcmp(op->k, "__sync")) sync_now(); else if (!strcmp(op->k, "__logs")) logcard_show(); else if (!strcmp(op->k, "__guide")) welcome_show_guide();
       else if (!strcmp(op->k, "__support")) { if (welcome_github_url()[0]) { supWant = !supWant; tween_to(&supK, (float)supWant, 0.5f, EASE_IN_OUT); orbs_pulse(supWant ? ORB_RIGHT : ORB_LEFT, 0.6f); } } /* the other code, turned over */ else if (!strcmp(op->k, "__upd")) update_install(); else if (!strcmp(op->k, "__check")) update_check(1); else if (!strcmp(op->k, "__logout")) logout();
@@ -564,8 +558,8 @@ static void preview_keys(float x, float y, float w, float h) {
     gfx_rrect(x, y, w, h, 18, col_alpha(PAGE, 0.78f)); }
   const char *EN_T = "Spirited Away", *EN_D = "A girl wanders into a world of spirits and must work in a bathhouse to save her parents.";
   int en = !strcmp(i18n_lang(), "en"); const char *LT = en ? "Le Voyage de Chihiro" : T(EN_T), *LD = en ? "Une fillette s\xe2\x80\x99\xc3\xa9gare dans un monde d\xe2\x80\x99" "esprits et doit travailler dans des bains pour sauver ses parents." : T(EN_D);
-  float cw = (w - 28 * 2 - 40) / 2, lx = rtl ? x + w - 28 - cw : x + 28, rx = rtl ? x + 28 : x + w - 28 - cw, ty = y + 22; /* two halves: TMDB, Trakt */
-  for (int k = 0; k < 2; k++) { float cx = k ? rx : lx, tx = rtl ? cx + cw : cx; const char *nm = k ? "Trakt" : "TMDB";
+  float cw = w - 28 * 2, lx = x + 28, ty = y + 22; /* TMDB across the card */
+  for (int k = 0; k < 1; k++) { float cx = lx, tx = rtl ? cx + cw : cx; const char *nm = "TMDB";
     float nw = text_width(nm, 18, 700, 1.0f) + 20; gfx_rrect(rtl ? tx - nw : tx, ty, nw, 28, 14, k ? acc_a(0.3f) : RGBA(0x0d, 0x25, 0x3f, 220)); text_draw(nm, rtl ? tx - nw / 2 : tx + nw / 2, ty + 14 - text_line_height(18) / 2.0f, 18, 700, k ? ACC3 : RGB(0x1e, 0xd5, 0xa3), 1.0f, 0, ALIGN_CENTER);
     text_draw(T(k ? "Ratings and comments" : "Titles in your language, reviews"), rtl ? tx - nw - 14 : tx + nw + 14, ty + 14 - text_line_height(20) / 2.0f, 20, 600, WHITE_A(200), 0, cw - nw - 14, al); }
   float by = ty + 28 + 14;
@@ -575,10 +569,6 @@ static void preview_keys(float x, float y, float w, float h) {
   if (k > 0) { gfx_clip_push(rtl ? lx + cw * (1 - k) : lx, by, cw * k, ch); tmdb_card(lx, by, cw, ch, T("With your key"), LT, LD, 1, 1); gfx_clip_pop(); }
   if (k > 0.01f && k < 0.99f) { float sx = rtl ? lx + cw * (1 - k) : lx + cw * k; gfx_rrect(sx - 1.5f, by + 10, 3, ch - 20, 1.5f, ACC); gfx_glow_round(sx - 40, by, 80, ch, col_alpha(ACC, 0.5f), lx, by, cw, ch, 16); } /* the line running ahead */
   revpanel_draw_comment(lx, by + ch + 12, cw, revpanel_sample(1), 0, revpanel_comment_lines(revpanel_sample(1), cw, 2), 1);
-  /* Trakt: the score with its spread, a comment; the bars grow in as the loop starts */
-  float g = ease_apply(EASE_OUT, fmodf(t, 5.0f) / 0.9f); int d[10]; const int *sd = revpanel_sample_dist(); for (int i = 0; i < 10; i++) d[i] = (int)(sd[i] * (0.05f + 0.95f * g) + 0.5f);
-  float sh = revpanel_draw_score(rx, by + 2, cw, 8.2f, "Trakt", 23140, d, 0);
-  revpanel_draw_comment(rx, by + sh + 14, cw, revpanel_sample(0), 0, revpanel_comment_lines(revpanel_sample(0), cw, 2), 1);
   { const char *pv = T("Preview"); float tw2 = text_width(pv, 16, 700, 1.2f) + 22, tx2 = rtl ? x + 12 : x + w - 12 - tw2; gfx_rrect(tx2, y + 8, tw2, 26, 13, BLACK_A(130)); gfx_ring(tx2, y + 8, tw2, 26, 13, 1, WHITE_A(50)); text_draw(pv, tx2 + tw2 / 2, y + 21 - text_line_height(16) / 2.0f, 16, 700, WHITE_A(220), 1.2f, 0, ALIGN_CENTER); }
   gfx_ring(x, y, w, h, 18, 1.5f, WHITE_A(40));
 }

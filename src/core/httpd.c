@@ -30,15 +30,13 @@ static int alive, stopReq, nconn; static double deadline;
 static char tok[17];
 static struct { int seq; char text[400]; } typed;
 static unsigned hits;
-static int (*keyFn)(const char *key), (*traktFn)(const char *key);
+static int (*keyFn)(const char *key);
 
 /* the pages speak the app's language: its translations of these, taken when a screen asks for the server
    (the server thread never reads the dictionaries, which a language change rebuilds) */
 static const char *PK[] = { "Search on TV", "Search on your TV", "What you type shows up on the TV as you type.", "Film or series", "Sent", "Can\xe2\x80\x99t reach the TV",
   "Titles and descriptions", "Titles and descriptions in your language", "Paste your TMDB API key (or API Read Access Token). Get one at", "It stays on your TV.",
-  "API key", "Save", "Checking\xe2\x80\xa6", "Saved. You can close this page.", "TMDB didn\xe2\x80\x99t accept this key.",
-  "Ratings and reviews", "Ratings and reviews from Trakt", "Paste your Trakt Client ID. To get one:", "open", "sign in, then Settings \xe2\x80\xba Your API Apps \xe2\x80\xba New Application. Any name; as the redirect URI paste",
-  "then Save and copy the Client ID.", "Client ID", "Trakt didn\xe2\x80\x99t accept this id." };
+  "API key", "Save", "Checking\xe2\x80\xa6", "Saved. You can close this page.", "TMDB didn\xe2\x80\x99t accept this key." };
 #define NPK (int)(sizeof PK / sizeof PK[0])
 static struct { char lang[4]; int rtl; char *t[NPK]; } str;
 
@@ -111,15 +109,6 @@ static void tmdb_page(Buf *b) {
     "x.open(\"GET\",location.pathname+\"/set?key=\"+encodeURIComponent(k.value.trim()));x.onload=function(){s.textContent=x.status===204?"); js(b, pt("Saved. You can close this page.")); b_s(b, ":"); js(b, pt("TMDB didn\xe2\x80\x99t accept this key.")); b_s(b, ";};"
     "x.onerror=function(){s.textContent="); js(b, pt("Can\xe2\x80\x99t reach the TV")); b_s(b, ";};x.send();};</script></body></html>");
 }
-static void trakt_page(Buf *b) {
-  head(b, pt("Ratings and reviews")); b_s(b, "<h1>"); hx(b, pt("Ratings and reviews from Trakt")); b_s(b, "</h1><p>"); hx(b, pt("Paste your Trakt Client ID. To get one:")); b_s(b, " "); hx(b, pt("open"));
-  b_s(b, " <a href=\"https://trakt.tv/oauth/applications/new\" target=\"_blank\" rel=\"noopener\" dir=\"ltr\">trakt.tv/oauth/applications</a>, "); hx(b, pt("sign in, then Settings \xe2\x80\xba Your API Apps \xe2\x80\xba New Application. Any name; as the redirect URI paste"));
-  b_s(b, " <code dir=\"ltr\">urn:ietf:wg:oauth:2.0:oob</code>, "); hx(b, pt("then Save and copy the Client ID.")); b_s(b, " "); hx(b, pt("It stays on your TV.")); b_s(b, "</p>");
-  b_s(b, "<input id=\"k\" dir=\"ltr\" autocomplete=\"off\" autocapitalize=\"off\" spellcheck=\"false\" placeholder=\""); hx(b, pt("Client ID")); b_s(b, "\"><button id=\"b\">"); hx(b, pt("Save")); b_s(b, "</button><small id=\"s\"></small><script>"
-    "var k=document.getElementById(\"k\"),s=document.getElementById(\"s\");document.getElementById(\"b\").onclick=function(){s.textContent="); js(b, pt("Checking\xe2\x80\xa6")); b_s(b, ";var x=new XMLHttpRequest();"
-    "x.open(\"GET\",location.pathname+\"/set?key=\"+encodeURIComponent(k.value.trim()));x.onload=function(){s.textContent=x.status===204?"); js(b, pt("Saved. You can close this page.")); b_s(b, ":"); js(b, pt("Trakt didn\xe2\x80\x99t accept this id.")); b_s(b, ";};"
-    "x.onerror=function(){s.textContent="); js(b, pt("Can\xe2\x80\x99t reach the TV")); b_s(b, ";};x.send();};</script></body></html>");
-}
 
 /* ---- requests ------------------------------------------------------------------------------------ */
 static void sendall(int fd, const char *p, size_t n) { while (n) { ssize_t w = send(fd, p, n, MSG_NOSIGNAL); if (w <= 0) { if (w < 0 && errno == EINTR) continue; return; } p += w; n -= (size_t)w; } }
@@ -162,23 +151,23 @@ static void handle(int fd) {
   char *sp1 = strchr(req, ' '), *sp2 = sp1 ? strchr(sp1 + 1, ' ') : NULL;
   if (!sp1 || !sp2 || strncmp(req, "GET ", 4)) { reply(fd, 404, NULL, NULL, 0); return; }
   *sp2 = 0; char *target = sp1 + 1, *q = strchr(target, '?'); if (q) *q++ = 0;
-  /* /t/<token>, then nothing, /q, /tmdb, /tmdb/set, /trakt or /trakt/set */
+  /* /t/<token>, then nothing, /q, /tmdb or /tmdb/set */
   const char *rest = NULL;
   if (!strncmp(target, "/t/", 3) && strlen(target) >= 19 && !strncmp(target + 3, tok, 16)) {
     rest = target + 19;
-    if (*rest && strcmp(rest, "/q") && strcmp(rest, "/tmdb") && strcmp(rest, "/tmdb/set") && strcmp(rest, "/trakt") && strcmp(rest, "/trakt/set")) rest = NULL; }
+    if (*rest && strcmp(rest, "/q") && strcmp(rest, "/tmdb") && strcmp(rest, "/tmdb/set")) rest = NULL; }
   if (!rest) { reply(fd, 404, NULL, NULL, 0); return; }
-  if (strcmp(rest, "/q") && strcmp(rest, "/tmdb/set") && strcmp(rest, "/trakt/set")) { pthread_mutex_lock(&mu); hits++; pthread_mutex_unlock(&mu); } /* a code was opened */
-  if (!strcmp(rest, "/tmdb/set") || !strcmp(rest, "/trakt/set")) {
+  if (strcmp(rest, "/q") && strcmp(rest, "/tmdb/set")) { pthread_mutex_lock(&mu); hits++; pthread_mutex_unlock(&mu); } /* a code was opened */
+  if (!strcmp(rest, "/tmdb/set")) {
     char key[1024]; qparam(q, "key", key, sizeof key);
-    pthread_mutex_lock(&mu); int (*fn)(const char *) = rest[1] == 't' && rest[2] == 'm' ? keyFn : traktFn; pthread_mutex_unlock(&mu);
+    pthread_mutex_lock(&mu); int (*fn)(const char *) = keyFn; pthread_mutex_unlock(&mu);
     reply(fd, fn && fn(key) ? 204 : 400, NULL, NULL, 0); return; }
   if (!strcmp(rest, "/q")) {
     char raw[1024], t[400]; qparam(q, "text", raw, sizeof raw); clean_text(raw, t, sizeof t);
     pthread_mutex_lock(&mu); typed.seq++; snprintf(typed.text, sizeof typed.text, "%s", t); pthread_mutex_unlock(&mu);
     reply(fd, 204, NULL, NULL, 0); return; }
   Buf b = { 0 };
-  pthread_mutex_lock(&mu); if (!strcmp(rest, "/tmdb")) tmdb_page(&b); else if (!strcmp(rest, "/trakt")) trakt_page(&b); else search_page(&b); pthread_mutex_unlock(&mu);
+  pthread_mutex_lock(&mu); if (!strcmp(rest, "/tmdb")) tmdb_page(&b); else search_page(&b); pthread_mutex_unlock(&mu);
   reply(fd, 200, "Content-Type: text/html; charset=utf-8\r\n", b.p, b.n); free(b.p);
 }
 static void *conn_main(void *arg) {
@@ -260,4 +249,3 @@ int httpd_typed(int since, char *out, size_t cap) {
 }
 unsigned httpd_hits(void) { pthread_mutex_lock(&mu); unsigned h = hits; pthread_mutex_unlock(&mu); return h; }
 void httpd_set_key_handler(int (*fn)(const char *key)) { pthread_mutex_lock(&mu); keyFn = fn; pthread_mutex_unlock(&mu); }
-void httpd_set_trakt_handler(int (*fn)(const char *key)) { pthread_mutex_lock(&mu); traktFn = fn; pthread_mutex_unlock(&mu); }

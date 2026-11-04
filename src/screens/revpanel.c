@@ -11,7 +11,6 @@
 #include "core/i18n.h"
 #include "core/json.h"
 #include "core/hit.h"
-#include "core/trakt.h"
 #include "core/trailer.h"
 #include "ui/qrcard.h"
 #include "ui/gfx.h"
@@ -125,7 +124,6 @@ static void act(int kind) {
     case O_LIB: sound_play(SND_TOGGLE); lib_toggle(&it); app_refresh_boards(); if (SCR == SCR_DETAIL) detail_paint_lib(); break;
   }
 }
-static int key_card(void) { return !R.rv->nc && !R.rv->pending && !trakt_has_key(); } /* the comments' place holds the Trakt card */
 /* the switch: the show's reviews, or the season's */
 static void tab_go(int t) { if (t == R.tab || t < 0 || t >= R.ntab) return; R.tabDir = t > R.tab ? 1 : -1; R.tab = t; R.cIdx = 0; R.expanded = -1; R.animN = 0; qt_set(&R.listY, 0); R.tabAt = app_now(); sound_focus(); }
 static void select_sel(int sel) { if (sel == R.sel || sel < 0 || sel > R.ns) return; R.sel = sel; R.season = sel ? R.seasonList[sel - 1] : 0; R.rv = reviews_get(R.it.type, R.it.id, R.season, 0); R.cIdx = 0; R.expanded = -1; R.animN = 0; R.tab = 0; /* (what stays the same stays; what changes fades in by itself) */ qt_set(&R.listY, 0); fpill_snap(&R.cpill); sound_play(SND_TOGGLE); }
@@ -133,12 +131,12 @@ static int key(int k) {
   if (R.closing) { if (!R.open) return 1; finish(); return 1; }
   if (k == K_BACK) { close_panel(); return 1; }
   if (R.zone == 0 && R.page) { /* in the page: its own row is the title page's buttons, held at the top */
-    if (k == K_DOWN) { if (R.stackSeason) { R.zone = 2; sound_focus(); } else if (R.rv->nc) { R.zone = 3; sound_focus(); } else if (key_card()) { R.zone = 1; sound_focus(); } else nudge_start(&R.nudge, k); } /* (the buttons, the seasons, the tabs, the comments: top to bottom) */
+    if (k == K_DOWN) { if (R.stackSeason) { R.zone = 2; sound_focus(); } else if (R.rv->nc) { R.zone = 3; sound_focus(); } else nudge_start(&R.nudge, k); } /* (the buttons, the seasons, the tabs, the comments: top to bottom) */
     else if (k == K_UP) close_panel(); else detail_page_btn_key(k);
     return 1; }
   if (R.zone == 0) { int b0 = R.optIdx;
     if (k == K_RIGHT) R.optIdx = R.optIdx + 1 < R.nopt ? R.optIdx + 1 : R.optIdx; else if (k == K_LEFT) R.optIdx = R.optIdx > 0 ? R.optIdx - 1 : 0;
-    else if (k == K_DOWN) { if (R.rv->nc) { R.zone = 3; sound_focus(); } else if (key_card()) { R.zone = 1; sound_focus(); } else nudge_start(&R.nudge, k); }
+    else if (k == K_DOWN) { if (R.rv->nc) { R.zone = 3; sound_focus(); } else nudge_start(&R.nudge, k); }
     else if (k == K_UP) { if (R.stackSeason) { R.zone = 2; sound_focus(); } else if (R.page) close_panel(); else nudge_start(&R.nudge, k); } /* (risen from the page: Up lets it down again) */
     else if (k == K_OK) { if (R.optIdx < R.nopt) act(R.opt[R.optIdx].kind); }
     if ((k == K_LEFT || k == K_RIGHT) && R.optIdx == b0) nudge_start(&R.nudge, k); else if (k == K_LEFT || k == K_RIGHT) sound_focus();
@@ -146,7 +144,7 @@ static int key(int k) {
   if (R.zone == 2) {
     if (k == K_LEFT || k == K_RIGHT) { int d = (k == K_RIGHT) != app_rtl() ? 1 : -1, s = R.sel + d; if (s >= 0 && s <= R.ns) select_sel(s); else nudge_start(&R.nudge, k); } /* (each step shows that one's reviews) */
     else if (k == K_OK) nudge_start(&R.nudge, k);
-    else if (R.page && k == K_DOWN) { if (R.rv->nc) { R.zone = 3; sound_focus(); } else if (key_card()) { R.zone = 1; sound_focus(); } else nudge_start(&R.nudge, k); }
+    else if (R.page && k == K_DOWN) { if (R.rv->nc) { R.zone = 3; sound_focus(); } else nudge_start(&R.nudge, k); }
     else if (R.page && k == K_UP) { R.zone = 0; sound_focus(); }
     else if (k == K_DOWN) { R.zone = 0; sound_focus(); } else nudge_start(&R.nudge, k);
     return 1; }
@@ -154,7 +152,7 @@ static int key(int k) {
     if (k == K_LEFT || k == K_RIGHT) { int rtl = app_rtl(), d = (k == K_RIGHT) != rtl ? 1 : -1, t = R.tab + d; if (t >= 0 && t < R.ntab) tab_go(t); else nudge_start(&R.nudge, k); }
     else if (k == K_UP) { R.zone = R.page && R.stackSeason ? 2 : 0; sound_focus(); } else if (k == K_DOWN || k == K_OK) { if (R.nvis) { R.zone = 1; R.cIdx = 0; sound_focus(); } else nudge_start(&R.nudge, k); } else nudge_start(&R.nudge, k);
     return 1; }
-  if (!R.rv->nc) { if (k == K_UP) { R.zone = 0; sound_focus(); } else if (k == K_OK && key_card()) qrcard_show_trakt(NULL, NULL); else nudge_start(&R.nudge, k); return 1; }
+  if (!R.rv->nc) { if (k == K_UP) { R.zone = 0; sound_focus(); } else nudge_start(&R.nudge, k); return 1; }
   int c0 = R.cIdx;
   if (k == K_DOWN) R.cIdx = R.cIdx + 1 < R.nvis ? R.cIdx + 1 : R.cIdx;
   else if (k == K_UP) { if (R.cIdx > 0) R.cIdx--; else { R.zone = 3; sound_focus(); return 1; } }
@@ -240,9 +238,8 @@ static void tick(float dt) {
   for (int i = 0; i <= R.ns && i < MAXSW; i++) { tween_to(&R.chF[i], R.zone == 2 && R.sel == i ? 1 : 0, 0.18f, EASE_IN_OUT); tween_tick(&R.chF[i], dt); } qt_tick(&R.swX, dt);
   /* the comments: the highlight under the focused one, the list scrolled so it shows whole */
   if (R.zone == 1 && R.cIdx < R.nvis) { int i = R.cIdx; fpill_to(&R.cpill, 0, R.cy[i], RW, R.ch[i], GLIDE_DUR); }
-  else if (R.zone == 1 && key_card()) fpill_to(&R.cpill, 0, 0, RW, 32 + text_line_height(26) + 6 + 2 * 28, GLIDE_DUR);
   else fpill_hide(&R.cpill);
-  if (R.zone == 1 && !R.rv->nc && !key_card()) R.zone = 0; /* the card went (the id came): back to the options */
+  if (R.zone == 1 && !R.rv->nc) R.zone = 0; /* no comments: back to the options */
 }
 /* ---- drawing ---- */
 static void outside(int a, int b) { (void)a; (void)b; close_panel(); }
@@ -437,15 +434,7 @@ static void draw_right(float x, float top, float bottom, int rtl) {
   else { text_draw(T("Comments"), tx, y, 22, 600, WHITE_A(160), 0, RW, al); y += text_line_height(22) + 12; }
   float vh = bottom - y;
   if (!R.rv->nc) { if (R.rv->pending) { for (int k = 0; k < 2; k++) { float cy = y + k * 150; ph_circle(rtl ? x + RW - 36 : x + 36, cy + 36, 20); ph_text(rtl ? x + RW - 68 : x + 68, cy + 22, 220, 1, 24, 30, al); ph_text(tx, cy + 64, RW - 32, 2, 23, CM_LH, al); } }
-    else if (trakt_has_key()) text_draw(T("No comments yet"), tx, y + 6, 24, 400, WHITE_A(150), 0, RW, al);
-    else { /* no Trakt id yet: a card in the comments' place, OK on it shows the code for the phone */
-      int f = R.zone == 1; float h = 32 + text_line_height(26) + 6 + 2 * 28, kx = rtl ? x + RW - 24 - 36 : x + 24, ktx = rtl ? x + RW - 24 - 36 - 20 : x + 24 + 36 + 20; hit_add(x, y, RW, h, cm_focus, cm_act, 0, 0);
-      if (R.cpill.a.v > 0.001f) { gfx_offset_push(x + (f ? nudge_x(&R.nudge) : 0), y + (f ? nudge_y(&R.nudge) : 0)); fpill_halo(&R.cpill, 18, 0.985f, acc_a(0.34f)); fpill_draw(&R.cpill, 18, 0.985f); gfx_offset_pop(); }
-      if (f) gfx_offset_push(nudge_x(&R.nudge), nudge_y(&R.nudge)); else { gfx_rrect(x, y, RW, h, 18, WHITE_A(14)); gfx_ring(x, y, RW, h, 18, 1, WHITE_A(18)); }
-      icon_draw("reviews", kx, y + 16 + 2, 36, f ? ACC_FG : ACC2);
-      text_draw(T("People\xe2\x80\x99s comments come with a Trakt id"), ktx, y + 16, 26, 700, f ? ACC_FG : WHITE_A(255), 0, RW - 100, al);
-      text_draw_wrapped(T("OK shows a code for your phone; later, Settings \xe2\x80\xba Keys"), ktx, y + 16 + text_line_height(26) + 6, RW - 100, 2, 22, 500, f ? col_alpha(ACC_FG, 0.8f) : WHITE_A(150), 0, al, 28);
-      if (f) gfx_offset_pop(); }
+    else text_draw(T("No comments yet"), tx, y + 6, 24, 400, WHITE_A(150), 0, RW, al);
     return; }
   /* scrolled so the focused one shows whole */
   if (R.zone == 1 && R.cIdx < R.nvis) { int i = R.cIdx; float want = R.listY.to; if (R.cy[i] + R.ch[i] - want > vh) want = R.cy[i] + R.ch[i] - vh; if (R.cy[i] - want < 0) want = R.cy[i]; if (want > R.listH - vh) want = fmaxf(0, R.listH - vh); qt_to(&R.listY, want, 0.3f); }
@@ -486,9 +475,9 @@ static Screen panel = { NULL, NULL, key, tick, draw, NULL, NULL, NULL };
 /* what the previews show (Settings > Keys, the guide): made-up but true to life */
 const RevComment *revpanel_sample(int i) {
   static RevComment c[3]; static unsigned lg = ~0u; if (lg != i18n_gen()) { lg = i18n_gen(); memset(c, 0, sizeof c);
-    snprintf(c[2].user, sizeof c[2].user, "leo.m"); snprintf(c[2].from, sizeof c[2].from, "Trakt"); c[2].days = 12; c[2].score = 9; c[2].likes = 5;
+    snprintf(c[2].user, sizeof c[2].user, "leo.m"); snprintf(c[2].from, sizeof c[2].from, "TMDB"); c[2].days = 12; c[2].score = 9; c[2].likes = 5;
     snprintf(c[2].text, sizeof c[2].text, "%s", T("Watched it twice in a week. The music alone is worth it."));
-    snprintf(c[0].user, sizeof c[0].user, "marta_k"); snprintf(c[0].from, sizeof c[0].from, "Trakt"); c[0].days = 81; c[0].score = 8; c[0].likes = 12; c[0].replies = 3;
+    snprintf(c[0].user, sizeof c[0].user, "marta_k"); snprintf(c[0].from, sizeof c[0].from, "TMDB"); c[0].days = 81; c[0].score = 8; c[0].likes = 12; c[0].replies = 3;
     snprintf(c[0].text, sizeof c[0].text, "%s", T("Sharp, playful and far better paced than it has any right to be. The heist in the middle is a joy."));
     snprintf(c[1].user, sizeof c[1].user, "cinephile_77"); snprintf(c[1].from, sizeof c[1].from, "TMDB"); c[1].days = 204; c[1].score = 7;
     snprintf(c[1].text, sizeof c[1].text, "%s", T("A warm, generous film that trusts its audience. Not every turn lands, but the ending earns its tears.")); }

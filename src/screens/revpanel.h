@@ -21,6 +21,6 @@ int   revpanel_comment_lines(const RevComment *c, float w, int max);   /* the li
 float revpanel_draw_comment(float x, float y, float w, const RevComment *c, int lit, int lines, float when);      /* when: the "n days ago" at k (0 none) */
 void  revpanel_draw_ring(float cx, float y, float d, const char *src, const char *val, float g); /* a source's ring round its mark, filled g of the way to its score, the score under it */
 float revpanel_badge(float x, float y, float h, const char *src, float share, int rtl); /* the source's mark (share: its score of 1, for its colour); the width */
-const RevComment *revpanel_sample(int i);   /* 0, 2: Trakt comments, 1: a TMDB review (in the app's language) */
+const RevComment *revpanel_sample(int i);   /* 0, 1, 2: sample reviews (1 in the app's language) */
 const int *revpanel_sample_dist(void);      /* a spread of ratings, 1..10 */
 #endif

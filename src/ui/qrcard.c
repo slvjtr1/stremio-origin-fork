@@ -11,7 +11,6 @@
 #include "core/i18n.h"
 #include "core/httpd.h"
 #include "core/tmdb.h"
-#include "core/trakt.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -23,7 +22,7 @@
 #define POLL 1.5
 static Screen *under; /* the overlay it opened over (the streams sheet) */
 static struct {
-  int open, closing, done; QrCardOpts o; char title[256], sub[400], url[600], shown[600], doneTitle[200], doneSub[300];
+  int open, closing, done; QrCardOpts o; char title[256], sub[400], url[1600], shown[600], doneTitle[200], doneSub[300];
   Timer1 in, out, tick; double nextPoll, closeAt; float h, subLines, doneSubLines;
 } Q;
 
@@ -88,9 +87,9 @@ void qrcard_show(const QrCardOpts *o) {
   if (Q.open) finish(); /* one card at a time: the one there is replaced */
   memset(&Q, 0, sizeof Q); Q.o = *o; Q.open = 1;
   snprintf(Q.title, sizeof Q.title, "%s", o->title ? o->title : ""); snprintf(Q.sub, sizeof Q.sub, "%s", o->sub ? o->sub : "");
-  snprintf(Q.url, sizeof Q.url, "%s", o->url ? o->url : ""); if (Q.url[0]) httpd_url_shown(Q.url, Q.shown, sizeof Q.shown);
+  snprintf(Q.url, sizeof Q.url, "%s", o->url ? o->url : ""); if (o->shown && o->shown[0]) snprintf(Q.shown, sizeof Q.shown, "%s", o->shown); else if (Q.url[0]) httpd_url_shown(Q.url, Q.shown, sizeof Q.shown);
   snprintf(Q.doneTitle, sizeof Q.doneTitle, "%s", o->doneTitle ? o->doneTitle : ""); snprintf(Q.doneSub, sizeof Q.doneSub, "%s", o->doneSub ? o->doneSub : "");
-  Q.o.title = Q.o.sub = Q.o.url = Q.o.doneTitle = Q.o.doneSub = NULL; /* the caller's strings may not live on */
+  Q.o.title = Q.o.sub = Q.o.url = Q.o.shown = Q.o.doneTitle = Q.o.doneSub = NULL; /* the caller's strings may not live on */
   layout(); timer_start(&Q.in, 0.3f); Q.nextPoll = app_now() + POLL;
   sglass_bake(&glass, SB_W / 2 - CW / 2, SB_H / 2 - Q.h / 2, CW, Q.h); /* where it settles */
   if (app_overlay != &card) under = app_overlay; app_overlay = &card;
@@ -110,17 +109,4 @@ void qrcard_show_tmdb(void (*onClose)(int hasKey, void *ud), void *ud) {
   o.check = tmdb_check; o.doneTitle = T("Key saved"); o.doneSub = T("Titles and descriptions now come in your language"); o.doneHold = 1.6f;
   o.onClose = tmdb_closed;
   qrcard_show(&o); tm.cb = onClose; tm.ud = ud; tm.gen = tmdb_generation();
-}
-/* Settings > Keys > Ratings and reviews: the Trakt client id page; onClose(hasKey, ud) once it is closed */
-static struct { void (*cb)(int, void *); void *ud; unsigned gen; } tk;
-static int trakt_check(void *ud) { (void)ud; return trakt_has_key() && trakt_generation() != tk.gen; }
-static void trakt_closed(void *ud) { (void)ud; void (*cb)(int, void *) = tk.cb; tk.cb = NULL; if (cb) cb(trakt_has_key(), tk.ud); }
-void qrcard_show_trakt(void (*onClose)(int hasKey, void *ud), void *ud) {
-  trakt_has_key(); /* the Trakt side ready to take the id from the phone */
-  char url[600]; httpd_url("/trakt", url, sizeof url);
-  QrCardOpts o; memset(&o, 0, sizeof o);
-  o.title = T("Ratings and reviews"); o.sub = T("Scan with your phone and paste your Trakt Client ID. The page says where to get it"); o.url = url;
-  o.check = trakt_check; o.doneTitle = T("Id saved"); o.doneSub = T("Ratings, their spread and people\xe2\x80\x99s comments now come from Trakt"); o.doneHold = 1.6f;
-  o.onClose = trakt_closed;
-  qrcard_show(&o); tk.cb = onClose; tk.ud = ud; tk.gen = trakt_generation();
 }

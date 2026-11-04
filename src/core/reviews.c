@@ -1,5 +1,4 @@
 #include "core/reviews.h"
-#include "core/trakt.h"
 #include "core/i18n.h"
 #include "core/tmdb.h"
 #include "core/net.h"
@@ -36,7 +35,7 @@ static void score(Reviews *r, int rank, float v, int votes, const char *src) {
   if (v <= 0) return; if (r->scoreSrc[0] && rank > r->rank) return;
   r->score = v; r->votes = votes; r->rank = rank; snprintf(r->scoreSrc, sizeof r->scoreSrc, "%s", src);
 }
-/* the comment's words: whitespace runs as one space, Trakt's [spoiler] marks dropped, cut whole at REV_TEXT */
+/* the comment's words: whitespace runs as one space, [spoiler] marks dropped, cut whole at REV_TEXT */
 static void words(const char *in, char *out, size_t cap) {
   size_t o = 0; int sp = 1;
   for (const char *s = in; *s; ) {
@@ -57,16 +56,6 @@ static void comment(Reviews *r, const char *from, const char *user, const char *
   RevComment *c = &r->c[r->nc]; memset(c, 0, sizeof *c); words(text, c->text, sizeof c->text); if (!c->text[0]) return;
   snprintf(c->from, sizeof c->from, "%s", from); snprintf(c->user, sizeof c->user, "%s", user && *user ? user : "\xe2\x80\x94");
   c->score = score < 0 ? 0 : score > 10 ? 10 : score; c->likes = likes; c->replies = replies; c->spoiler = spoiler; c->days = days_ago(created); r->nc++;
-}
-static void trakt_ratings(Reviews *r, const cJSON *j) {
-  float v = (float)js_num(j, "rating", 0); int votes = (int)js_num(j, "votes", 0); if (v <= 0) return;
-  const cJSON *d = js_obj(j, "distribution"); int any = 0;
-  if (d) for (int i = 0; i < 10; i++) { char k[4]; snprintf(k, sizeof k, "%d", i + 1); r->dist[i] = (int)js_num(d, k, 0); any |= r->dist[i] > 0; }
-  r->hasDist = any; char s[12]; snprintf(s, sizeof s, "%d%%", (int)(v * 10 + 0.5f)); tile(r, RK_TRAKT, "Trakt", s); score(r, RK_TRAKT, v, votes, "Trakt");
-}
-static void trakt_comments(Reviews *r, const cJSON *j) {
-  const cJSON *c; cJSON_ArrayForEach(c, j) { const cJSON *u = js_obj(c, "user"); const char *nm = js_str(u, "username", js_str(u, "name", ""));
-    comment(r, "Trakt", nm, js_str(c, "comment", ""), (int)js_num(js_obj(c, "user_stats"), "rating", 0), (int)js_num(c, "likes", 0), (int)js_num(c, "replies", 0), js_bool(c, "spoiler", 0), js_str(c, "created_at", NULL)); }
 }
 static void tmdb_vote(Reviews *r, const cJSON *j) {
   { const char *ov = js_str(j, "overview", ""), *pp = js_str(j, "poster_path", ""); /* a season's own words and poster (its answer carries them) */
@@ -90,7 +79,7 @@ static void on_net(int st, const unsigned char *body, size_t len, void *ud) {
   { static const char *SN[] = { "details", "wikidata", "trakt ratings", "trakt comments", "tmdb find", "tmdb vote", "tmdb reviews" }; /* (each source's answer in the log: one that never shows says why there) */
     fprintf(stderr, "[reviews] %s for %s: status %d, %u bytes\n", a->src >= 0 && a->src < 7 ? SN[a->src] : "?", a->key, st, (unsigned)len); }
   if (r && st != -1) { cJSON *j = st == 200 ? net_json(body) : NULL;
-    if (j) switch (a->src) { case SRC_WIKI: wiki(r, j); break; case SRC_TRATE: trakt_ratings(r, j); break; case SRC_TCOMM: trakt_comments(r, j); break;
+    if (j) switch (a->src) { case SRC_WIKI: wiki(r, j); break;
       case SRC_MVOTE: tmdb_vote(r, j); break; case SRC_MREV: tmdb_reviews(r, j); break; default: break; }
     net_json_free(j); r->pending--; touched(r); }
   free(a);
@@ -107,12 +96,6 @@ static void on_find(int st, const unsigned char *body, size_t len, void *ud) {
     const cJSON *mv = cJSON_GetArrayItem(js_arr(j, "movie_results"), 0), *tv = cJSON_GetArrayItem(js_arr(j, "tv_results"), 0); int tid = (int)js_num(tv ? tv : mv, "id", 0);
     net_json_free(j); if (tid) ask_tmdb(r, tid); touched(r); }
   free(a);
-}
-static void ask_trakt(Reviews *r) {
-  Who w; who_of(r, &w); char base[160], p[200]; int tv = !strcmp(w.type, "series"); Ask *a;
-  if (w.e) snprintf(base, sizeof base, "/shows/%s/seasons/%d/episodes/%d", w.id, w.s, w.e); else if (w.s) snprintf(base, sizeof base, "/shows/%s/seasons/%d", w.id, w.s); else snprintf(base, sizeof base, "/%s/%s", tv ? "shows" : "movies", w.id);
-  snprintf(p, sizeof p, "%s/ratings", base); a = ask_new(r, SRC_TRATE); sent(r, trakt_request(p, on_net, a), a);
-  snprintf(p, sizeof p, "%s/comments/likes?limit=%d", base, REV_MAXC); a = ask_new(r, SRC_TCOMM); sent(r, trakt_request(p, on_net, a), a);
 }
 static void ask_wiki(Reviews *r) {
   Who w; who_of(r, &w); char sp[400], enc[1300], url[1500]; static const char *H = "0123456789ABCDEF";
@@ -134,15 +117,15 @@ static void meta_in(Reviews *r, const cJSON *m) {
 static void on_meta(cJSON *m, void *ud) { Ask *a = ud; Reviews *r = find(a->key); if (r) { r->pending--; if (m) meta_in(r, m); touched(r); } free(a); }
 static void start(Reviews *r) {
   Who w; who_of(r, &w); r->asked = 1;
-  if (sb_is_imdb(w.id)) { if (!w.s) ask_wiki(r); ask_trakt(r); }
+  if (sb_is_imdb(w.id) && !w.s) ask_wiki(r);
   cJSON *m = sb_meta_cached(w.type, w.id);
   if (m) meta_in(r, m); else { Ask *a = ask_new(r, SRC_META); r->pending++; sb_meta(w.type, w.id, on_meta, a); }
   touched(r);
 }
 const Reviews *reviews_get(const char *type, const char *id, int season, int episode) {
   char key[48]; snprintf(key, sizeof key, "%s|%s|%d|%d", type, id, season, episode);
-  { static unsigned tg, kg; static int seen; unsigned t2 = trakt_generation(), k2 = tmdb_generation(); /* a key came or went: all is asked again */
-    if (seen && (t2 != tg || k2 != kg)) { for (int i = 0; i < KEEP; i++) { free(kept[i].c); memset(&kept[i], 0, sizeof kept[i]); } gen++; } seen = 1; tg = t2; kg = k2; }
+  { static unsigned kg; static int seen; unsigned k2 = tmdb_generation(); /* the key came or went: all is asked again */
+    if (seen && k2 != kg) { for (int i = 0; i < KEEP; i++) { free(kept[i].c); memset(&kept[i], 0, sizeof kept[i]); } gen++; } seen = 1; kg = k2; }
   Reviews *r = find(key);
   if (!r) { r = &kept[keptNext]; keptNext = (keptNext + 1) % KEEP; free(r->c); memset(r, 0, sizeof *r); snprintf(r->key, sizeof r->key, "%s", key); start(r); }
   return r;

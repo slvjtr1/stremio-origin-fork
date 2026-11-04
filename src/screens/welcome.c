@@ -28,7 +28,6 @@
 #include "screens/revpanel.h"
 #include "core/app.h"
 #include "core/tmdb.h"
-#include "core/trakt.h"
 #include "core/best.h"
 #include "core/hit.h"
 #include "core/httpd.h"
@@ -97,15 +96,14 @@ static const struct { const char *t, *l, *b[MAXB], *ic[MAXB]; int pv, ctl; } TOU
   { "Your phone as a keyboard", "Typing with a remote is slow. Use your phone instead.",
     { "Open Search: the code is under the keyboard", "Scan it with your phone\xe2\x80\x99s camera", "Type there and it lands on the TV" },
     { "nav_search", "g_phone", "g_wifi" }, PV_PHONE, 0 },
-  { "Your keys", "Two keys bring more. OK shows the code for one; you can always add them later in Settings \xe2\x80\xba Keys.",
-    { "TMDB: titles and descriptions in your language, and its reviews", "Trakt: the rating, how people spread theirs, and their comments" },
-    { "set_lang", "reviews" }, PV_YOURKEYS, 0 },
+  { "Your key", "A TMDB key brings titles and descriptions in your language, and its reviews. OK shows the code; you can always add it later in Settings \xe2\x80\xba Keys.",
+    { "TMDB: titles and descriptions in your language, and its reviews" },
+    { "set_lang" }, PV_YOURKEYS, 0 },
   { "Thank you", "Made by one person in free time. No ads and no tracking.",
     { "Something wrong? Settings \xe2\x80\xba About \xe2\x80\xba Share logs", "Enjoying it? A star on GitHub" },
     { "g_bug", "g_heart" }, PV_THANKS, 0 },
 };
 #define NTOUR (int)(sizeof TOUR / sizeof TOUR[0])
-static int ykOff; /* the keys page's first step, when TMDB is built in: Trakt's */
 typedef struct { char t[120], x[300]; const char *ic; char icn[24]; int nt, nx; } News;
 static struct {
   int open, closing, checked, tour, n, cur, step, from, fromStep, dir, pageSw, fromSignIn; Page p[MAXP];
@@ -730,7 +728,7 @@ static void sc_yourkeys(int st, float t) {
     float x = 80, y = 60, lw = 600, rx = x + lw + 40, rw = SB_W / KS - 80 - rx;
     gfx_opacity_push(a); gfx_offset_push(0, 20 * (1 - eo(0, 0.6f, t)));
     text_draw(T("Ratings and reviews"), x, y, 24, 600, WHITE_A(170), 0, lw, ALIGN_LEFT); y += text_line_height(24) + 16;
-    y += revpanel_draw_score(x, y, lw, 8.2f, "Trakt", 23140, d, 0) + 26;
+    y += revpanel_draw_score(x, y, lw, 8.2f, "TMDB", 23140, d, 0) + 26;
     float tr = eo(1.4f, 2.0f, t); if (tr > 0) { gfx_opacity_push(tr); gfx_offset_push(0, 24 * (1 - tr)); text_draw(T("Ratings from other sources"), x, y, 24, 600, WHITE_A(170), 0, lw, ALIGN_LEFT); y += text_line_height(24) + 14;
       static const char *SRC[4] = { "IMDb", "Rotten Tomatoes", "Metacritic", "TMDB" }, *VAL[4] = { "8.6", "97%", "96", "8.4" }; float cw = lw / 4;
       for (int i = 0; i < 4; i++) { float ti = eo(1.5f + 0.12f * i, 2.3f + 0.12f * i, t); gfx_opacity_push(ti > 0.3f ? 1 : ti / 0.3f); revpanel_draw_ring(x + cw * (i + 0.5f), y, 66, SRC[i], VAL[i], ti); gfx_opacity_pop(); }
@@ -738,7 +736,7 @@ static void sc_yourkeys(int st, float t) {
     float cy = 60; text_draw(T("Comments"), rx, cy, 24, 600, WHITE_A(170), 0, rw, ALIGN_LEFT); cy += text_line_height(24) + 16;
     for (int i = 0; i < 2; i++) { float ci = eo(0.8f + 0.5f * i, 1.4f + 0.5f * i, t); if (ci <= 0) continue; const RevComment *c = revpanel_sample(i ? 2 : 0);
       gfx_opacity_push(ci); gfx_offset_push(0, 40 * (1 - ci)); cy += revpanel_draw_comment(rx, cy, rw, c, 0, revpanel_comment_lines(c, rw, 3), ci) + 14; gfx_offset_pop(); gfx_opacity_pop(); }
-    gfx_offset_pop(); gfx_opacity_pop(); gfx_scale_pop(); push(0.5f, L, ORB_OK, 0.5f); push(1.3f, L, ORB_DONE, 0.6f); push(1.9f, L, ORB_HOLD, 0.5f); key_added(trakt_has_key()); }
+    gfx_offset_pop(); gfx_opacity_pop(); gfx_scale_pop(); push(0.5f, L, ORB_OK, 0.5f); push(1.3f, L, ORB_DONE, 0.6f); push(1.9f, L, ORB_HOLD, 0.5f); key_added(tmdb_has_key()); }
 }
 
 /* -- 8. the thank-you, and the version's page: the code for a tip on a soft white tile, hearts rising beside it;
@@ -801,7 +799,7 @@ static void sc_news(float t) {
 }
 static void scene(int pv, int st, float t) {
   switch (pv) { case PV_KEYS: sc_keys(st, t); break; case PV_HOLD: sc_hold(st, t); break; case PV_STREAMS: sc_streams(st, t); break; case PV_SUBS: sc_subs(st, t); break;
-    case PV_TORRENTS: sc_torrents(st, t); break; case PV_PHONE: sc_phone(st, t); break; case PV_YOURKEYS: sc_yourkeys(st + ykOff, t); break; case PV_THANKS: sc_thanks(st, t); break; default: sc_news(t); }
+    case PV_TORRENTS: sc_torrents(st, t); break; case PV_PHONE: sc_phone(st, t); break; case PV_YOURKEYS: sc_yourkeys(st, t); break; case PV_THANKS: sc_thanks(st, t); break; default: sc_news(t); }
 }
 
 /* ==== the page ==== */
@@ -945,7 +943,7 @@ static int at_codes(void) { const Page *p = &W.p[W.cur]; return W.gh[0] && ((p->
 static int at_keys(void) { return W.p[W.cur].pv == PV_YOURKEYS; }
 static void next(void) {
   const Page *p = &W.p[W.cur];
-  if (at_keys()) { if (W.step + ykOff == 0) qrcard_show_tmdb(NULL, NULL); else qrcard_show_trakt(NULL, NULL); return; } /* the key's code; Right or Down go on */
+  if (at_keys()) { qrcard_show_tmdb(NULL, NULL); return; } /* the key's code; Right or Down go on */
   if (at_codes()) { W.tipWant = !W.tipWant; tween_to(&W.tipK, (float)W.tipWant, 0.5f, EASE_IN_OUT); orbs_push(&orbs[0], W.tipWant ? ORB_RIGHT : ORB_LEFT, 0.7f); return; } /* the other code (Back closes) */
   if (at_ctl() && !best_on()) { if (!best_speed_busy()) { W.speedFail = 0; best_caps_probe(NULL, NULL); best_speed_run(on_speed, NULL); orbs_push(&orbs[0], ORB_HOLD, 1); } return; } /* OK turns it on (measured there); once on, it goes on */
   if (W.step < p->nb - 1) go(W.cur, W.step + 1); else if (W.cur < W.n - 1) go(W.cur + 1, 0); else close_guide();
@@ -1066,11 +1064,7 @@ static void open_guide(int tour) {
   W.n = 0; W.tour = tour;
   if (tour) { for (int i = 0; i < NTOUR; i++) { Page *pg = &W.p[W.n++]; memset(pg, 0, sizeof *pg); snprintf(pg->title, sizeof pg->title, "%s", TOUR[i].t); snprintf(pg->lead, sizeof pg->lead, "%s", TOUR[i].l);
       for (int b = 0; b < MAXB && TOUR[i].b[b]; b++) { snprintf(pg->b[b], sizeof pg->b[b], "%s", TOUR[i].b[b]); pg->ic[b] = TOUR[i].ic[b]; pg->nb++; } pg->pv = TOUR[i].pv; pg->ctl = TOUR[i].ctl;
-      if (pg->pv == PV_YOURKEYS) { int tm = !tmdb_builtin(), tk = !trakt_builtin(); ykOff = 0; /* (a key this build carries is not asked for: its step goes, and the page with both) */
-        if (!tm && !tk) W.n--;
-        else if (!tk) { pg->nb = 1; snprintf(pg->lead, sizeof pg->lead, "%s", "Ratings and comments come built in. A TMDB key brings more: OK shows the code. You can always add it later in Settings \xe2\x80\xba Keys."); }
-        else if (!tm) { pg->nb = 1; ykOff = 1; snprintf(pg->b[0], sizeof pg->b[0], "%s", pg->b[1]); pg->ic[0] = pg->ic[1];
-          snprintf(pg->lead, sizeof pg->lead, "%s", "Titles and descriptions in your language come built in. A Trakt id brings ratings and comments: OK shows the code. You can always add it later in Settings \xe2\x80\xba Keys."); } } } }
+      if (pg->pv == PV_YOURKEYS && tmdb_builtin()) W.n--; } } /* (a key this build carries is not asked for: the page goes) */
   else { Page *pg = &W.p[W.n++]; memset(pg, 0, sizeof *pg); pg->pv = PV_NEWS; snprintf(pg->title, sizeof pg->title, "%s", "What\xe2\x80\x99s new"); }
   if (tour && W.n < MAXP && load()) { /* the first start: the version's news after the tour, the thanks (support) page staying last */
     int at = W.n; if (at > 0 && W.p[at - 1].pv == PV_THANKS) at--;
