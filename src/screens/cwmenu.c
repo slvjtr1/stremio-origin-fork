@@ -4,6 +4,7 @@
 #include "ui/orbs.h"
 #include "screens/cwmenu.h"
 #include <SDL2/SDL.h>
+#include "core/tmdb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "screens/detail.h"
@@ -203,7 +204,7 @@ void cwmenu_show(const Item *it) {
   if (it->ep) { revpanel_show(it, 0, held ? fx : 0, held ? fy : 0, held ? fw : 0, held ? fh : 0, held ? fr : 0); return; } /* an episode held: its reviews, with the menu's options among them */
   M.from[0] = held ? fx : 0; M.from[1] = held ? fy : 0; M.from[2] = held ? fw : 0; M.from[3] = held ? fh : 0; M.from[4] = held ? fr : 0;
   float cur = M.closing ? M.out.v : M.open ? M.op.v : 0;
-  M.it = *it; M.open = 1; M.closing = 0; M.idx = 0; M.n = 0; app_overlay = &menu;
+  M.it = *it; { const TmdbLoc *TL = tmdb_wanted(it->id) ? tmdb_loc(it->type, it->id, 1) : NULL; if (TL && TL->name && TL->name[0]) snprintf(M.it.name, sizeof M.it.name, "%s", TL->name); } M.open = 1; M.closing = 0; M.idx = 0; M.n = 0; app_overlay = &menu;
   snprintf(M.kind, sizeof M.kind, "%s", T(!strcmp(it->type, "series") ? "Series" : "Movie"));
   M.sub[0] = 0; const char *c = strrchr(it->videoId, ':');
   if (c) { const char *p = c - 1; while (p > it->videoId && *p != ':') p--; if (*p == ':') { char s[8], e[8]; snprintf(s, sizeof s, "%d", atoi(p + 1)); snprintf(e, sizeof e, "%d", atoi(c + 1)); snprintf(M.sub, sizeof M.sub, "%s", T2("Season {s} · Episode {e}", "s", s, "e", e)); if (it->epName[0]) { size_t l = strlen(M.sub); snprintf(M.sub + l, sizeof M.sub - l, "  ·  %s", it->epName); } } }
@@ -217,7 +218,7 @@ void cwmenu_show(const Item *it) {
   if (!it->ep && sb_is_imdb(it->id)) add(A_REVIEWS, "reviews", T("Reviews"));
   int inL = lib_has(it->id); add(A_LIB, inL ? "minus" : "plus", T(inL ? "Remove from Library" : "Add to Library"));
   if (getenv("SB_SLOWLOG")) fprintf(stderr, "[menu] options in %u ms\n", SDL_GetTicks() - tm0);
-  M.titleLines = (float)text_wrap_count(it->name, CW - 2 * PX, 2, 38, 700, -0.5f); if (M.titleLines < 1) M.titleLines = 1;
+  M.titleLines = (float)text_wrap_count(M.it.name, CW - 2 * PX, 2, 38, 700, -0.5f); if (M.titleLines < 1) M.titleLines = 1;
   M.h = items_y() + M.n * (IH + 4) + 30; /* as tall as its options */
   /* from closed: it slides in once with its glass baked (the card's own part of the page); reopened mid-close: it turns back */
   if (cur < 0.01f) { tween_set(&M.op, 0); tween_set(&M.x, 40); tween_set(&M.grow, 0); fpill_snap(&M.pill); Uint32 b0 = SDL_GetTicks(); sglass_bake(&M.glass, card_x(), SB_H / 2 - M.h / 2, CW, M.h); M.openAt = app_now() + (SDL_GetTicks() - b0) / 1000.0 + 0.016; } /* the options start once the glass is made */

@@ -15,6 +15,7 @@
 #include "ui/img.h"
 #include "ui/glass.h"
 #include <math.h>
+#include "core/tmdb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,7 @@ static void year_of(const char *ml, char *out, size_t cap) {
   out[0] = 0; for (const char *q = ml; *q; q++) if (q[0] >= '0' && q[0] <= '9' && q[1] >= '0' && q[1] <= '9' && q[2] >= '0' && q[2] <= '9' && q[3] >= '0' && q[3] <= '9' && (q == ml || q[-1] < '0' || q[-1] > '9')) { snprintf(out, cap, "%.4s", q); return; }
 }
 static void scene_load(void) {
-  if (!SS.n) return; SS.cur = SS.list[SS.i % SS.n]; SS.scene = SS.i++;
+  if (!SS.n) return; SS.cur = SS.list[SS.i % SS.n]; SS.scene = SS.i++; if (tmdb_wanted(SS.cur.id)) tmdb_state(SS.cur.type, SS.cur.id, 1);
   sb_bg_mid(&SS.cur, SS.url, sizeof SS.url); SS.loading = 1; SS.nextAt = 0;
 }
 static void scene_start(GLuint tex, float asp) {
@@ -91,7 +92,10 @@ static void scene_start(GLuint tex, float asp) {
   l->kb = SS.scene % 2; l->at = app_now(); tween_set(&l->a, 0); tween_to(&l->a, 1, 1.8f, EASE_IN_OUT);
   tween_to(&SS.L[SS.top].a, 0, 1.8f, EASE_IN_OUT); SS.top = nx; /* the one fading away keeps drifting */
   SS.sceneAt = app_now(); SS.nextAt = SS.sceneAt + 10.2; SS.infoWant = 1; SS.infoOut = 0; SS.logoWait = 0;
-  sb_logo_of(&SS.cur, SS.logo, sizeof SS.logo); if (SS.logo[0]) img_prefetch(SS.logo, 460, 150);
+  { const TmdbLoc *TL = tmdb_wanted(SS.cur.id) ? tmdb_loc(SS.cur.type, SS.cur.id, 1) : NULL; /* in your language */
+    if (TL && TL->name && TL->name[0]) snprintf(SS.cur.name, sizeof SS.cur.name, "%s", TL->name);
+    if (TL && TL->logo && TL->logo[0]) snprintf(SS.logo, sizeof SS.logo, "%s", TL->logo); else if (tmdb_wanted(SS.cur.id)) SS.logo[0] = 0; else sb_logo_of(&SS.cur, SS.logo, sizeof SS.logo); }
+  if (SS.logo[0]) img_prefetch(SS.logo, 460, 150);
   char y[8]; year_of(SS.cur.metaLine, y, sizeof y); const char *ty = T(!strcmp(SS.cur.type, "series") ? "Series" : "Movies");
   if (y[0]) snprintf(SS.meta, sizeof SS.meta, "%s  \xc2\xb7  %s", y, ty); else snprintf(SS.meta, sizeof SS.meta, "%s", ty);
 }

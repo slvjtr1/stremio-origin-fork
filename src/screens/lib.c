@@ -17,6 +17,7 @@
 #include "ui/widgets.h"
 #include "ui/sound.h"
 #include "core/hit.h"
+#include "core/tmdb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -139,7 +140,7 @@ static void head_facts(const Item *h, const cJSON *m, Facts *F) {
     { const cJSON *n = cJSON_GetObjectItemCaseSensitive(m, "imdbRating"); if (cJSON_IsNumber(n) && n->valuedouble > 0) { snprintf(irb, sizeof irb, "%.1f", n->valuedouble); ir = irb; } } /* a number too */
     snprintf(F->meta, sizeof F->meta, "%s %s %s%s", rel, rt, *ir ? "IMDb " : "", ir);
     const cJSON *gs = js_arr(m, "genres"); if (gs) { int n = 0; const cJSON *g; cJSON_ArrayForEach(g, gs) { if (n >= 3 || !cJSON_IsString(g)) break; size_t l = strlen(F->gen); snprintf(F->gen + l, sizeof F->gen - l, "%s%s", n ? T(", ") : "", T(g->valuestring)); n++; } }
-    snprintf(F->desc, sizeof F->desc, "%s", js_str(m, "description", "")); }
+    { const TmdbLoc *TL = tmdb_wanted(h->id) ? tmdb_loc(h->type, h->id, 1) : NULL; snprintf(F->desc, sizeof F->desc, "%s", TL && TL->overview && TL->overview[0] ? TL->overview : js_str(m, "description", "")); } }
   else if (o) { char y[16] = ""; if (o->year) snprintf(y, sizeof y, "%d", o->year); snprintf(F->bits, sizeof F->bits, "%s%s%s", T(!strcmp(o->it.type, "series") ? "Series" : "Movie"), y[0] ? "  \xc2\xb7  " : "", y); }
   if (o && o->cw) { if (o->left < 1) snprintf(F->lft, sizeof F->lft, "%s", T("Less than a minute left")); else { char r[32]; int mn = (int)(o->left + 0.5f); sb_fmt_runtime(mn < 1 ? 1 : mn, r, sizeof r); snprintf(F->lft, sizeof F->lft, "%s", T1("{t} left", "t", r)); } F->left = 1; F->pct = o->pct; }
   else if (o && o->done) snprintf(F->lft, sizeof F->lft, "%s", T("Watched"));
@@ -183,7 +184,10 @@ static void head_tick(void) {
   double now = app_now();
   { static double lgAt; if (now - lgAt > 0.5) { lgAt = now; logos_ahead(L.zone == 1 ? L.idx : 0); } }
   if (L.wantStage == 1 && now >= L.wantAt) { const LibIt *o = &L.all[L.wantIdx]; snprintf(L.shownId, sizeof L.shownId, "%s", o->it.id); L.wantStage = 2;
-    if (sb_is_imdb(o->it.id)) snprintf(L.hLogo, sizeof L.hLogo, "https://images.metahub.space/logo/medium/%s/img", o->it.id); else snprintf(L.hLogo, sizeof L.hLogo, "%s", o->it.logo);
+    { const TmdbLoc *TL = tmdb_wanted(o->it.id) ? tmdb_loc(o->it.type, o->it.id, 1) : NULL; /* TMDB's logo in your language first */
+      if (TL && TL->logo && TL->logo[0]) snprintf(L.hLogo, sizeof L.hLogo, "%s", TL->logo);
+      else if (tmdb_wanted(o->it.id)) L.hLogo[0] = 0; /* (no logo in your language: the name, translated) */
+      else if (sb_is_imdb(o->it.id)) snprintf(L.hLogo, sizeof L.hLogo, "https://images.metahub.space/logo/medium/%s/img", o->it.id); else snprintf(L.hLogo, sizeof L.hLogo, "%s", o->it.logo); }
     if (L.hLogo[0]) img_prefetch_pri(L.hLogo, 520, 140); L.logoDeadline = now + 0.7; L.metaDeadline = now + 0.45;
     meta_once(&o->it);
     head_ahead(L.zone == 1 ? L.idx : 0);
@@ -194,7 +198,7 @@ static void head_tick(void) {
     if (ready) { L.wantStage = 0; L.wantId[0] = 0; if (L.hLogo[0] && !img_loaded(L.hLogo)) L.hLogo[0] = 0; /* too late: the name */
       /* the title shown so far stays and fades out while the new one fades in over it (0.35 s, the page's 'ease') */
       float k = L.headIn.on ? timer_x(&L.headIn) : 1; if (L.cur.on && k > 0.5f) L.prev = L.cur; /* (mid-crossfade: the one most seen stays) */
-      L.cur.it = o->it; L.cur.on = 1; snprintf(L.cur.logo, sizeof L.cur.logo, "%s", L.hLogo); head_facts(&o->it, m, &L.cur.f); L.factsIn.on = 0;
+      L.cur.it = o->it; { const TmdbLoc *TL = tmdb_wanted(o->it.id) ? tmdb_loc(o->it.type, o->it.id, 1) : NULL; if (TL && TL->name && TL->name[0]) snprintf(L.cur.it.name, sizeof L.cur.it.name, "%s", TL->name); } L.cur.on = 1; snprintf(L.cur.logo, sizeof L.cur.logo, "%s", L.hLogo); head_facts(&o->it, m, &L.cur.f); L.factsIn.on = 0;
       timer_start(&L.headIn, 0.35f); } }
 }
 
@@ -268,10 +272,11 @@ static float col_x(int c) { float x = GRID_X + c * LSTEP; return app_rtl() ? SB_
 static void rail_focus(int i, int b) { (void)b; int was = topNav.active; topNav.active = 0; if (was || L.zone != 0 || L.ri != i) { L.zone = 0; L.ri = i; paint(); } }
 static void card_focus(int i, int b) { (void)b; int was = topNav.active; topNav.active = 0; if (was || L.zone != 1 || L.idx != i) { L.zone = 1; L.idx = i; paint(); } }
 static void draw_card(const LibIt *o, float x, float y, int load) {
-  const char *src = o->poster; GLuint t = src[0] && (load || img_shaped_loaded(src, (int)LW, (int)LH, CARD_R, 0)) ? img_get_shaped(src, (int)LW, (int)LH, CARD_R, 0) : 0;
+  const TmdbLoc *TL = tmdb_wanted(o->it.id) ? tmdb_loc(o->it.type, o->it.id, 1) : NULL; /* in your language */
+  const char *src = TL && TL->poster && TL->poster[0] ? TL->poster : o->poster; GLuint t = src[0] && (load || img_shaped_loaded(src, (int)LW, (int)LH, CARD_R, 0)) ? img_get_shaped(src, (int)LW, (int)LH, CARD_R, 0) : 0;
   int failed = !t && (!src[0] || img_shaped_failed(src, (int)LW, (int)LH, CARD_R, 0));
   if (!failed) ph_picture(t, x, y, LW, LH, CARD_R, WHITE_A(255)); /* the waiting look until the poster has faded in over it (corners are in the picture) */
-  else { ph_surface(x, y, LW, LH, CARD_R); text_draw_wrapped(o->it.name, app_rtl() ? x + LW - 16 : x + 16, y + 16, LW - 32, 6, 28, 400, WHITE_A(230), 0, ALIGN_START, 28 * 1.3f); } /* the title only when the art failed */
+  else { ph_surface(x, y, LW, LH, CARD_R); text_draw_wrapped(TL && TL->name && TL->name[0] ? TL->name : o->it.name, app_rtl() ? x + LW - 16 : x + 16, y + 16, LW - 32, 6, 28, 400, WHITE_A(230), 0, ALIGN_START, 28 * 1.3f); } /* the title only when the art failed */
   if (o->done) { float bx = app_rtl() ? x + 12 : x + LW - 12 - 46; gfx_shadow(bx, y + 14, 46, 46, 23, 10, BLACK_A(140)); gfx_circle(bx + 23, y + 12 + 23, 23, acc_a(0.96f)); icon_draw("check", bx + 9, y + 12 + 9, 28, WHITE_A(255)); }
   if (o->cw) { gfx_rrect(x + 12, y + LH - 12 - 5, LW - 24, 5, 2.5f, WHITE_A(64)); float pw = (LW - 24) * clampf(o->pct, 0, 1); if (pw > 1) gfx_rrect(app_rtl() ? x + LW - 12 - pw : x + 12, y + LH - 12 - 5, pw, 5, 2.5f, WHITE_A(255)); }
 }
