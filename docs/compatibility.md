@@ -8,6 +8,7 @@
 | 22 to 25 | Should work, not tested yet |
 
 ## Install
-- Download `tv.stremioorigin.app_<version>_arm.ipk` from [Releases](https://github.com/slvjtr1/stremio-origin-fork/releases/latest).
+- Homebrew Channel (rooted TVs): add the repository `https://slvjtr1.github.io/stremio-origin-fork/apps.json`, then install Stremio Origin.
+- Or download `tv.stremioorigin.app_<version>_arm.ipk` from [Releases](https://github.com/slvjtr1/stremio-origin-fork/releases/latest).
 - Install it with [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop) or `ares-install` (Developer Mode or a rooted TV with Homebrew Channel).
 - After that, updates install from inside the app: Settings › About.

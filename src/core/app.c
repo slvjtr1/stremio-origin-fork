@@ -744,7 +744,14 @@ void app_open_external(const char *url, const char *name) {
       DetailParams p; memset(&p, 0, sizeof p); snprintf(p.it.type, sizeof p.it.type, "%s", ty); snprintf(p.it.id, sizeof p.it.id, "%s", id); if (vid && *vid) { snprintf(p.it.videoId, sizeof p.it.videoId, "%s", vid); p.openStreams = 1; }
       if (*ty && *id) { app_go(SCR_DETAIL, &p, 0); return; } } }
   char nm[120]; snprintf(nm, sizeof nm, "%.*s", (int)strcspn(name ? name : "", "\n"), name ? name : "");
-  QrCardOpts o; memset(&o, 0, sizeof o); o.title = T("Open on another device"); o.sub = nm[0] ? nm : NULL; o.url = url; qrcard_show(&o);
+  /* the site's link page (after #: never sent to a server): the title, where it goes, one tap to open it */
+  static const char *H = "0123456789ABCDEF"; char go[1600]; size_t o2 = (size_t)snprintf(go, sizeof go, "%s/open/#u=", SB_SITE_URL);
+  for (int pass = 0; pass < 2; pass++) { const unsigned char *s = (const unsigned char *)(pass ? nm : url);
+    if (pass) { if (!nm[0]) break; if (o2 + 4 < sizeof go) { memcpy(go + o2, "&t=", 3); o2 += 3; } }
+    for (; *s && o2 + 4 < sizeof go; s++) { if ((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9') || *s == '-' || *s == '_' || *s == '.' || *s == '~') go[o2++] = (char)*s; else { go[o2++] = '%'; go[o2++] = H[*s >> 4]; go[o2++] = H[*s & 15]; } } }
+  go[o2] = 0;
+  const char *host = strstr(url, "://"); char sh[200]; host = host ? host + 3 : url; snprintf(sh, sizeof sh, "%.*s", (int)strcspn(host, "/?#"), host);
+  QrCardOpts o; memset(&o, 0, sizeof o); o.title = T("Open on another device"); o.sub = nm[0] ? nm : NULL; o.url = go; o.shown = sh; qrcard_show(&o);
 }
 void app_play(const Stream *s, const char *type, const char *id, const char *vid, int fromStart);
 void app_open_item(const Item *it) {

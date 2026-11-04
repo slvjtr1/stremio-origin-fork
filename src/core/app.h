@@ -2,6 +2,7 @@
    the accent colour, toasts. Screens are modules that register an enter/leave/key/tick/draw set. */
 #ifndef SB_APP_H
 #define SB_APP_H
+#define SB_SITE_URL "https://slvjtr1.github.io/stremio-origin-fork" /* the app's site: links, help, updates */
 #include <stdint.h>
 #include "core/anim.h"
 #include "core/stremio.h"

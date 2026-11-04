@@ -20,7 +20,6 @@
 #include <string.h>
 
 static struct { int open, started, state; double at, doneAt, outAt; char out[16], err[200], url[600]; } C; static SGlass glass;
-#define SB_ISSUES "https://github.com/stremio-origin/webos/issues/new" /* where this build's issues go */
 #define CW 1040.0f
 #define CH 470.0f
 static void close_card(void) { if (!C.open) return; C.open = 0; C.outAt = app_now(); }
@@ -36,7 +35,7 @@ static void tick(float dt) {
     char o[64]; int st = applog_share_state(o, sizeof o);
     if (st == 1 && strlen(o) == 4) { C.state = 1; snprintf(C.out, sizeof C.out, "%s", o); C.doneAt = app_now();
       /* the issue, prefilled: its title, the log code and the build in the text */
-      snprintf(C.url, sizeof C.url, "%s?title=%s&body=Log%%20code%%3A%%20%s%%0AVersion%%3A%%20%s%%20(%s)%%0A%%0AWhat%%20happened%%3A%%20", SB_ISSUES, "Issue%20from%20the%20TV", o, update_current(), "webOS"); }
+      snprintf(C.url, sizeof C.url, "%s/help/#log=%s&v=%s", SB_SITE_URL, o, update_current()); } /* the site's help page: the code, and the report it fills in */
     else if (st == -1 || (st == 0 && app_now() - C.at > 40.6)) { C.state = -1; C.doneAt = app_now();
       snprintf(C.err, sizeof C.err, "%s", T(st == -1 && (!strcmp(o, "net") || !strcmp(o, "timeout")) ? "No internet connection" : "Couldn’t share the logs. Try again in a moment")); }
   }
