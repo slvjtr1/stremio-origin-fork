@@ -29,6 +29,12 @@ int  text_rtl(void);
 void text_frame_begin(void);     /* resets the per-frame rasterising budget */
 void text_gc(void);              /* drops lines not drawn lately (call when a screen changes) */
 
+/* the subtitles' own fonts (Settings > Subtitles > Font): TEXT_FACE(n) | weight draws in bundled font n (1..TEXT_NFACES)
+   where it has the letters, the app's own fonts elsewhere. 0: the app's own (Inter, Noto Sans Arabic) */
+#define TEXT_NFACES 5
+#define TEXT_FACE(n) ((n) << 12)
+const char *text_face_file(int n); /* its file under fonts/ (1..TEXT_NFACES), for libass too */
+
 /* layout metrics for a font size: the line box height and where the baseline sits */
 int  text_line_height(int px);
 

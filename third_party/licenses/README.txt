@@ -6,4 +6,6 @@ Third-party code in this app and its licences:
 - SHA-256 and AES (third_party/crypto): Brad Conte's crypto-algorithms, public domain (crypto-algorithms-public-domain.txt).
 - P-256 key exchange (third_party/crypto/uecc): micro-ecc by Kenneth MacKay, BSD-2-Clause (micro-ecc-BSD-2-Clause.txt).
 - FreeType, HarfBuzz, FriBidi, libass (ISC, 0.17.5), cJSON, stb, qrcodegen, libwebp, SDL2: their licences ship with their sources in third_party/.
+- Subtitle fonts in assets/fonts (SIL Open Font License 1.1, each licence beside its font): Roboto, Atkinson Hyperlegible Next,
+  Lora, Cairo and Readex Pro, unmodified, from github.com/google/fonts.
 The app itself is GPL-3.0.

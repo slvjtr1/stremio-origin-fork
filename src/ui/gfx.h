@@ -28,11 +28,14 @@ static inline SbRect rect(float x, float y, float w, float h) { SbRect r = { x, 
 
 int  gfx_init(int surfaceW, int surfaceH);
 void gfx_resize(int surfaceW, int surfaceH);
+void gfx_window_to_layout(float x, float y, int winW, int winH, float *lx, float *ly); /* (a phone: the 16:9 picture sits inside a wider window) */
+void gfx_layout_to_window_frac(float x, float y, float w, float h, float out[4]);
 void gfx_begin(uint32_t clear);   /* clears to the colour (alpha included: the video shows through alpha 0) */
 void gfx_end(void);               /* flushes what is left */
 void gfx_flush(void);
 void gfx_invalidate_state(void);
 float gfx_scale(void);            /* surface pixels per layout unit */
+void  gfx_mirror_x(float *x0, float *x1);  /* (screen pixels) through the mirror, when one is up */
 void  gfx_xform_point(float *x, float *y);   /* layout -> surface pixels, through the offset and scale stacks */
 
 /* shapes (SDF rounded rectangles) */

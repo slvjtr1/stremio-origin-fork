@@ -31,11 +31,11 @@
    One FT_Face per (family, weight): the variable fonts are set to that weight once, and glyph
    rendering never changes the coordinates again (changing them per glyph is what makes variable
    fonts slow). Sizes are set per line with FT_Set_Pixel_Sizes. */
-enum { FAM_LATIN = 0, FAM_ARABIC = 1, FAM_FB = 2 };   /* fam >= FAM_FB: the fallback file fam - FAM_FB */
+enum { FAM_LATIN = 0, FAM_ARABIC = 1, FAM_SUB = 2, FAM_FB = 2 + TEXT_NFACES };   /* FAM_SUB..: the subtitles' own fonts (read on first use); fam >= FAM_FB: the fallback file fam - FAM_FB */
 enum { FID_NONE = -1, FID_TAG = -2 };                  /* a run's font: no font has it (dropped); a flag drawn as a tag */
 /* bitmap: 1 = colour PNG glyphs only (drawn as a mask), -1 = FreeType could not open it; ftpx: the FT size of a fallback face */
 typedef struct { int fam, weight; FT_Face face; hb_font_t *hb; int px, ftpx, bitmap; } Font;
-#define MAX_FONTS 16
+#define MAX_FONTS 40
 #define MAX_FB 64
 #define CPC_N 1024
 /* one font set per thread: the drawing thread's, and the text thread's (FreeType faces are not shared across threads).
@@ -45,7 +45,18 @@ static FontSet mainSet; static _Thread_local FontSet *FS; static _Thread_local i
 #define fonts (FS->f)
 #define nfonts (FS->n)
 #define ft (FS->lib)
-static unsigned char *fontData[2]; static long fontLen[2];
+static unsigned char *fontData[FAM_FB]; static long fontLen[FAM_FB];
+static const char *FACE_FILES[TEXT_NFACES] = { "Roboto.ttf", "AtkinsonHyperlegibleNext.ttf", "Lora.ttf", "Cairo.ttf", "ReadexPro.ttf" };
+const char *text_face_file(int n) { return n >= 1 && n <= TEXT_NFACES ? FACE_FILES[n - 1] : NULL; }
+static char assetRoot[1024]; static pthread_mutex_t facemu = PTHREAD_MUTEX_INITIALIZER; static signed char faceTried[TEXT_NFACES];
+static long read_file(const char *path, unsigned char **out);
+static int face_load(int fam) { /* a subtitle font's file, read once (from either thread) the first time a line asks for it */
+  int i = fam - FAM_SUB; if (i < 0 || i >= TEXT_NFACES) return 0;
+  pthread_mutex_lock(&facemu);
+  if (!faceTried[i]) { faceTried[i] = 1; char p[1200]; snprintf(p, sizeof p, "%s/fonts/%s", assetRoot, FACE_FILES[i]); unsigned char *d = NULL; long n = read_file(p, &d);
+    if (n > 0) { fontLen[fam] = n; fontData[fam] = d; } else fprintf(stderr, "[text] no font at %s\n", p); }
+  int ok = fontData[fam] != NULL; pthread_mutex_unlock(&facemu); return ok;
+}
 static float sscale = 1.0f;  /* surface pixels per layout unit: glyphs are rasterised at that resolution */
 static int uiRtl;
 static int budgetLines;      /* lines rasterised this frame */
@@ -56,6 +67,7 @@ void text_stats(double *lineMs, double *widthMs, int *raster, int *shape, int *l
 
 static Font *font_get(int fam, int weight) {
   int i; for (i = 0; i < nfonts; i++) if (fonts[i].fam == fam && fonts[i].weight == weight) return &fonts[i];
+  if (fam >= FAM_SUB && fam < FAM_FB && !face_load(fam)) return NULL;
   if (nfonts >= MAX_FONTS || !fontData[fam]) return NULL;
   Font *f = &fonts[nfonts];
   if (FT_New_Memory_Face(ft, fontData[fam], fontLen[fam], 0, &f->face)) return NULL;
@@ -200,7 +212,7 @@ int text_init(const char *assetDir, float surfaceScale) {
   char p[1024];
   FS = &mainSet; shapeRtl = uiRtl;
   if (FT_Init_FreeType(&ft)) return 0;
-  sscale = surfaceScale;
+  sscale = surfaceScale; snprintf(assetRoot, sizeof assetRoot, "%s", assetDir);
   snprintf(p, sizeof p, "%s/fonts/InterVariable.ttf", assetDir); fontLen[0] = read_file(p, &fontData[0]);
   snprintf(p, sizeof p, "%s/fonts/NotoSansArabic.ttf", assetDir); fontLen[1] = read_file(p, &fontData[1]);
   if (!fontLen[0]) { fprintf(stderr, "[text] no font at %s\n", p); return 0; }
@@ -335,6 +347,7 @@ static float shape_run(Shaped *out, Font *f, const uint32_t *cps, int a, int b, 
   hb_buffer_add_codepoints(buf, cps, b, a, b - a);
   hb_buffer_set_direction(buf, rtl ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
   if (f->fam >= FAM_FB) { hb_buffer_set_script(buf, sc ? sc : HB_SCRIPT_COMMON); hb_buffer_set_flags(buf, HB_BUFFER_FLAG_REMOVE_DEFAULT_IGNORABLES); }
+  else if (f->fam >= FAM_SUB) hb_buffer_set_script(buf, sc ? sc : HB_SCRIPT_LATIN); /* a subtitles' font: the script of the run it took over */
   else hb_buffer_set_script(buf, f->fam == FAM_ARABIC ? HB_SCRIPT_ARABIC : HB_SCRIPT_LATIN);
   hb_buffer_set_language(buf, hb_language_get_default());
   hb_feature_t feats[2] = { { HB_TAG('c','v','1','1'), 1, 0, (unsigned)-1 }, { HB_TAG('s','s','0','1'), 1, 0, (unsigned)-1 } }; /* the web app's Inter features */
@@ -368,6 +381,7 @@ static int strong_script(hb_script_t sc) { return sc && sc != HB_SCRIPT_COMMON &
 /* the whole line: cps are logical order; returns total advance; fills `out` in visual order */
 static float shape_line(Shaped *out, const uint32_t *cps, int n, int px, int weight, float tracking) {
   if (n <= 0) return 0;
+  int face = (weight >> 12) & 15; weight &= 0xfff; if (face > TEXT_NFACES) face = 0; /* TEXT_FACE(n): the subtitles' font where it has the letters */
   FriBidiCharType *types = malloc(n * sizeof *types); FriBidiBracketType *brk = malloc(n * sizeof *brk);
   FriBidiLevel *levels = malloc(n * sizeof *levels);
   FriBidiParType base = shapeRtl ? FRIBIDI_PAR_RTL : FRIBIDI_PAR_LTR;
@@ -375,6 +389,7 @@ static float shape_line(Shaped *out, const uint32_t *cps, int n, int px, int wei
   /* Arabic UI: a line with no right-to-left letter at all (an addon's stream name, a Latin title) is laid out left to
      right, as the page does with unicode-bidi: plaintext; otherwise its emoji and numbers jump to the far end */
   if (base == FRIBIDI_PAR_RTL) { int i = 0; while (i < n && !FRIBIDI_IS_RTL(types[i])) i++; if (i == n) base = FRIBIDI_PAR_LTR; }
+  else { int i = 0; while (i < n && !FRIBIDI_IS_LETTER(types[i])) i++; if (i < n && FRIBIDI_IS_RTL(types[i])) base = FRIBIDI_PAR_RTL; } /* (left-to-right page: an Arabic line read from its own first letter, as plaintext does) */
   fribidi_get_bracket_types((const FriBidiChar *)cps, n, types, brk);
   if (!fribidi_get_par_embedding_levels_ex(types, brk, n, &base, levels)) { for (int i = 0; i < n; i++) levels[i] = 0; }
   /* runs: same level, same font, and (for fallback fonts) one script; a Latin line is one cluster per letter, all Inter */
@@ -406,7 +421,10 @@ static float shape_line(Shaped *out, const uint32_t *cps, int n, int px, int wei
     Run *r = &runs[map[k]];
     if (r->fid == FID_TAG) { pen += shape_tag(out, cps, r->a, r->b, px, tracking, pen); continue; }
     Font *f = r->fid >= FAM_FB ? fb_font(r->fid - FAM_FB) : font_get(r->fid, weight); if (!f) f = font_get(FAM_LATIN, weight); if (!f) continue;
-    pen += shape_run(out, f, cps, r->a, r->b, r->lv & 1, px, tracking, pen, r->sc, weight >= 600 && f->fam >= FAM_FB);
+    if (face && f->fam < FAM_SUB) { Font *sf = font_get(FAM_SUB + face - 1, weight); /* (a run it lacks a letter of stays in the app's font) */
+      if (sf) { int all = 1; for (int q = r->a; q < r->b && all; q++) if (cps[q] > 0x20 && !font_has(sf, cps[q])) all = 0; if (all) f = sf; } }
+    hb_script_t rsc = f->fam >= FAM_SUB && f->fam < FAM_FB ? (r->fid == FAM_ARABIC ? HB_SCRIPT_ARABIC : HB_SCRIPT_LATIN) : r->sc;
+    pen += shape_run(out, f, cps, r->a, r->b, r->lv & 1, px, tracking, pen, rsc, weight >= 600 && f->fam >= FAM_FB);
   }
   free(types); free(brk); free(levels); free(runs); free(rl); free(map);
   out->width = pen;
@@ -504,6 +522,10 @@ static void raster_box(unsigned char *bmp, int w, int hgt, const Box *b, float x
 }
 static unsigned char *raster_bitmap(Shaped *s, int px, int *ow, int *oh, int *oasc) { /* any thread: glyphs into an alpha bitmap */
   int asc = (int)(px * 0.97f + 0.5f), hgt = (int)(px * 1.21f + 0.999f);
+  /* marks set below the letters (Arabic dots: the two under a final yeh sit 0.42 em down, the line keeps 0.24): the
+     picture goes deeper for that line only, its top and baseline where they were, so nothing is cut off */
+  { float low = 0; for (int i = 0; i < s->n; i++) if (s->g[i].y > low) low = s->g[i].y;
+    if (low > 0) { int need = asc + (int)ceilf(low + px * 0.3f) + 1; if (need > hgt) hgt = need; } }
   int w = (int)ceilf(s->width) + 4; if (w < 1) w = 1; if (w > 4096) w = 4096;
   unsigned char *bmp = calloc((size_t)w * hgt, 1);
   for (int i = 0; i < s->nbox; i++) raster_box(bmp, w, hgt, &s->box[i], s->box[i].x + 2, asc + s->box[i].y, px / 18.0f < 1 ? 1 : px / 18.0f);

@@ -31,7 +31,7 @@ static int curProg = -1;
 static GLuint curTex;
 static int batchOpaque = 1, blendOn = 1;
 static GLuint vbos[3]; static int vboCur; static GLsizeiptr vboOff, vboCap; static double flushMs; static int flushN; /* three streaming buffers in turn: the GPU may still read the last frame's */
-static int surfW, surfH;
+static int surfW, surfH, scrOx, scrOy; /* scrOx/Oy: where the 16:9 picture starts in a wider or taller window (a phone; 0 on a TV) */
 static float scl = 1.0f;
 static int drawCalls, quadsDrawn;
 
@@ -134,7 +134,16 @@ int gfx_init(int w, int h) {
   fprintf(stderr, "[gfx] %s | %s | %s\n", glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION));
   return 1;
 }
-void gfx_resize(int w, int h) { surfW = w; surfH = h; scl = (float)w / SB_W; glViewport(0, 0, w, h); }
+void gfx_resize(int w, int h) {
+  surfW = w; surfH = h; scl = (float)w / SB_W; glViewport(scrOx, scrOy, w, h); }
+/* a point of the window (its own size winW x winH, as SDL reports events) in layout units */
+void gfx_window_to_layout(float x, float y, int winW, int winH, float *lx, float *ly) {
+  float fw = (float)(surfW + 2 * scrOx), fh = (float)(surfH + 2 * scrOy); if (winW <= 0 || winH <= 0 || surfW <= 0 || surfH <= 0) { *lx = x; *ly = y; return; }
+  *lx = (x / winW * fw - scrOx) / surfW * SB_W; *ly = (y / winH * fh - scrOy) / surfH * SB_H; }
+/* a rectangle in layout units as fractions of the whole window (0..1), for a picture placed by the system (the video) */
+void gfx_layout_to_window_frac(float x, float y, float w, float h, float out[4]) {
+  float fw = (float)(surfW + 2 * scrOx), fh = (float)(surfH + 2 * scrOy); if (fw <= 0 || fh <= 0) { out[0] = x / SB_W; out[1] = y / SB_H; out[2] = w / SB_W; out[3] = h / SB_H; return; }
+  out[0] = (scrOx + x / SB_W * surfW) / fw; out[1] = (scrOy + y / SB_H * surfH) / fh; out[2] = w / SB_W * surfW / fw; out[3] = h / SB_H * surfH / fh; }
 float gfx_scale(void) { return scl; }
 int gfx_draw_calls(void) { return drawCalls; }
 static long poolBytes, texBytes; static int npool, texCount;
@@ -195,7 +204,7 @@ static void apply_clip(void) {
   gfx_flush();
   if (nclip) { int x = (int)floorf(curClip.x * scl), y = (int)floorf(curClip.y * scl), w = (int)ceilf((curClip.x + curClip.w) * scl) - x, h = (int)ceilf((curClip.y + curClip.h) * scl) - y;
     if (w < 0) w = 0; if (h < 0) h = 0;
-    glEnable(GL_SCISSOR_TEST); glScissor(x, surfH - y - h, w, h); }
+    glEnable(GL_SCISSOR_TEST); glScissor(x + (tgtOn ? 0 : scrOx), surfH - y - h + (tgtOn ? 0 : scrOy), w, h); }
   else glDisable(GL_SCISSOR_TEST);
 }
 void gfx_invalidate_state(void) { curProg = -1; curTex = 0; } /* someone else drew with raw GL: the next batch sets everything again */
@@ -336,9 +345,10 @@ static int nine(int kind, float x, float y, float w, float h, float r, float t, 
     if (i == 1 && j == 1 && kind == CK_RING) continue;                     /* a ring has no middle */
     if (i == 1 && j == 1 && holeOn && xs[1] >= holeX && ys[1] >= holeY && xs[2] <= holeX + holeW && ys[2] <= holeY + holeH) continue; /* hidden under the box it shades */
     float fx0 = (xs[i] - gx) / gw, fx1 = (xs[i + 1] - gx) / gw, fy0 = (ys[j] - gy) / gh, fy1 = (ys[j + 1] - gy) / gh;
+    float ua = us[i][0], ub = us[i][1]; if (mirN) { float t2 = ua; ua = ub; ub = t2; } /* (mirrored: a corner moved to the other side faces that way too) */
     quad(P_ALPHA, tex, xs[i], ys[j], qw, qh, 0, 0, 0, 0,
          bilerp(c00, c10, c01, c11, fx0, fy0), bilerp(c00, c10, c01, c11, fx1, fy0), bilerp(c00, c10, c01, c11, fx0, fy1), bilerp(c00, c10, c01, c11, fx1, fy1),
-         us[i][0], vs[j][0], us[i][1], vs[j][1]);
+         ua, vs[j][0], ub, vs[j][1]);
   }
   return 1;
 }
@@ -516,7 +526,7 @@ int gfx_in_target(void) { return saved.on; }
 void gfx_target_end(void) {
   if (!saved.on) return;
   gfx_flush(); saved.on = 0; tgtOn = 0; fadeOff = 0;
-  glBindFramebuffer(GL_FRAMEBUFFER, screenFbo); surfW = saved.surfW; surfH = saved.surfH; scl = saved.scl; glViewport(0, 0, surfW, surfH);
+  glBindFramebuffer(GL_FRAMEBUFFER, screenFbo); surfW = saved.surfW; surfH = saved.surfH; scl = saved.scl; glViewport(scrOx, scrOy, surfW, surfH);
   nclip = saved.nclip; nopac = saved.nopac; noff = saved.noff; nsc = saved.nsc; curOpac = saved.curOpac; curOx = saved.curOx; curOy = saved.curOy;
   curSx = saved.curSx; curSy = saved.curSy; curSox = saved.curSox; curSoy = saved.curSoy; curClip = saved.curClip;
   memcpy(clips, saved.clips, sizeof clips); memcpy(opac, saved.opac, sizeof opac); memcpy(offx, saved.offx, sizeof offx); memcpy(offy, saved.offy, sizeof offy); memcpy(scx, saved.scx, sizeof scx); memcpy(scy, saved.scy, sizeof scy); memcpy(sox, saved.sox, sizeof sox); memcpy(soy, saved.soy, sizeof soy); memcpy(scOx, saved.scOx, sizeof scOx); memcpy(scOy, saved.scOy, sizeof scOy);
@@ -524,6 +534,7 @@ void gfx_target_end(void) {
 }
 
 /* ---- state stacks ------------------------------------------------------------------------- */
+void gfx_mirror_x(float *x0, float *x1) { mir(x0, x1); } /* a box's two edges (screen pixels) where the mirror puts them */
 void gfx_xform_point(float *x, float *y) { xform(x, y); } /* layout -> screen, with the offset and scale stacks (for the pointer's rectangles) */
 void gfx_clip_push(float x, float y, float w, float h) {
   float x0 = x, y0 = y, x1 = x + w, y1 = y + h; xform(&x0, &y0); xform(&x1, &y1); mir(&x0, &x1);

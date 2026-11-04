@@ -115,7 +115,7 @@ static void deliver(Job *j) {
     cpy(d->url, sizeof d->url, js_str(s, "url", "")); cpy(d->lang, sizeof d->lang, js_str(s, "lang", "eng")); cpy(d->name, sizeof d->name, js_str(s, "name", "English")); cpy(d->kind, sizeof d->kind, js_str(s, "kind", "srt")); }
   j->cb(t, NULL, j->ud); free(t); cJSON_Delete(o);
 }
-static void send(Job *j, cJSON *o) {
+static void job_send(Job *j, cJSON *o) {
   if (j->sent) { cJSON_Delete(o); return; }
   j->sent = 1;
   if (*js_str(o, "url", "")) memo_put(trCache, j->key, cJSON_Duplicate(o, 1)); /* pressing Trailer again is instant */
@@ -160,13 +160,13 @@ static void on_hls(int st, const unsigned char *body, size_t len, void *ud) {
   HlsReq *r = ud; char top[2048] = "";
   if (st >= 200 && st < 300 && hls_top(js_str(r->o, "hls", ""), (const char *)body, top, sizeof top)) {
     cJSON_AddStringToObject(r->o, "master", js_str(r->o, "hls", "")); cJSON_ReplaceItemInObjectCaseSensitive(r->o, "hls", cJSON_CreateString(top)); }
-  send(r->j, r->o); job_unref(r->j); free(r);
+  job_send(r->j, r->o); job_unref(r->j); free(r);
 }
 static void reply(Job *j, cJSON *o) {
   if (j->sent) { cJSON_Delete(o); return; }
   if (*js_str(o, "hls", "") && !j->lq) { HlsReq *r = malloc(sizeof *r); r->j = j; r->o = o; j->refs++;
     net_get_timeout(js_str(o, "hls", ""), 4000, on_hls, r); return; }
-  send(j, o);
+  job_send(j, o);
 }
 
 /* ---- YouTube: Innertube's Android client, then Piped mirrors ------------------------------------- */
@@ -470,8 +470,8 @@ void trailer_tick(void) {
   double t = now_s();
   for (Job *j = jobs, *n; j; j = n) {
     j->refs++; /* nothing below may free it while it is looked at */
-    if (j->deliver) { deliver(j); j->refs--; }  /* the ref send() took */
-    if (!j->sent && t >= j->deadline) { send(j, err_obj("timeout")); deliver(j); j->refs--; }
+    if (j->deliver) { deliver(j); j->refs--; }  /* the ref job_send() took */
+    if (!j->sent && t >= j->deadline) { job_send(j, err_obj("timeout")); deliver(j); j->refs--; }
     if (j->imdbRetryAt && t >= j->imdbRetryAt) { j->imdbRetryAt = 0; imdb_ask(j); }
     if (j->caps && !j->capsFired && t >= j->capsCapAt) caps_fin(j);
     n = j->next; job_unref(j);

@@ -11,6 +11,7 @@
 #include "ui/shared.h"
 #include "ui/gfx.h"
 #include "ui/text.h"
+#include "ui/subfx.h"
 #include "ui/img.h"
 #include "ui/icon.h"
 #include "ui/widgets.h"
@@ -86,10 +87,10 @@ static float kf(double at, float dur, const float *c, float delay) { if (!at) re
 /* ---- state ---- */
 #define MAXBTN 8
 #define MAXROW 64
-typedef struct { int k; /* 0 note 1 skel 2 ep 3 src 4 chip; ls: a subtitle row's list, 1 OpenSubtitles 2 the addons' */ char lb[200], sub[120], ov[300], th[512], vl[48]; int on, spin, tool; int i, ls; const cJSON *v; Stream *st; char u[1024]; float d, hh, ww, vw; uint32_t sw; } TItem; /* hh, ww, vw: measured on first draw (items are made fresh, zeroed) */
+typedef struct { int k; /* 0 note 1 skel 2 ep 3 src 4 chip; ls: a subtitle row's list, 1 OpenSubtitles 2 the addons' */ char lb[200], sub[120], ov[300], th[512], vl[48]; int on, spin, tool, sp; int i, ls; const cJSON *v; Stream *st; char u[1024]; float d, hh, ww, vw; uint32_t sw; } TItem; /* hh, ww, vw: measured on first draw (items are made fresh, zeroed) */
 typedef struct { char title[64], vl[32]; TItem *items; int n; } TCol;
 static float fill_ease(double t);
-typedef struct { int k; /* 0 none 1 intro 2 recap 3 outro */ int big, nbtn, idx, autoN; double t0, adur; struct { const char *id; char lb[48]; double to; int main; } b[2]; } PPrompt;
+typedef struct { int k; /* 0 none 1 intro 2 recap 3 outro (the next-up card) 4 skip credits */ int big, nbtn, idx, autoN; double t0, adur; struct { const char *id; char lb[48]; double to; int main; } b[2]; } PPrompt;
 static struct {
   int open, closing, live, failed, started; double openedAt;
   char type[16], id[64], vid[80], name[256], logo[512], bg[512], poster[512], sname[600], saddon[96], url[SB_URL_MAX], alt[SB_URL_MAX]; int altTried, p2pRetried; double lastPos; int isTrailer, isHls;
@@ -101,7 +102,7 @@ static struct {
      the loading line, the seek pill, the knob, the prompt, the subtitles' lift */
   Mo in, artA, ttlA, ttlX, ttlY, barA, barY, btnA, btnY, topR, topY, dim, dimT, vig, pzA, bufA, lnA, skA, skS, knA, prA, prY, prB, subB, ccS, pgA, pgY;
   struct { ParGuide g; int age, certAge, guideIn, certIn, asked; unsigned sess; double at, askAt; } pg; /* the viewer notice: an age and what for, as the picture comes, gone in 5 s */
-  Mo dlyA, dlyR; int dlyF; double dlyAt; /* the delay card (mode 4): its showing, its focus ring's place, the focused button, when the value last changed */
+  Mo dlyA, dlyR; int dlyF, dlyKind; double dlyAt; /* the delay card (mode 4; dlyKind 1: the same card for the subtitles' height): its showing, its focus ring's place, the focused button, when the value last changed */
   double hideAt; int osd;
   /* the info chips: kept per place, each with its own entrance */
   struct { char t[100], old[100]; const char *icon; int bold, sep; double at, xAt; float delay, oldW; } chip[8]; int nchip; /* old, xAt, oldW: the words before a change, crossfading */
@@ -110,10 +111,10 @@ static struct {
   Mo focX, focY, focW, focH, focA, tipA; char tip[48]; double tipAt, focFadeAt; int focSeen;
   int ldd, exitFade; char trName[128], p2pLine[160]; Mo p2pA;
   
-  /* prompts (shown: the one drawn, kept while it fades out) */ PPrompt prompt, shown; int dismissed[4];
+  /* prompts (shown: the one drawn, kept while it fades out) */ PPrompt prompt, shown; int dismissed[5]; int introChk;
   struct { int has; double s, e; } intro, recap, outro; int skipsAsked, skipsOk;
   /* the skip sources being asked (merged by rank when they have answered) */
-  struct { unsigned tok; int pending, sent, nsrc, isEp, se, en, chapWait; double quickAt, endAt, d; struct { char url[440]; int kind, tries, live; double retryAt; } job[3]; struct { int rank; struct { int has; double s, e; } g[3]; } src[4]; } sk;
+  struct { unsigned tok; int pending, sent, nsrc, isEp, se, en, chapWait; double quickAt, endAt, d; struct { char url[440]; int kind, tries, live; double retryAt; } job[4]; struct { int rank; struct { int has; double s, e; } g[3]; } src[4]; int arm[4], narm; } sk;
   /* next episode from the closest source */
   int nextTried; struct { unsigned tok; int done, has; double bs, until; char vid[80], info[700], url[SB_URL_MAX], addon[96], binge[96]; Stream best; } nx;
   int ended; double endGoAt; double metaRetryAt;
@@ -261,9 +262,16 @@ static void try_resume(void) {
 
 /* ---- subtitles ---- */
 static const char *want_sub(void) { return store_get("subsLang", "eng"); }
+typedef struct SubStyle SubStyle; static const SubStyle *sub_style(void); static float sub_rest(void), sub_lift(void);
 static int size_idx(void) { int i = atoi(store_get("subtitleSize", "2")); return i < 0 || i > 6 ? 2 : i; }
 static const int SUB_SIZES[] = { 72, 80, 100, 120, 140, 160, 180 };
 static const char *SUB_COLORS[] = { "#ffffff", "#ffe600", "#00e5ff" }, *SUB_BGS[] = { "0", "1", ".6" };
+static const char *SUB_FONTS[] = { "Inter", "Roboto", "Atkinson", "Lora", "Cairo", "Readex" }; /* (TEXT_FACE 0..5: text.c; short, for the tray's column) */
+static int font_idx(void) { int i = atoi(store_get("subsFont", "0")); return i < 0 || i > TEXT_NFACES ? 0 : i; }
+static int bold_on(void) { return !strcmp(store_get("subsBold", "false"), "true"); }
+static int outline_on(void) { return strcmp(store_get("subsOutline", "true"), "false") != 0; }
+static const char *SHADOW_LB[] = { "Off", "Light", "Medium", "Strong", "Heavy" };
+static int shadow_lvl(void) { if (strcmp(store_get("subsShadow", "false"), "true")) return 0; int l = atoi(store_get("subsShadowStrength", "2")); return l < 1 || l > 4 ? 2 : l; } /* 0 off, 1..4 its strength */
 static int bg_idx(void) { const char *v = store_get("subsBgStyle", "0"); for (int i = 0; i < 3; i++) if (!strcmp(SUB_BGS[i], v)) return i; return 0; }
 static int color_idx(void) { const char *v = store_get("subsColor", "#ffffff"); for (int i = 0; i < 3; i++) if (!strcasecmp(SUB_COLORS[i], v)) return i; return -1; }
 static uint32_t hexcol(const char *h) { return 0xff000000u | (unsigned)strtoul(h + 1, NULL, 16); }
@@ -341,11 +349,12 @@ static void ass_sync(void) {
   float vx = 0, vy = 0, vw = SB_W, vh = SB_H; int w = video_width(), h = video_height();
   if (w > 0 && h > 0 && !strcmp(P.aspect, "fit")) { float a = (float)w / h; if (a > SB_W / SB_H) { vh = SB_W / a; vy = (SB_H - vh) / 2; } else { vw = SB_H * a; vx = (SB_W - vw) / 2; } }
   VidState vs = video_state();
-  asssubs_tick(video_time() - P.subDelay, vs == VID_PLAYING && !video_settling(), video_fps(), vx, vy, vw, vh, w, h, SUB_SIZES[size_idx()] / 100.0f);
+  asssubs_tick(video_time() - P.subDelay, vs == VID_PLAYING && !video_settling(), video_fps(), vx, vy, vw, vh, w, h, SUB_SIZES[size_idx()] / 100.0f, sub_lift());
 }
 static void sync_auto_arm(void);
 static void auto_sub(void) {
   const char *w = want_sub(); if (P.autoSubDone || strcmp(P.curSub, "off")) return; if (!*w) return;
+  if (!strcmp(store_get("subsAuto", "true"), "false")) return; /* (Settings > Subtitles: turned on by hand only) */
   int em = -1; for (int j = 0; j < P.nEmb; j++) if (lang_match(P.emb[j].lang, w) && (em < 0 || (P.emb[em].forced && !P.emb[j].forced))) em = j;
   if (em >= 0) { P.autoSubDone = 1; set_emb_sub(P.emb[em].idx); return; } /* embedded wins: it is in sync with the file */
   if (!P.embKnown && !P.embWaitOver) { if (!P.embWaitAt) P.embWaitAt = now_() + 8; return; } /* the file's own tracks get 8 s to show up first */
@@ -421,12 +430,15 @@ static void load_emb_tracks(void) {
    against: a file with no text tracks (most HTTP and debrid files) is matched against another subtitle made for this
    file instead, found and read by the job itself; nothing of the kind: nothing to sync against. ---- */
 static struct { SubSync *job; int phase; /* 0 idle, 1 waiting for the reference, 2 matching */ int stage; double t0, nextAt, center; char st[160]; double *base; int nbase;
-  int quiet, autoWant; unsigned autoTok; double autoAt; /* quiet: the check of a subtitle the app chose by itself, unseen unless it fixes something */ } SY;
+  int quiet, autoWant; unsigned autoTok; double autoAt; /* quiet: the check of a subtitle the app chose by itself, unseen unless it fixes something */
+  /* Keep in sync (Settings > Subtitles): the same quiet check again every few minutes of playing, around wherever the film
+     is by then; the lines move only when they have drifted (a third of a second or more from where they are now) */
+  int fol, folOff; double folAt, curF, curD; } SY;
 static void sync_stop(int keepTimes) {
-  if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.st[0] = 0; SY.quiet = 0;
-  if (!keepTimes) { free(SY.base); SY.base = NULL; SY.nbase = 0; }
+  if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.st[0] = 0; SY.quiet = 0; SY.fol = 0;
+  if (!keepTimes) { free(SY.base); SY.base = NULL; SY.nbase = 0; SY.curF = 1; SY.curD = 0; SY.folAt = 0; SY.folOff = 0; }
 }
-static void sync_end(const char *why) { if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; if (!SY.quiet) snprintf(SY.st, sizeof SY.st, "%s", why); fprintf(stderr, "[subsync] %s%s\n", SY.quiet ? "(by itself) " : "", why); SY.quiet = 0; refresh_tray(4); }
+static void sync_end(const char *why) { if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.fol = 0; if (!SY.quiet) snprintf(SY.st, sizeof SY.st, "%s", why); fprintf(stderr, "[subsync] %s%s\n", SY.quiet ? "(by itself) " : "", why); SY.quiet = 0; refresh_tray(4); }
 static void sync_undo(void) { /* Reset: the lines' own times again */
   if (SY.base && SY.nbase == P.ncues) { for (int i = 0; i < P.ncues; i++) { P.cues[i].s = SY.base[2 * i]; P.cues[i].e = SY.base[2 * i + 1]; } cueTimesGen++; }
   sync_stop(0);
@@ -475,22 +487,32 @@ static void sync_auto_tick(void) {
   SY.autoWant = 0; SY.quiet = 1; SY.phase = 1; SY.t0 = now_(); SY.nextAt = 0; SY.center = video_time();
   fprintf(stderr, "[sync] checking the subtitle chosen at the start, by itself (at %.0f s)\n", SY.center);
 }
+static void sync_follow_tick(void) {
+  if (SY.phase || SY.autoWant || SY.folOff || P.isTrailer || strncmp(P.curSub, "ext:", 4) || !P.ncues || SL.wait || P.subDelay != 0 || !strcmp(store_get("subsFollow", "true"), "false")) return;
+  if (paused() || video_state() != VID_PLAYING) { if (SY.folAt) SY.folAt += 1.0 / 60; return; } /* (minutes of playing, not of the clock) */
+  if (!SY.folAt) { SY.folAt = now_() + 240; return; }
+  if (now_() < SY.folAt) return; SY.folAt = now_() + 420;
+  SY.quiet = 1; SY.fol = 1; SY.phase = 1; SY.t0 = now_(); SY.nextAt = 0; SY.center = video_time();
+  fprintf(stderr, "[sync] keeping in sync: checked again at %.0f s\n", SY.center);
+}
 static void sync_tick(void) {
-  sync_auto_tick(); if (!SY.phase) return;
+  sync_auto_tick(); sync_follow_tick(); if (!SY.phase) return;
   if (SY.phase == 2) { SyncResult r; if (!subsync_poll(SY.job, &r)) { int sg = subsync_stage(SY.job); if (sg != SY.stage) { SY.stage = sg; if (!SY.quiet) { snprintf(SY.st, sizeof SY.st, "%s", sync_wait_txt(sg)); refresh_tray(4); } } return; }
     subsync_drop(SY.job); SY.job = NULL;
+    if (r.st == SYNC_NOREF || r.st == SYNC_NOSUB) SY.folOff = 1; /* (nothing to follow: no more checks for this subtitle) */
     if (r.st == SYNC_NOREF) { sync_end(T("Nothing to sync against")); return; }
     if (r.st == SYNC_NOSUB) { sync_end(T("Couldn’t sync")); return; }
     if (r.st != SYNC_OK) { sync_end(T("Not sure: unchanged")); return; }
-    double at = video_time(), sh = at * (r.f - 1) + r.d; /* the shift where it is watched (a speed fix moves it along the film) */
-    if (SY.quiet && (P.subDelay != 0 || (fabs(sh) < 0.5 && fabs(r.f - 1) < 0.0005))) { fprintf(stderr, "[sync] (by itself) %s: left as it is\n", P.subDelay != 0 ? "a delay was set meanwhile" : "already in sync"); sync_end(""); return; }
+    double at = video_time(), sh = at * (r.f - 1) + r.d, cur = at * ((SY.curF ? SY.curF : 1) - 1) + SY.curD; /* the shift where it is watched (a speed fix moves it along the film); cur: the one in use */
+    if (SY.quiet && (P.subDelay != 0 || (fabs(sh - cur) < (SY.fol ? 0.35 : 0.5) && fabs(r.f - (SY.curF ? SY.curF : 1)) < 0.0005))) { fprintf(stderr, "[sync] (by itself) %s: left as it is\n", P.subDelay != 0 ? "a delay was set meanwhile" : "already in sync"); sync_end(""); return; }
+    int wasFol = SY.fol;
     if (!SY.base || SY.nbase != P.ncues) { free(SY.base); SY.base = malloc((size_t)(P.ncues ? P.ncues : 1) * 2 * sizeof *SY.base); SY.nbase = SY.base ? P.ncues : 0;
       for (int i = 0; i < SY.nbase; i++) { SY.base[2 * i] = P.cues[i].s; SY.base[2 * i + 1] = P.cues[i].e; } }
     if (!SY.base) { sync_end(T("Couldn’t sync")); return; }
     for (int i = 0; i < P.ncues; i++) { P.cues[i].s = SY.base[2 * i] * r.f + r.d; P.cues[i].e = SY.base[2 * i + 1] * r.f + r.d; } cueTimesGen++;
-    P.subDelay = 0;
+    P.subDelay = 0; SY.curF = r.f; SY.curD = r.d;
     char n[24]; snprintf(n, sizeof n, "%s%.1f", sh >= 0 ? "+" : "", sh); char st[160]; snprintf(st, sizeof st, "%s %s%s%s", T("Synced"), T1("{n} s", "n", n), fabs(r.f - 1) > 0.001 ? "  ·  " : "", fabs(r.f - 1) > 0.001 ? T("speed fixed") : "");
-    int q = SY.quiet; SY.quiet = 0; sync_end(st); toast(q ? T1("Subtitles synced {n} s", "n", n) : SY.st, 3000, NULL); return; }
+    int q = SY.quiet; SY.quiet = 0; sync_end(st); toast(q ? T1(wasFol ? "Subtitles drifted: synced again {n} s" : "Subtitles synced {n} s", "n", n) : SY.st, 3000, NULL); return; }
   if (now_() < SY.nextAt) return; SY.nextAt = now_() + 0.5;
   /* waiting for the file's own lines near the playhead */
   int st = mkv ? mkv_state(mkv) : MKV_FALLBACK, listed = mkv && st != MKV_FALLBACK && mkv_listed(mkv);
@@ -695,9 +717,12 @@ static void dts_tick(void) {
 /* ---- skips: intro / recap / credits. Sources, best first, merged per segment: the file's own chapters (a reader
    hooks in below), TheIntroDB and IntroDB by IMDb id, AniSkip for anime from Kitsu-based addons. A segment that
    doesn't fit this file's length is dropped and the next source's is used. One source with something useful
-   gives the others 2.5 s more; whatever answered by 14 s is used. API answers are kept 6 h; errors never ---- */
+   gives the others 2.5 s more; whatever answered by 14 s is used. API answers are kept 6 h; errors never. Anime from
+   IMDb-based addons (Cinemeta) reach AniSkip too: the IMDb id's MyAnimeList entries (ARM, arm.haglund.dev), the one
+   holding this season's episode (ani.zip's episode list), then its skip times. All free, no key, nothing about the
+   viewer sent ---- */
 void (*player_chapters_hook)(const char *url, int p2p);
-enum { SK_TIDB, SK_IDB, SK_KITSU, SK_ANI };
+enum { SK_TIDB, SK_IDB, SK_KITSU, SK_ANI, SK_ARM, SK_AZ };
 static struct { char url[440]; double at; char *body; } skCache[120]; static int skCacheN; static unsigned skTok;
 static const char *sk_cached(const char *u) { for (int i = 0; i < skCacheN; i++) if (!strcmp(skCache[i].url, u)) return now_() - skCache[i].at < 6 * 3600 ? skCache[i].body : NULL; return NULL; }
 static void sk_keep(const char *u, const char *body) {
@@ -714,7 +739,7 @@ static void sk_add(int rank, const int has[3], const double ss[3], const double 
   if (any && !P.sk.quickAt) P.sk.quickAt = now_() + 2.5;
 }
 static void sk_finish(void) {
-  if (P.sk.sent) return; P.sk.sent = 1; P.sk.tok = 0; double d = P.sk.d; int has[3] = { 0 }; double ss[3] = { 0 }, ee[3] = { 0 };
+  if (P.sk.sent) return; P.sk.sent = 1; P.introChk = 0; P.sk.tok = 0; double d = P.sk.d; int has[3] = { 0 }; double ss[3] = { 0 }, ee[3] = { 0 };
   for (int k = 0; k < 3; k++) for (int j = 0; j < P.sk.nsrc; j++) { const __typeof__(P.sk.src[0].g[0]) *g = &P.sk.src[j].g[k]; if (g->has && sk_fits(k, g->s, g->e)) { has[k] = 1; ss[k] = g->s; ee[k] = g->e; break; } }
   if (has[2] && d && ee[2] > d) ee[2] = d;
   /* credits learned from this show's other episodes: how long before the end they start */
@@ -742,6 +767,23 @@ static void sk_answer(int i, const cJSON *j) {
     static const char *K[3] = { "intro", "recap", "outro" };
     for (int k = 0; k < 3; k++) { const cJSON *o = js_obj(j, K[k]); if (!o) continue; double s0 = sk_sec(o, "start_sec", -1); sk_seg(&has[k], &ss[k], &ee[k], s0, sk_sec(o, "end_sec", k == 2 ? (d ? d : s0 + 600) : -1)); }
     sk_add(2, has, ss, ee);
+  } else if (kind == SK_ARM) { /* the IMDb id's anime entries: this season's (TheTVDB's numbering, as IMDb's), a film's */
+    const cJSON *x; P.sk.narm = 0; int tv = 0, lastTv = 0;
+    if (j) cJSON_ArrayForEach(x, j) { const char *md = js_str(x, "media", ""); int al = (int)js_num(x, "anilist", 0), mal = (int)js_num(x, "myanimelist", 0); if (!al || !mal) continue;
+      if (!P.sk.isEp) { if (!strcmp(md, "MOVIE") && P.sk.narm < 4) P.sk.arm[P.sk.narm++] = -mal; continue; }
+      if (strcmp(md, "TV") && strcmp(md, "ONA")) continue; tv++; lastTv = al;
+      if ((int)js_num(x, "thetvdb-season", -1) == P.sk.se && P.sk.narm < 4) P.sk.arm[P.sk.narm++] = al; }
+    if (P.sk.isEp && !P.sk.narm && tv == 1) P.sk.arm[P.sk.narm++] = lastTv; /* one series, numbered straight through */
+    if (!P.sk.narm) { sk_done(); return; }
+    if (P.sk.arm[0] < 0) { P.sk.job[i].kind = SK_ANI; P.sk.job[i].tries = 0; snprintf(P.sk.job[i].url, sizeof P.sk.job[i].url, "https://api.aniskip.com/v2/skip-times/%d/1?types=op&types=ed&types=recap&types=mixed-op&types=mixed-ed&episodeLength=0", -P.sk.arm[0]); sk_ask(i); return; }
+    P.sk.job[i].kind = SK_AZ; P.sk.job[i].tries = 0; snprintf(P.sk.job[i].url, sizeof P.sk.job[i].url, "https://api.ani.zip/mappings?anilist_id=%d", P.sk.arm[0]); memmove(P.sk.arm, P.sk.arm + 1, sizeof P.sk.arm[0] * 3); P.sk.narm--; sk_ask(i); return;
+  } else if (kind == SK_AZ) { /* the entry's episodes: which of them is this season's episode */
+    const cJSON *eps = js_obj(j, "episodes"), *e; int ep = 0, mal = (int)js_num(js_obj(j, "mappings"), "mal_id", 0);
+    if (eps) cJSON_ArrayForEach(e, eps) { if ((int)js_num(e, "seasonNumber", -1) == P.sk.se && (int)js_num(e, "episodeNumber", -1) == P.sk.en && e->string) { ep = atoi(e->string); break; } }
+    if (!ep && eps && cJSON_GetArraySize(eps) && !P.sk.narm) { cJSON_ArrayForEach(e, eps) if ((int)js_num(e, "absoluteEpisodeNumber", -1) == P.sk.en && (int)js_num(e, "seasonNumber", -1) <= 1 && e->string) { ep = atoi(e->string); break; } } /* (a long series IMDb numbers straight through) */
+    if (ep > 0 && mal > 0) { P.sk.job[i].kind = SK_ANI; P.sk.job[i].tries = 0; snprintf(P.sk.job[i].url, sizeof P.sk.job[i].url, "https://api.aniskip.com/v2/skip-times/%d/%d?types=op&types=ed&types=recap&types=mixed-op&types=mixed-ed&episodeLength=0", mal, ep); sk_ask(i); return; }
+    if (P.sk.narm > 0) { snprintf(P.sk.job[i].url, sizeof P.sk.job[i].url, "https://api.ani.zip/mappings?anilist_id=%d", P.sk.arm[0]); memmove(P.sk.arm, P.sk.arm + 1, sizeof P.sk.arm[0] * 3); P.sk.narm--; P.sk.job[i].tries = 0; sk_ask(i); return; }
+    sk_done(); return;
   } else if (kind == SK_KITSU) { /* the MyAnimeList id, then its skip times (the same job) */
     const cJSON *dt = js_arr(j, "data"), *m0 = dt ? cJSON_GetArrayItem(dt, 0) : NULL; const char *mal = js_str(js_obj(m0, "attributes"), "externalId", NULL);
     if (!mal) { sk_done(); return; }
@@ -759,7 +801,7 @@ static void sk_answer(int i, const cJSON *j) {
 static void on_sk(int st, const unsigned char *body, size_t len, void *ud) {
   (void)len; unsigned v = (unsigned)(uintptr_t)ud; int i = v & 3; if (!P.open || !P.sk.tok || v >> 2 != P.sk.tok || !P.sk.job[i].live) return;
   cJSON *j = st > 0 ? net_json(body) : NULL; const cJSON *err = cJSON_GetObjectItemCaseSensitive(j, "error");
-  int real = cJSON_IsObject(j) && !err && (cJSON_GetObjectItemCaseSensitive(j, "imdb_id") || cJSON_GetObjectItemCaseSensitive(j, "tmdb_id") || cJSON_GetObjectItemCaseSensitive(j, "found") || (P.sk.job[i].kind == SK_KITSU && js_arr(j, "data")));
+  int kd = P.sk.job[i].kind, real = (kd == SK_ARM && cJSON_IsArray(j)) || (cJSON_IsObject(j) && !err && (cJSON_GetObjectItemCaseSensitive(j, "imdb_id") || cJSON_GetObjectItemCaseSensitive(j, "tmdb_id") || cJSON_GetObjectItemCaseSensitive(j, "found") || (kd == SK_KITSU && js_arr(j, "data")) || (kd == SK_AZ && js_obj(j, "episodes"))));
   int miss = 0; if (cJSON_IsString(err)) { char e[96]; lower(err->valuestring, e, sizeof e); miss = strstr(e, "not found") != NULL; }
   if (!real && !miss && ++P.sk.job[i].tries < 3) { cJSON_Delete(j); P.sk.job[i].retryAt = now_() + 1.5; return; }
   if (real || miss) sk_keep(P.sk.job[i].url, real ? (const char *)body : "{}");
@@ -767,14 +809,21 @@ static void on_sk(int st, const unsigned char *body, size_t len, void *ud) {
 }
 static void sk_ask(int i) {
   const char *c = sk_cached(P.sk.job[i].url);
-  if (c) { cJSON *j = cJSON_Parse(c); P.sk.job[i].live = 0; int ok = cJSON_IsObject(j) && cJSON_GetArraySize(j) > 0; sk_answer(i, ok ? j : NULL); cJSON_Delete(j); return; }
+  if (c) { cJSON *j = cJSON_Parse(c); P.sk.job[i].live = 0; int ok = (cJSON_IsObject(j) || cJSON_IsArray(j)) && cJSON_GetArraySize(j) > 0; sk_answer(i, ok ? j : NULL); cJSON_Delete(j); return; }
   P.sk.job[i].live = 1; P.sk.job[i].retryAt = 0; net_get(P.sk.job[i].url, on_sk, (void *)(uintptr_t)((P.sk.tok << 2) | (unsigned)i));
 }
-static void sk_job(const char *url, int kind) { int i = 0; while (i < 3 && P.sk.job[i].url[0]) i++; if (i >= 3) return; snprintf(P.sk.job[i].url, sizeof P.sk.job[i].url, "%s", url); P.sk.job[i].kind = kind; P.sk.pending++; sk_ask(i); }
+static void sk_job(const char *url, int kind) { int i = 0; while (i < 4 && P.sk.job[i].url[0]) i++; if (i >= 4) return; snprintf(P.sk.job[i].url, sizeof P.sk.job[i].url, "%s", url); P.sk.job[i].kind = kind; P.sk.pending++; sk_ask(i); }
 static void sk_tick(void) {
   if (!P.sk.tok || P.sk.sent) return; double n = now_();
-  for (int i = 0; i < 3; i++) if (P.sk.job[i].live && P.sk.job[i].retryAt && n >= P.sk.job[i].retryAt) sk_ask(i);
+  for (int i = 0; i < 4; i++) if (P.sk.job[i].live && P.sk.job[i].retryAt && n >= P.sk.job[i].retryAt) sk_ask(i);
   if (!P.sk.sent && ((P.sk.quickAt && n >= P.sk.quickAt) || n >= P.sk.endAt)) sk_finish();
+}
+/* anime by its metadata: the Anime genre, or animation from Japan */
+static int is_anime(void) {
+  const cJSON *m = sb_meta_cached(P.type, P.id), *g; int anim = 0, jp = 0; if (!m) return 0;
+  cJSON_ArrayForEach(g, js_arr(m, "genres")) if (cJSON_IsString(g)) { if (!strcmp(g->valuestring, "Anime")) return 1; if (!strcmp(g->valuestring, "Animation")) anim = 1; }
+  const cJSON *c = cJSON_GetObjectItemCaseSensitive(m, "country"); if (cJSON_IsString(c) && strstr(c->valuestring, "Japan")) jp = 1;
+  return anim && jp;
 }
 static void load_skips(void) {
   if (P.isTrailer || P.skipsAsked || !P.id[0]) return; P.skipsAsked = 1;
@@ -791,7 +840,8 @@ static void load_skips(void) {
   if (imdb) { char im[24]; int k = 2; while (k < 22 && isdigit((unsigned char)imdb[k])) k++; snprintf(im, sizeof im, "%.*s", k, imdb);
     P.sk.isEp = !strcmp(P.type, "series") && ne >= 2; if (P.sk.isEp) { const char *l = strrchr(vid, ':'), *pp = l - 1; while (pp > vid && *pp != ':') pp--; P.sk.se = atoi(pp + 1); P.sk.en = atoi(l + 1); }
     if (P.sk.isEp) snprintf(u, sizeof u, "https://api.theintrodb.org/v3/media?imdb_id=%s&season=%d&episode=%d", im, P.sk.se, P.sk.en); else snprintf(u, sizeof u, "https://api.theintrodb.org/v3/media?imdb_id=%s", im); sk_job(u, SK_TIDB);
-    if (P.sk.isEp) snprintf(u, sizeof u, "https://api.introdb.app/segments?imdb_id=%s&season=%d&episode=%d", im, P.sk.se, P.sk.en); else snprintf(u, sizeof u, "https://api.introdb.app/segments?imdb_id=%s&is_movie=true", im); sk_job(u, SK_IDB); }
+    if (P.sk.isEp) snprintf(u, sizeof u, "https://api.introdb.app/segments?imdb_id=%s&season=%d&episode=%d", im, P.sk.se, P.sk.en); else snprintf(u, sizeof u, "https://api.introdb.app/segments?imdb_id=%s&is_movie=true", im); sk_job(u, SK_IDB);
+    if (is_anime()) { snprintf(u, sizeof u, "https://arm.haglund.dev/api/v2/imdb?id=%s", im); sk_job(u, SK_ARM); } }
   if (P.sk.tok) sk_done();
 }
 /* the chapters a reader found in this file: the best skip source ("Opening", "Recap", "End Credits"...); n <= 0: none */
@@ -898,6 +948,18 @@ static void next_aspect(void) {
 
 /* ---- prompts: skip intro / recap, the credits card ---- */
 static int in_seg(int has, double s, double e, double t, double tail) { return has && t >= s && t < e - tail; }
+/* the sources call a part "intro" that is often the recap ("Previously on..."): what the subtitles say there decides.
+   A recap talks all the way through and often says so; a title sequence is music (its lines, when any, are lyrics) */
+static int looks_recap(double s, double e) {
+  static const char *const W[] = { "previously", "last time on", "last week on", "anteriormente", "previamente", "pr\xc3\xa9" "c\xc3\xa9" "demment", "zuvor", "bisher bei", "nelle puntate precedenti",
+    "in precedenza", "eerder in", "poprzednio", "\xd1\x80\xd0\xb0\xd0\xbd\xd0\xb5\xd0\xb5", "\xc3\xb6nceki b\xc3\xb6l\xc3\xbcm", "\xd8\xb3\xd8\xa7\xd8\xa8\xd9\x82\xd8\xa7", "\xd9\x81\xd9\x8a \xd8\xa7\xd9\x84\xd8\xad\xd9\x84\xd9\x82\xd8\xa9 \xd8\xa7\xd9\x84\xd8\xb3\xd8\xa7\xd8\xa8\xd9\x82\xd8\xa9", "\xe5\x89\x8d\xe5\x9b\x9e", NULL };
+  double talk = 0; int lines = 0;
+  for (int i = 0; i < P.ncues; i++) { const Cue *c = &P.cues[i]; double a = c->s, b = c->e; if (b <= s || a >= e || !c->t) continue;
+    if (strstr(c->t, "\xe2\x99\xaa") || strstr(c->t, "\xe2\x99\xab") || strchr(c->t, '#')) continue; /* (lyrics) */
+    char lo[256]; lower(c->t, lo, sizeof lo); for (int k = 0; W[k]; k++) if (strstr(lo, W[k])) return 1;
+    talk += (b < e ? b : e) - (a > s ? a : s); lines++; }
+  return e - s >= 20 && lines >= 6 && talk / (e - s) > 0.45;
+}
 static void paint_prompt(void) { if (P.prompt.k) P.shown = P.prompt; }
 static void go_next(void);
 static void next_auto(void);
@@ -910,14 +972,21 @@ static void prompt_go(int i) {
 }
 static void check_prompt(void) {
   double d = dur(); if (d <= 0 || P.seekT >= 0) return; double t = video_time(); int want = 0, big = 0;
+  if (P.intro.has && !P.introChk && P.ncues > 0 && !strncmp(P.vid, "tt", 2) && t >= P.intro.s - 1) { P.introChk = 1; /* (an anime's sources say which is which) */
+    if (looks_recap(P.intro.s, P.intro.e)) { fprintf(stderr, "[player] the \"intro\" %.0f-%.0f talks: a recap\n", P.intro.s, P.intro.e); if (!P.recap.has) { P.recap.has = 1; P.recap.s = P.intro.s; P.recap.e = P.intro.e; } P.intro.has = 0; } }
+  int after = P.outro.has && P.outro.e < d - 10, inCred = in_seg(P.outro.has, P.outro.s, P.outro.e, t, 2); /* after: a scene follows the credits */
   if (in_seg(P.intro.has, P.intro.s, P.intro.e, t, 2) && !P.dismissed[1]) want = 1;
   else if (in_seg(P.recap.has, P.recap.s, P.recap.e, t, 2) && !P.dismissed[2]) want = 2;
-  else if (!P.dismissed[3] && (P.next.has || P.sim)) { int credits = P.outro.has ? t >= P.outro.s : (d > 600 && d - t <= 90 && d - t > 2); if (credits) { want = 3; big = 1; } }
+  else if (inCred && after && !P.dismissed[4]) want = 4;
+  else if (!P.dismissed[3] && (P.next.has || P.sim)) { int credits = P.outro.has ? (after ? d - t <= 20 && d - t > 2 : t >= P.outro.s) : (d > 600 && d - t <= 90 && d - t > 2); if (credits) { want = 3; big = 1; } }
+  else if (inCred && !P.dismissed[4] && !P.next.has && !P.sim) want = 4; /* nothing to go to: Skip credits ends it */
+  if ((want == 1 || want == 2 || want == 4) && !strcmp(store_get("skipIntro", "button"), "off")) want = 0; /* (Settings: no skipping offered) */
   if (want == P.prompt.k) return;
   P.prompt.k = want; P.prompt.big = big; P.prompt.autoN = 0; P.prompt.nbtn = 0;
-  if (want == 1 || want == 2) { P.prompt.b[0].id = "skip"; snprintf(P.prompt.b[0].lb, 48, "%s", T(want == 1 ? "Skip intro" : "Skip recap")); P.prompt.b[0].to = want == 1 ? P.intro.e : P.recap.e; P.prompt.b[0].main = 0; P.prompt.nbtn = 1;
-    /* the pill fills up and skips by itself when full (about 6 s, less when the part ends sooner); OK skips now, a pause stops it */
-    if (!paused()) { double e = want == 1 ? P.intro.e : P.recap.e, dd = e - t - 1; P.prompt.autoN = 1; P.prompt.t0 = now_(); P.prompt.adur = dd < 2.5 ? 2.5 : dd > 6 ? 6 : dd; } }
+  if (want == 1 || want == 2 || want == 4) { P.prompt.b[0].id = "skip"; snprintf(P.prompt.b[0].lb, 48, "%s", T(want == 1 ? "Skip intro" : want == 2 ? "Skip recap" : "Skip credits")); P.prompt.b[0].to = want == 1 ? P.intro.e : want == 2 ? P.recap.e : after ? P.outro.e : d - 0.5; P.prompt.b[0].main = 0; P.prompt.nbtn = 1;
+    /* Automatically (Settings): the pill fills up and skips by itself when full (about 6 s, less when the part ends
+       sooner); OK skips now, a pause stops it. The button alone is the default: nothing is skipped unasked */
+    if (!paused() && !strcmp(store_get("skipIntro", "button"), "auto")) { double e = want == 1 ? P.intro.e : want == 2 ? P.recap.e : P.outro.e, dd = e - t - 1; P.prompt.autoN = 1; P.prompt.t0 = now_(); P.prompt.adur = dd < 2.5 ? 2.5 : dd > 6 ? 6 : dd; } }
   else if (want == 3) { P.prompt.b[0].id = "credits"; snprintf(P.prompt.b[0].lb, 48, "%s", T("Watch credits")); P.prompt.b[0].main = 0; P.prompt.b[1].id = P.next.has ? "next" : "sim"; snprintf(P.prompt.b[1].lb, 48, "%s", T(P.next.has ? "Next episode" : "Something similar")); P.prompt.b[1].main = 1; P.prompt.nbtn = 2;
     /* credits + autoplay on: "Next episode" fills up and plays by itself unless you pick something */
     if (P.next.has && strcmp(store_get("bingeWatch", "true"), "false") && strcmp(store_get("enableNextVideo", "true"), "false")) { P.prompt.autoN = 1; P.prompt.t0 = now_(); P.prompt.adur = 10; } }
@@ -1180,8 +1249,13 @@ static void tray_data(void) {
       else if (!c2->n && P.adxLoading) { col_add(c2, 1); col_add(c2, 1); }
     }
     int ci = color_idx(); x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Size")); snprintf(x->vl, 48, "%d%%", SUB_SIZES[size_idx()]); snprintf(x->u, 1024, "size");
+    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Font")); snprintf(x->vl, 48, "%s", SUB_FONTS[font_idx()]); snprintf(x->u, 1024, "font"); /* the subtitles' own fonts, one more with each OK */
+    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Bold")); snprintf(x->u, 1024, "bold"); /* (on or off: a small switch, drawn with the column) */
     x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Colour")); snprintf(x->u, 1024, "color"); /* colour and background: shown by their swatch (drawn with the column) */
+    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Outline")); snprintf(x->u, 1024, "outline"); /* the edge round the words: on or off */
+    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Shadow")); snprintf(x->vl, 48, "%s", T(SHADOW_LB[shadow_lvl()])); snprintf(x->u, 1024, "shadow"); /* a drop shadow behind them: off, then stronger with each OK */
     x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Background")); snprintf(x->u, 1024, "bg"); (void)ci;
+    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Height")); { int h = atoi(store_get("subsPos", "0")); if (h) snprintf(x->vl, 48, "%s%d%%", h > 0 ? "+" : "\xe2\x88\x92", abs(h)); else snprintf(x->vl, 48, "0%%"); } snprintf(x->u, 1024, "hgtopen"); /* the small card at the top: the line moves while you watch */
     if (!P.isTrailer && !strncmp(P.curSub, "ext:", 4)) { x = col_add(c4, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Auto-sync")); snprintf(x->sub, 120, "%s", SY.st); snprintf(x->u, 1024, "sync"); } /* a downloaded subtitle: lined up with the file's own */
     x = col_add(c4, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Adjust")); snprintf(x->sub, 120, "%s", T("While you watch")); snprintf(x->u, 1024, "dlyopen"); /* the small card at the top: the film stays in view */
     x = col_add(c4, 4); x->tool = 1; x->d = 0; snprintf(x->lb, 200, "%s", T("Reset")); snprintf(x->u, 1024, "dly");
@@ -1211,6 +1285,8 @@ static void tray_data(void) {
     const cJSON *eps[400]; int ne = 0; cJSON_ArrayForEach(v, P.videos) { int sn = cJSON_GetObjectItem(v, "season") ? (int)js_num(v, "season", 1) : 1; if (sn == P.tray.season && ne < 400) eps[ne++] = v; }
     for (int i = 1; i < ne; i++) for (int j = i; j > 0 && js_num(eps[j - 1], "episode", 0) > js_num(eps[j], "episode", 0); j--) { const cJSON *tmp = eps[j]; eps[j] = eps[j - 1]; eps[j - 1] = tmp; }
     time_t nowT = time(NULL);
+    int nvid = P.videos ? cJSON_GetArraySize(P.videos) : 0, *seen = spoiler_on() && nvid > 0 ? calloc((size_t)nvid, sizeof(int)) : NULL; /* no spoilers: which were seen */
+    if (seen) { const cJSON *lit = lib_get(P.id); if (lit) lib_ep_watched_map(lit, P.videos, seen); }
     for (int i = 0; i < ne && P.tray.n < MAXROW; i++) { const cJSON *e = eps[i]; TItem *x = add_item(P.tray.row, &P.tray.n, MAXROW, 2); x->v = e; int en = (int)js_num(e, "episode", 0); const char *nm = js_str(e, "name", js_str(e, "title", NULL));
       if (nm) snprintf(x->lb, 200, "%d. %s", en, nm); else { char n[8]; snprintf(n, sizeof n, "%d", en); snprintf(x->lb, 200, "%d. %s", en, T1("Episode {n}", "n", n)); }
       const char *rel = js_str(e, "released", js_str(e, "firstAired", "")); int y, m, d; char ds[32] = ""; if (sscanf(rel, "%d-%d-%d", &y, &m, &d) == 3) snprintf(ds, sizeof ds, "%d/%d/%d", d, m, y);
@@ -1219,7 +1295,9 @@ static void tray_data(void) {
       snprintf(x->ov, 300, "%s", js_str(e, "overview", js_str(e, "description", "")));
       const char *th = js_str(e, "thumbnail", NULL); if (th && *th) snprintf(x->th, 512, "%s", th); else if (!strncmp(P.id, "tt", 2) && cJSON_GetObjectItem(e, "episode")) snprintf(x->th, 512, "https://episodes.metahub.space/%s/%d/%d/w300.jpg", P.id, P.tray.season, en);
       { char *p = strstr(x->th, "image.tmdb.org/t/p/"); if (p) { p += 19; char *q = strchr(p, '/'); if (q) { char rest[512]; snprintf(rest, sizeof rest, "%s", q); snprintf(p, 512 - (p - x->th), "w300%s", rest); } } }
-      x->on = !strcmp(js_str(e, "id", ""), P.vid); }
+      x->on = !strcmp(js_str(e, "id", ""), P.vid);
+      if (seen && !x->on && !up) { int vi = 0, sn = 0; const cJSON *q; cJSON_ArrayForEach(q, P.videos) { if (q == e) { sn = seen[vi]; break; } vi++; } x->sp = !sn; } }
+    free(seen);
   } else if (t.kind == 2 || t.kind == 5) {
     if (t.kind == 2) snprintf(P.tray.title, 300, "%s", T("Sources")); P.tray.ntabs = 0; P.tray.tab = 0;
     srcs_begin(t.kind == 5 ? P.tray.epvid : P.vid); src_rows(); if (P.srcs.ng) src_ask(0);
@@ -1258,7 +1336,7 @@ static void open_tray(int kind) {
 }
 static void tray_origin(void) { int ak = P.tray.kind < 0 ? -P.tray.kind : P.tray.kind; int b = btn_index(ak == 1 || ak == 5 ? "eps" : ak == 2 ? "src" : ak == 3 ? "aud" : "subs");
   P.tray.ox = b >= 0 ? P.btns[b].x0 + P.btns[b].w / 2 : SB_W - 72 - 39; P.tray.oy = SB_H - 54 - 47; } /* its button's centre, measured again on close: the tray may have grown since */
-static void dly_open(void);
+static void dly_open(void); static void hgt_open(void);
 static void close_tray(void) { if (P.tray.kind == 4) subTab = P.tray.tab; P.mode = 1; P.tray.kind = -P.tray.kind; tray_origin(); arm_hide(); }
 static void tray_back(void) {
   if (P.tray.onBtn) { close_tray(); return; }
@@ -1270,13 +1348,18 @@ static void adjust(const char *k) {
   if (!strcmp(k, "size")) { char v[4]; snprintf(v, sizeof v, "%d", (size_idx() + 1) % 7); store_set("subtitleSize", v); }
   else if (!strcmp(k, "color")) { int ci = color_idx(); store_set("subsColor", SUB_COLORS[((ci < 0 ? 0 : ci) + 1) % 3]); }
   else if (!strcmp(k, "bg")) store_set("subsBgStyle", SUB_BGS[(bg_idx() + 1) % 3]);
+  else if (!strcmp(k, "font")) { char v[4]; snprintf(v, sizeof v, "%d", (font_idx() + 1) % (TEXT_NFACES + 1)); store_set("subsFont", v); }
+  else if (!strcmp(k, "bold")) store_set("subsBold", bold_on() ? "false" : "true");
+  else if (!strcmp(k, "outline")) store_set("subsOutline", outline_on() ? "false" : "true");
+  else if (!strcmp(k, "shadow")) { int l = (shadow_lvl() + 1) % 5; char v[4]; snprintf(v, sizeof v, "%d", l ? l : 2); /* (off keeps a middle strength for the settings' switch) */
+    store_set("subsShadow", l ? "true" : "false"); store_set("subsShadowStrength", v); }
   render_tray(0);
 }
 static void choose(TItem *it) {
   if (!it) return;
   if (it->k == 4 && P.tray.kind == 4) {
     if (!strncmp(it->u, "lang:", 5)) { snprintf(P.subLang, sizeof P.subLang, "%s", it->u + 5); render_tray(0); if (P.tray.ncols > 1) { int r = first_on(P.tray.cols[1].items, P.tray.cols[1].n); if (r >= 0) { P.tray.c = 1; P.tray.r[1] = r; } } } /* its subtitles: the focus goes over */
-    else if (!strcmp(it->u, "off")) subs_off(); else if (!strncmp(it->u, "emb:", 4)) set_emb_sub(it->i); else if (it->tool) { if (strcmp(it->u, "sync")) { TM.vkC = P.tray.c; snprintf(TM.vkU, sizeof TM.vkU, "%s", it->u); mo_set(&TM.vkA, 0); mo_to(&TM.vkA, 1, .2f, C_OUT, 0); } if (!strcmp(it->u, "sync")) sync_run(); else if (!strcmp(it->u, "dlyopen")) { dly_open(); return; } else if (!strcmp(it->u, "dly")) { P.subDelay = it->d ? (double)((int)((P.subDelay + it->d) * 10 + (P.subDelay + it->d >= 0 ? 0.5 : -0.5))) / 10 : 0; if (!it->d) sync_undo(); render_tray(0); } else adjust(it->u); }
+    else if (!strcmp(it->u, "off")) subs_off(); else if (!strncmp(it->u, "emb:", 4)) set_emb_sub(it->i); else if (it->tool) { if (strcmp(it->u, "sync")) { TM.vkC = P.tray.c; snprintf(TM.vkU, sizeof TM.vkU, "%s", it->u); mo_set(&TM.vkA, 0); mo_to(&TM.vkA, 1, .2f, C_OUT, 0); } if (!strcmp(it->u, "sync")) sync_run(); else if (!strcmp(it->u, "dlyopen")) { dly_open(); return; } else if (!strcmp(it->u, "hgtopen")) { hgt_open(); return; } else if (!strcmp(it->u, "dly")) { P.subDelay = it->d ? (double)((int)((P.subDelay + it->d) * 10 + (P.subDelay + it->d >= 0 ? 0.5 : -0.5))) / 10 : 0; if (!it->d) sync_undo(); render_tray(0); } else adjust(it->u); }
     else if (it->ls) { const SubEntry *l = it->ls == 1 ? P.ext : P.adx; int n = it->ls == 1 ? P.nExt : P.nAdx, k = it->i; /* the row's entry (found again by its file if the list moved) */
       if (k < 0 || k >= n || strcmp(l[k].url, it->u)) for (k = 0; k < n && strcmp(l[k].url, it->u); k++) ;
       if (k < n) set_ext_sub(it->ls, &l[k]); }
@@ -1344,15 +1427,21 @@ static void dly_draw(void);
    second each), the delay between them, play / pause and Done; the picture and the lines stay in view, so a change is
    seen at once. Back or Done closes it (mode 4) ---- */
 #define DLY_STEP 0.25
-static void dly_open(void) { close_tray(); P.osd = 0; P.mode = 4; P.dlyF = 0; mo_set(&P.dlyR, 0); mo_to(&P.dlyA, 1, .28f, C_OUT, 0); }
+static void dly_open(void) { close_tray(); P.osd = 0; P.mode = 4; P.dlyKind = 0; P.dlyF = 0; mo_set(&P.dlyR, 0); mo_to(&P.dlyA, 1, .28f, C_OUT, 0); }
+/* the same card for the subtitles' height: - lowers, + raises (Up and Down too), a step at a time within the limits; the
+   lines move as it changes, so where they sit over this film is seen at once (kept for every film) */
+static void hgt_open(void) { dly_open(); P.dlyKind = 1; P.dlyF = 1; mo_set(&P.dlyR, 1); }
+static void hgt_change(int d) { int v = atoi(store_get("subsPos", "0")) + d * (int)(SUBFX_LIFT_STEP * 100 + .5f), lo = (int)(SUBFX_LIFT_MIN * 100 - .5f), hi = (int)(SUBFX_LIFT_MAX * 100 + .5f);
+  if (v < lo) v = lo; if (v > hi) v = hi; char b[8]; snprintf(b, sizeof b, "%d", v); store_set("subsPos", b); P.dlyAt = now_(); }
 static void dly_close(void) { P.mode = 0; mo_to(&P.dlyA, 0, .2f, C_EASE, 0); }
 static void dly_change(double d) { double v = P.subDelay + d; v = floor(v / DLY_STEP + 0.5) * DLY_STEP; if (v > 120) v = 120; if (v < -120) v = -120; P.subDelay = fabs(v) < 1e-6 ? 0 : v; P.dlyAt = now_(); }
 static void dly_act(int i) { P.dlyF = i; mo_to(&P.dlyR, (float)i, .18f, C_OUT, 0);
-  if (i == 0) dly_change(-DLY_STEP); else if (i == 1) dly_change(DLY_STEP); else if (i == 2) toggle(); else dly_close(); }
+  if (i < 2 && P.dlyKind) hgt_change(i ? 1 : -1); else if (i == 0) dly_change(-DLY_STEP); else if (i == 1) dly_change(DLY_STEP); else if (i == 2) toggle(); else dly_close(); }
 static void dly_key(int k) {
   if (k == K_LEFT) { if (P.dlyF > 0) { P.dlyF--; mo_to(&P.dlyR, (float)P.dlyF, .18f, C_OUT, 0); } else nudge_start(&P.nudge, k); }
   else if (k == K_RIGHT) { if (P.dlyF < 3) { P.dlyF++; mo_to(&P.dlyR, (float)P.dlyF, .18f, C_OUT, 0); } else nudge_start(&P.nudge, k); }
   else if (k == K_OK) dly_act(P.dlyF);
+  else if ((k == K_UP || k == K_DOWN) && P.dlyKind) { int i = k == K_UP ? 1 : 0; P.dlyF = i; mo_to(&P.dlyR, (float)i, .18f, C_OUT, 0); hgt_change(k == K_UP ? 1 : -1); } /* the height: Up raises, Down lowers */
   else if (k == K_UP || k == K_DOWN) nudge_start(&P.nudge, k);
 }
 static void act(const char *id) {
@@ -1531,7 +1620,7 @@ static void prepare(const char *vid, double startAt, int keepSubs) {
   P.meta = meta; P.ext = keep; P.nExt = nkeep; P.adx = keepA; P.nAdx = nkeepA; P.startAt = startAt; aspect_load(); set_status("");
   if (!strcmp(P.type, "series")) { const char *c = strrchr(P.vid, ':'); if (c && c > P.vid) { const char *q = c - 1; while (q > P.vid && *q != ':') q--; if (*q == ':') { P.season = atoi(q + 1); P.episode = atoi(c + 1); } } } /* known from the id, the metadata or not */
   memset(&P.pg.g, 0, sizeof P.pg.g); P.pg.age = 0; P.pg.certAge = -1; P.pg.guideIn = P.pg.certIn = 0; P.pg.asked = 0; P.pg.sess++; P.pg.at = P.pg.askAt = 0; mo_set(&P.pgA, 0); mo_set(&P.pgY, -10);
-  mo_set(&P.artA, artWas); mo_set(&P.in, again ? 1 : 0); mo_set(&P.lnA, 1); mo_set(&P.prB, 104); mo_set(&P.subB, SB_H * 0.08f); mo_set(&P.ttlX, -30); mo_set(&P.barY, 18); mo_set(&P.btnY, 24); mo_set(&P.topY, -12); mo_set(&P.prY, 20); mo_set(&P.skS, 0); mo_set(&P.ccS, 1);
+  mo_set(&P.artA, artWas); mo_set(&P.in, again ? 1 : 0); mo_set(&P.lnA, 1); mo_set(&P.prB, 104); mo_set(&P.subB, sub_rest()); mo_set(&P.ttlX, -30); mo_set(&P.barY, 18); mo_set(&P.btnY, 24); mo_set(&P.topY, -12); mo_set(&P.prY, 20); mo_set(&P.skS, 0); mo_set(&P.ccS, 1);
   fill_from_meta(); if (!P.logo[0] && !strncmp(P.id, "tt", 2)) snprintf(P.logo, sizeof P.logo, "https://images.metahub.space/logo/medium/%s/img", P.id);
   if (!P.bg[0]) { Item it = lib_item(); sb_bg_mid(&it, P.bg, sizeof P.bg); }
 }
@@ -1790,7 +1879,7 @@ static void css(void) {
   mo_to(&P.knA, (P.mode == 1 && P.row == 1) || P.skOn ? 1 : 0, .15f, C_EASE, 0);
 
   mo_to(&P.prA, P.prompt.k ? 1 : 0, .3f, C_EASE, 0); mo_to(&P.prY, P.prompt.k ? 0 : 20, .3f, C_OUT, 0); mo_to(&P.prB, P.osd ? 440 : 104, .3f, C_EASE, 0);
-  mo_to(&P.subB, tr ? SB_H * 0.62f : P.osd ? 420 : P.skm ? 200 : SB_H * 0.08f, .3f, C_EASE, 0);
+  { float rest = sub_rest(); mo_to(&P.subB, tr ? SB_H * 0.62f : P.osd ? fmaxf(420, rest) : P.skm ? fmaxf(200, rest) : rest, .3f, C_EASE, 0); } /* (raised by the viewer: never below where it was set) */
   mo_to(&P.hvA, P.hvOn ? 1 : 0, .15f, C_EASE, 0); mo_to(&P.ccS, strcmp(P.curSub, "off") ? 0 : 1, .26f, C_OUT, 0);
   mo_to(&P.p2pA, P.isP2p && P.p2pLine[0] && osd ? 1 : 0, .3f, C_EASE, 0);
   { int on = P.pg.at > 0 && now_() - P.pg.at < 6.0; /* 6 s from when it comes, controls or not, then it fades; once only */
@@ -1864,7 +1953,7 @@ void player_tick(float dt) {
   if (P.live) {
     if (video_width() != P.lastVw || video_height() != P.lastVh) apply_aspect(); /* the picture's size became known or changed */
     if (P.aspRefreshAt && now_() >= P.aspRefreshAt) { P.aspRefreshAt = 0; if (paused()) video_seek(video_time()); }
-    if (paused() && P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2)) { P.prompt.autoN = 0; paint_prompt(); } /* paused: no skipping by itself */
+    if (paused() && P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2 || P.prompt.k == 4)) { P.prompt.autoN = 0; paint_prompt(); } /* paused: no skipping by itself */
     /* the screensaver: paused and untouched for the time chosen in Settings, the controls fade away and the title's cover takes the screen */
     if (P.ssOn && !paused()) ss_exit();
     /* (the player has no screensaver of its own any more: the app's one comes over a paused film) */
@@ -1877,7 +1966,7 @@ void player_tick(float dt) {
     if (vs == VID_ENDED && !P.ended) { P.ended = 1; save_progress(1); mark_watched(); if (strcmp(store_get("bingeWatch", "true"), "false") && strcmp(store_get("enableNextVideo", "true"), "false") && P.next.has) P.endGoAt = now_() + 0.6; else close_player(0, 0); }
     if (P.endGoAt && now_() >= P.endGoAt) { P.endGoAt = 0; go_next(); if (!P.open || P.closing) return; }
     check_prompt();
-    if (P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2) && now_() - P.prompt.t0 >= P.prompt.adur && !paused()) prompt_go(0);
+    if (P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2 || P.prompt.k == 4) && now_() - P.prompt.t0 >= P.prompt.adur && !paused()) prompt_go(0);
     else if (P.prompt.autoN && P.prompt.k == 3 && now_() - P.prompt.t0 >= 10) { P.prompt.autoN = 0; next_auto(); }
     if (!P.live) return; /* a new episode is being found */
     const char *r = res_of_video(video_width(), video_height()); if (*r && !P.isTrailer) P.res = r;
@@ -1953,12 +2042,38 @@ static void draw_art(void) {
   gfx_opacity_pop();
 }
 /* the subtitle style, read once while the settings stay as they are */
-typedef struct { unsigned ser; int px; uint32_t col, ol; float bo; } SubStyle;
+struct SubStyle { unsigned ser; int px; uint32_t col, ol; float bo; SubFx fx; }; /* fx: the outline (on or off, its width) and the drop shadow */
 static const SubStyle *sub_style(void) {
   static SubStyle st; if (st.ser == store_serial() && st.ser) return &st;
   st.ser = store_serial(); st.px = (int)(38 * SUB_SIZES[size_idx()] / 100.0f + 0.5f); st.col = hexcol(store_get("subsColor", "#ffffff")); st.ol = hexcol(store_get("subsOutlineColor", "#000000")); st.bo = (float)atof(SUB_BGS[bg_idx()]);
+  subfx_read(&st.fx, st.px);
   return &st;
 }
+/* one line of plain subtitles, painted in layers (shadow, outline, the line): subfx.c */
+typedef struct { const char *s; float x, y; int px, align, wt; } SubLn;
+/* an Arabic line whose closing marks were put first for players that drew it left to right (".مرحبا", "?كيف"):
+   drawn right to left here they would stand at its start, so they go back to its end (a line that already ends
+   with a mark, or a Latin one, is left as it is) */
+static int mark_len(const unsigned char *p) { if (*p && strchr(".,!?:;", *p)) return 1; if (p[0] == 0xd8 && (p[1] == 0x8c || p[1] == 0x9b || p[1] == 0x9f)) return 2; if (p[0] == 0xe2 && p[1] == 0x80 && p[2] == 0xa6) return 3; return 0; } /* . , ! ? : ; and the Arabic comma, semicolon, question mark, the ellipsis */
+static int ends_marked(const char *s, size_t L) { const unsigned char *e = (const unsigned char *)s + L; return (L >= 1 && strchr(".,!?:;", e[-1])) || (L >= 2 && e[-2] == 0xd8 && (e[-1] == 0x8c || e[-1] == 0x9b || e[-1] == 0x9f)) || (L >= 3 && e[-3] == 0xe2 && e[-2] == 0x80 && e[-1] == 0xa6); }
+/* an opening quote or bracket before the words: «, (, [ or a straight/curly double quote (UTF-8 length, 0 none) */
+static int opener_len(const unsigned char *p) { if (*p == '"' || *p == '(' || *p == '[') return 1; if (p[0] == 0xc2 && p[1] == 0xab) return 2; if (p[0] == 0xe2 && p[1] == 0x80 && (p[2] == 0x9c || p[2] == 0x9d)) return 3; return 0; }
+static void rtl_marks_end(char *s) {
+  /* a dialogue dash left at the end ("مرحبا -", as files made for left-to-right players carry it): to the start */
+  { size_t L = strlen(s); while (L && s[L - 1] == ' ') L--; unsigned char a0 = (unsigned char)s[0];
+    if (L >= 3 && s[L - 1] == '-' && s[L - 2] == ' ' && a0 >= 0xd8 && a0 <= 0xdb && s[0] != '-') {
+      size_t e = L - 2; while (e && s[e - 1] == ' ') e--; memmove(s + 2, s, e); s[0] = '-'; s[1] = ' '; s[e + 2] = 0; } }
+  size_t n = 0; int k; while ((k = mark_len((const unsigned char *)s + n))) n += (size_t)k; if (!n || n > 24) return;
+  size_t m = n; while (s[m] == ' ') m++;
+  size_t q = m; while ((k = opener_len((const unsigned char *)s + q))) q += (size_t)k; /* (."واكاندا": the full stop belongs after the closing quote) */
+  unsigned char a = (unsigned char)s[q]; if (a < 0xd8 || a > 0xdb) return; /* an Arabic letter right after */
+  size_t L = strlen(s); while (L > m && s[L - 1] == ' ') L--; if (ends_marked(s, L)) return;
+  char tmp[32]; memcpy(tmp, s, n); memmove(s, s + m, L - m); memcpy(s + L - m, tmp, n); s[L - m + n] = 0;
+}
+static void subln_paint(void *ud, float dx, float dy, uint32_t col) { const SubLn *l = ud; text_draw(l->s, l->x + dx, l->y + dy, l->px, l->wt, col, 0, 0, l->align); }
+/* where the dialogue stands when nothing is open: 8 % up, raised or lowered as the viewer set it */
+static float sub_lift(void) { return sub_style()->fx.lift; }
+static float sub_rest(void) { return SB_H * (0.08f + sub_lift()); }
 /* the cue list's index, made once per list: whether it runs in start order, and the latest end so far at each cue */
 typedef struct { const Cue *c; int n; const char *t0, *t1; int sorted; unsigned gen, tg; double *maxE; int cap; } CueIx;
 static const CueIx *cue_ix(void) {
@@ -1969,14 +2084,13 @@ static const CueIx *cue_ix(void) {
   ix.sorted = 1; for (int i = 0; i < n; i++) { if (i && P.cues[i].s < P.cues[i - 1].s) ix.sorted = 0; ix.maxE[i] = i && ix.maxE[i - 1] > P.cues[i].e ? ix.maxE[i - 1] : P.cues[i].e; }
   return &ix;
 }
-static void draw_mkv_line(const MkvLine *l, float bx, float by, int px, uint32_t col, uint32_t ol, float bo, int align) {
+static void draw_mkv_line(const MkvLine *l, float bx, float by, int px, uint32_t col, const SubFx *fx, float bo, int align) {
   float lh = px * 1.35f; char buf[1024]; snprintf(buf, sizeof buf, "%s", l->t); char *lp[12]; int n = 0; for (char *c = strtok(buf, "\n"); c && n < 12; c = strtok(NULL, "\n")) lp[n++] = c;
   int an = l->an ? l->an : 2; float y = an >= 7 ? by : an >= 4 ? by - n * lh / 2 : by - n * lh; /* numpad: 7-9 hang from the point, 1-3 stand on it */
   if (l->color) col = 0xff000000u | (l->color & 0xffffff); /* a sign keeps its own colour */
-  for (int i = 0; i < n; i++) { float tw = text_width(lp[i], px, 600, 0), x0 = align == ALIGN_CENTER ? bx - tw / 2 : align == ALIGN_RIGHT ? bx - tw : bx;
+  for (int i = 0; i < n; i++) { float tw = text_width(lp[i], px, fx->wt, 0), x0 = align == ALIGN_CENTER ? bx - tw / 2 : align == ALIGN_RIGHT ? bx - tw : bx;
     if (bo > 0) gfx_rrect(x0 - 16, y - 2, tw + 32, lh + 4, 8, BLACK_A((int)(bo * 255)));
-    for (int d = 0; d < 8; d++) { static const float ox[8] = { -2, 2, 0, 0, -1, 1, -1, 1 }, oy[8] = { 0, 0, -2, 2, -1, 1, 1, -1 }; text_draw(lp[i], bx + ox[d], y + oy[d] + (lh - text_line_height(px)) / 2, px, 600, ol, 0, 0, align); }
-    text_draw(lp[i], bx, y + (lh - text_line_height(px)) / 2, px, 600, col, 0, 0, align); y += lh; }
+    SubLn ln = { lp[i], bx, y + (lh - text_line_height(px)) / 2, px, align, fx->wt }; subfx_paint(fx, col, subln_paint, &ln); y += lh; }
 }
 static void draw_subs(void) {
   float bottom = P.subB.v; /* the page's bottom: 8 %, above the controls (420), the seek bar (200) or an open tray (62 %), gliding 0.3 s */
@@ -1984,13 +2098,13 @@ static void draw_subs(void) {
   if (!strncmp(P.curSub, "emb:", 4) && SL.mkv && !SL.tv && mkv) { /* the file's own lines (the TV draws them while it holds the track) */
     MkvLine ls[8]; static char tb[4096]; int n = mkv_lines_at(mkv, atoi(P.curSub + 4), video_time() - P.subDelay, ls, 8, tb, sizeof tb); if (!n) return;
     if (!SL.shown) { SL.shown = 1; fprintf(stderr, "[subs] first line on screen %.1f s after the choice: \"%.40s\"\n", now_() - SL.at, ls[0].t); }
-    const SubStyle *sst = sub_style(); int px = sst->px; uint32_t col = sst->col, ol = sst->ol; float bo = sst->bo;
+    const SubStyle *sst = sub_style(); int px = sst->px; uint32_t col = sst->col; const SubFx *fx = &sst->fx; float bo = sst->bo;
     float lh = px * 1.35f, stackY = SB_H - bottom;
     for (int i = n - 1; i >= 0; i--) { const MkvLine *l = &ls[i]; int an = l->an ? l->an : 2, al = an % 3 == 1 ? ALIGN_LEFT : an % 3 == 0 ? ALIGN_RIGHT : ALIGN_CENTER;
-      if (l->x >= 0 && l->y >= 0) draw_mkv_line(l, l->x / 100 * SB_W, l->y / 100 * SB_H, px, col, ol, bo, al); /* placed by the file */
-      else if (an >= 7) draw_mkv_line(l, al == ALIGN_LEFT ? 80 : al == ALIGN_RIGHT ? SB_W - 80 : SB_W / 2, 70, px, col, ol, bo, al);
-      else if (an >= 4) draw_mkv_line(l, al == ALIGN_LEFT ? 80 : al == ALIGN_RIGHT ? SB_W - 80 : SB_W / 2, SB_H / 2, px, col, ol, bo, al);
-      else { int nl = 1; for (const char *c = l->t; *c; c++) if (*c == '\n') nl++; draw_mkv_line(l, al == ALIGN_LEFT ? 80 : al == ALIGN_RIGHT ? SB_W - 80 : SB_W / 2, stackY, px, col, ol, bo, al); stackY -= nl * lh; } } /* the dialogue stacks up from the bottom */
+      if (l->x >= 0 && l->y >= 0) draw_mkv_line(l, l->x / 100 * SB_W, l->y / 100 * SB_H, px, col, fx, bo, al); /* placed by the file */
+      else if (an >= 7) draw_mkv_line(l, al == ALIGN_LEFT ? 80 : al == ALIGN_RIGHT ? SB_W - 80 : SB_W / 2, 70, px, col, fx, bo, al);
+      else if (an >= 4) draw_mkv_line(l, al == ALIGN_LEFT ? 80 : al == ALIGN_RIGHT ? SB_W - 80 : SB_W / 2, SB_H / 2, px, col, fx, bo, al);
+      else { int nl = 1; for (const char *c = l->t; *c; c++) if (*c == '\n') nl++; draw_mkv_line(l, al == ALIGN_LEFT ? 80 : al == ALIGN_RIGHT ? SB_W - 80 : SB_W / 2, stackY, px, col, fx, bo, al); stackY -= nl * lh; } } /* the dialogue stacks up from the bottom */
     return; }
   if (!P.ncues || !strncmp(P.curSub, "emb", 3)) return; double t = video_time() - P.subDelay; const Cue *show[2]; int ns = 0;
   const CueIx *ix = cue_ix();
@@ -2002,21 +2116,19 @@ static void draw_subs(void) {
     if (nf == 2) { show[0] = f[1]; show[1] = f[0]; ns = 2; } else if (nf == 1) { show[0] = f[0]; ns = 1; } }
   if (!ns) return;
   if (!SL.shown) { SL.shown = 1; fprintf(stderr, "[subs] first line on screen %.1f s after the choice: \"%.40s\"\n", now_() - SL.at, show[0]->t); }
-  const SubStyle *st = sub_style(); int px = st->px; uint32_t col = st->col, ol = st->ol; float bo = st->bo;
+  const SubStyle *st = sub_style(); int px = st->px; uint32_t col = st->col; float bo = st->bo;
   float lh = px * 1.35f;
   /* the shown cues' lines, split and measured once while they stay up */
-  static struct { const Cue *a, *b; unsigned gen; int px, lines; char buf[4096]; char *lp[12]; float mw; } SC;
+  static struct { const Cue *a, *b; unsigned gen; int px, wt, lines; char buf[4096]; char *lp[12]; float mw; } SC;
   const Cue *ca = show[0], *cb = ns > 1 ? show[1] : NULL;
-  if (SC.a != ca || SC.b != cb || SC.gen != ix->gen || SC.px != px) { SC.a = ca; SC.b = cb; SC.gen = ix->gen; SC.px = px;
+  if (SC.a != ca || SC.b != cb || SC.gen != ix->gen || SC.px != px || SC.wt != st->fx.wt) { SC.a = ca; SC.b = cb; SC.gen = ix->gen; SC.px = px; SC.wt = st->fx.wt;
     char all[4096] = ""; for (int i = 0; i < ns; i++) { size_t l = strlen(all); snprintf(all + l, sizeof all - l, "%s%s", i ? "\n" : "", show[i]->t); }
-    SC.lines = 0; snprintf(SC.buf, sizeof SC.buf, "%s", all); for (char *c = strtok(SC.buf, "\n"); c && SC.lines < 12; c = strtok(NULL, "\n")) SC.lp[SC.lines++] = c;
-    SC.mw = 0; for (int i = 0; i < SC.lines; i++) SC.mw = fmaxf(SC.mw, text_width(SC.lp[i], px, 600, 0)); }
+    SC.lines = 0; snprintf(SC.buf, sizeof SC.buf, "%s", all); for (char *c = strtok(SC.buf, "\n"); c && SC.lines < 12; c = strtok(NULL, "\n")) { rtl_marks_end(c); SC.lp[SC.lines++] = c; }
+    SC.mw = 0; for (int i = 0; i < SC.lines; i++) SC.mw = fmaxf(SC.mw, text_width(SC.lp[i], px, st->fx.wt, 0)); }
   int lines = SC.lines; char **lp = SC.lp;
   float y = SB_H - bottom - lines * lh;
   if (bo > 0) { float mw = SC.mw; gfx_rrect(SB_W / 2 - mw / 2 - 16, y - 2, mw + 32, lines * lh + 4, 8, BLACK_A((int)(bo * 255))); } /* one box around the lines, as the page's span */
-  for (int i = 0; i < lines; i++) {
-    for (int d = 0; d < 8; d++) { static const float ox[8] = { -2, 2, 0, 0, -1, 1, -1, 1 }, oy[8] = { 0, 0, -2, 2, -1, 1, 1, -1 }; text_draw(lp[i], SB_W / 2 + ox[d], y + oy[d] + (lh - text_line_height(px)) / 2, px, 600, ol, 0, 0, ALIGN_CENTER); }
-    text_draw(lp[i], SB_W / 2, y + (lh - text_line_height(px)) / 2, px, 600, col, 0, 0, ALIGN_CENTER); y += lh; }
+  for (int i = 0; i < lines; i++) { SubLn ln = { lp[i], SB_W / 2, y + (lh - text_line_height(px)) / 2, px, ALIGN_CENTER, st->fx.wt }; subfx_paint(&st->fx, col, subln_paint, &ln); y += lh; }
 }
 /* the CC button of a trailer: the subtitles icon, and when they are off a slash drawn from its top-left (0.26 s) with a gap cut around it */
 static void cc_icon(float x, float y, float sz, uint32_t col, uint32_t gap) {
@@ -2062,7 +2174,7 @@ static void draw_osd(void) {
     app_clock_draw(W - 64, 46, 1);
     double d = dur(); if (d > 0) { time_t t = time(NULL) + (time_t)(d - video_time());
       static char s[64]; static long sMin = -1; static unsigned sLg; /* made again when its minute or the language changes */
-      if ((long)(t / 60) != sMin || sLg != i18n_gen()) { sMin = (long)(t / 60); sLg = i18n_gen(); struct tm tm; localtime_r(&t, &tm); char e[16]; snprintf(e, sizeof e, "%02d:%02d", tm.tm_hour, tm.tm_min); snprintf(s, sizeof s, "%s", T1("Ends at {t}", "t", e)); text_upper(s, sizeof s); }
+      if ((long)(t / 60) != sMin || sLg != i18n_gen()) { sMin = (long)(t / 60); sLg = i18n_gen(); struct tm tm; localtime_r(&t, &tm); char e[24]; app_time_fmt(&tm, e, sizeof e, 1); snprintf(s, sizeof s, "%s", T1("Ends at {t}", "t", e)); text_upper(s, sizeof s); }
       txt_sh(s, W - 64, 46 + text_line_height(38) / 2 + 38 + 14, 20, 600, WHITE_A(178), 1.6f, 0, ALIGN_RIGHT, 128); } /* a quiet line just under the clock's glass, in line with the time */
     gfx_offset_pop(); gfx_opacity_pop(); }
   /* bottom left: the title's art, S:E and its name, the info chips, year · genre · via addon (laid out from the bar up) */
@@ -2140,19 +2252,22 @@ static void draw_osd(void) {
   /* the prompts: the skip pill, the credits buttons, the next-up card */
   PG.prompt = 0; const PPrompt *pr = P.prompt.k ? &P.prompt : &P.shown;
   if (P.prA.v > 0.001f && pr->k) { float a = P.prA.v; gfx_opacity_push(a); gfx_offset_push(nudge_x(&P.nudge) * (P.mode == 3), P.prY.v); float pb = P.prB.v, rm = 72 + 40 * fminf(1, fmaxf(0, (440 - pb) / 336)); /* off the edges: further in alone, in line with the buttons when they show */ PG.prompt = a > 0.5f && P.prompt.k; PG.card = 0; PG.npr = 0;
-    if (pr->k == 3 && P.next.has) { float cw = 540, cx = W - rm - cw; float artH = 286, lh2 = text_line_height(21); static TMemo ovW; float ovn = P.next.ov[0] ? tm_wrap(&ovW, P.next.ov, cw - 44, 2, 24, 400, 0) : 0; float ch = 16 + artH + 18 + lh2 + 6 + text_line_height(30) + (ovn ? 6 + ovn * 33 : 0) + 18 + 36 + 18; float cy = H - pb - ch;
+    if (pr->k == 3 && P.next.has) { float cw = 540, cx = W - rm - cw; float artH = 286, lh2 = text_line_height(21); int nsp = spoiler_on() && P.next.thumb[0] && !spoiler_failed(P.next.thumb); const char *nov = nsp && P.next.ov[0] ? T("The story shows once you watch it") : P.next.ov; /* the next one is not seen yet: blurred, no story */
+      static TMemo ovW; float ovn = nov[0] ? tm_wrap(&ovW, nov, cw - 44, 2, 24, 400, 0) : 0; float ch = 16 + artH + 18 + lh2 + 6 + text_line_height(30) + (ovn ? 6 + ovn * 33 : 0) + 18 + 36 + 18; float cy = H - pb - ch;
       PG.card = 1; PG.prX[0] = cx; PG.prY[0] = cy; PG.prW[0] = cw; PG.prH[0] = ch;
       lglass_shell(cx, cy, cw, ch, 28, RGBA(14, 12, 22, 220), 1);
-      float ax = cx + 16, ay = cy + 16; const char *th = P.next.thumb[0] ? P.next.thumb : P.bg; GLuint t = th[0] ? img_get_shaped(th, (int)(cw - 32), (int)artH, 18, 1) : 0; ph_picture(t, ax, ay, cw - 32, artH, 18, WHITE_A(255));
+      float ax = cx + 16, ay = cy + 16; const char *th = P.next.thumb[0] ? P.next.thumb : P.bg;
+      if (nsp) { if (!spoiler_draw(P.next.thumb, ax, ay, cw - 32, artH, 18)) ph_box(ax, ay, cw - 32, artH, 18); }
+      else { GLuint t = th[0] ? img_get_shaped(th, (int)(cw - 32), (int)artH, 18, 1) : 0; ph_picture(t, ax, ay, cw - 32, artH, 18, WHITE_A(255)); }
       if (pr->autoN) { float k = fill_ease((now_() - pr->t0) / 10); gfx_clip_push(ax, ay + artH - 6, (cw - 32) * k, 6); gfx_rrect(ax, ay + artH - 24, cw - 32, 24, 18, ACC2); gfx_clip_pop(); }
       float y = ay + artH + 18; static UMemo upU; const char *up = um_upper(&upU, T("Next episode")); float w = text_draw(up, ax + 6, y, 21, 800, ACC2, 2.0f, 0, ALIGN_LEFT);
       if (pr->autoN) { int left = (int)(10 - (now_() - pr->t0) + 0.999); if (left < 0) left = 0; char n[8]; snprintf(n, sizeof n, "%d", left); char s[64]; snprintf(s, sizeof s, " · %s", T1("Starts in {n} s", "n", n)); text_draw(s, ax + 6 + w, y, 21, 600, WHITE_A(204), 0.4f, 0, ALIGN_LEFT); } y += lh2 + 6;
       { float sw = text_draw(P.next.se, ax + 6, y, 30, 800, WHITE_A(255), -0.3f, 0, ALIGN_LEFT); if (P.next.title[0]) { static TMemo mdW; float dw = tm_width(&mdW, "·", 30, 800, 0); text_draw("·", ax + 6 + sw + 12, y, 30, 800, WHITE_A(102), 0, 0, ALIGN_LEFT); text_draw(P.next.title, ax + 6 + sw + 12 + dw + 12, y, 30, 800, WHITE_A(255), -0.3f, cw - 44 - sw - 24 - dw, ALIGN_LEFT); } y += text_line_height(30); }
-      if (ovn) { text_draw_wrapped(P.next.ov, ax + 6, y + 6 + (33 - text_line_height(24)) / 2, cw - 44, 2, 24, 400, WHITE_A(199), 0, ALIGN_LEFT, 33); y += 6 + ovn * 33; }
+      if (ovn) { text_draw_wrapped(nov, ax + 6, y + 6 + (33 - text_line_height(24)) / 2, cw - 44, 2, 24, 400, WHITE_A(199), 0, ALIGN_LEFT, 33); y += 6 + ovn * 33; }
       y += 18; { float hx = ax + 6, cy2 = y + 18; hx += key_hint(hx, cy2, K_OK, T("Next episode"), WHITE_A(230), 0) + 28; key_hint(hx, cy2, K_BACK, T("Watch credits"), WHITE_A(230), 0); } } /* the remote's keys, as everywhere */
 
     else { float x = W - rm; int focus = P.mode == 3 || (P.mode == 0 && !pr->big); for (int i = pr->nbtn - 1; i >= 0; i--) { const char *ic = !strcmp(pr->b[i].id, "next") ? "p_next" : !strcmp(pr->b[i].id, "skip") ? "p_skip" : NULL; static TMemo prW[2]; float tw2 = tm_width(&prW[i & 1], pr->b[i].lb, 26, 700, 0), w = 2 + 64 + tw2 + (ic ? 42 : 0), h = 74; x -= w; float y = H - pb - h; int f = focus && i == pr->idx;
-        int cnt = (pr->k == 1 || pr->k == 2) && pr->autoN; /* skip intro / recap counting down: the accent fills it from the left behind the words, then it skips */
+        int cnt = (pr->k == 1 || pr->k == 2 || pr->k == 4) && pr->autoN; /* skip intro / recap counting down: the accent fills it from the left behind the words, then it skips */
         if (f && !cnt) lglass_accent(x, y, w, h, 37, 1); else lglass_shell(x, y, w, h, 37, RGBA(18, 16, 28, 200), 1); /* glass: lit in the accent when focused */
         if (cnt) { float k = fill_ease((now_() - pr->t0) / pr->adur); if (k > 0) { float fw = h + (w - h) * k; gfx_opacity_push(fminf(1, k * 6)); gfx_clip_push(x, y, fw, h); lglass_accent(x, y, w, h, 37, 1); gfx_clip_pop(); gfx_opacity_pop(); } } /* a pill growing out of its left end, eased */
         if (f) gfx_ring_out(x, y, w, h, 37, 4, acc_a(0.38f));
@@ -2185,6 +2300,9 @@ static void draw_card(TItem *it, float x, float y, float w, float h, int f) {
   int on = it->on; uint32_t base = f ? ((it->k == 2 || (it->k == 3 && on) || it->k == 4) ? WHITE_A(18) : 0) : WHITE_A(11); /* rows: .045; focused: the plate shows through (.07 on some kinds) */
   if (it->k == 0) { float tx = x + 10; if (it->spin) { float cx = x + 10 + 11, cy = y + 18 + 13; gfx_ring(cx - 11, cy - 11, 22, 22, 11, 3, WHITE_A(51)); float ph = clock_ph(0.9) * 6.2832f; for (int i = 0; i <= 8; i++) { float an = ph - 2.356f + 1.5708f * i / 8; gfx_circle(cx + cosf(an) * 9.5f, cy + sinf(an) * 9.5f, 1.5f, ACC2); } tx += 34; } text_draw(it->lb, tx, y + 18, 24, 400, WHITE_A(184), 0, 0, ALIGN_LEFT); return; }
   if (base) gfx_rrect(x, y, w, h, 20, base); if (it->k == 3 && on && !f) gfx_ring(x, y, w, h, 20, 2, acc_a(0.7f));
+  if (it->k == 2 && it->sp && !spoiler_failed(it->th)) { float th = 189; gfx_clip_push(x, y, w, th); if (!spoiler_draw(it->th, x, y, w, th + 20, 20)) ph_box(x, y, w, th + 20, 20); gfx_clip_pop(); /* not seen yet: blurred, its story kept back */
+    float ty = y + th + 14; text_draw(it->lb, x + 18, ty + (30 - text_line_height(24)) / 2, 24, 700, WHITE_A(255), 0, w - 36, ALIGN_LEFT); ty += 30; if (it->sub[0]) { text_draw(it->sub, x + 18, ty + 4, 22, 600, WHITE_A(184), 0, w - 36, ALIGN_LEFT); ty += 4 + text_line_height(22); }
+    if (it->ov[0]) text_draw(T("The story shows once you watch it"), x + 18, ty + 8 + (30 - text_line_height(22)) / 2, 22, 400, WHITE_A(150), 0, w - 36, ALIGN_LEFT); return; }
   if (it->k == 2) { float th = 189; GLuint t = it->th[0] ? img_get_shaped(it->th, (int)w, (int)th + 20, 20, 1) : 0; if (!t && (!it->th[0] || img_shaped_failed(it->th, (int)w, (int)th + 20, 20, 1)) && P.bg[0]) t = img_get_shaped(P.bg, (int)w, (int)th + 20, 20, 1);
     gfx_clip_push(x, y, w, th); ph_picture(t, x, y, w, th + 20, 20, WHITE_A(255)); gfx_clip_pop(); /* rounded at the top only: the lower corners are cut square */
     if (on) { float nw; const char *now = playing_tag(&nw); gfx_rrect(x + 12, y + 12, nw, 8 + text_line_height(20), 11, ACC); text_draw(now, x + 12 + 13, y + 12 + 4, 20, 800, ACC_FG, 1, 0, ALIGN_LEFT); }
@@ -2320,7 +2438,11 @@ static void draw_tray(void) {
           else if (item_on(it)) icon_draw("check", tx + 1, yy + h / 2 - 11, 22, col_alpha(ACC2, i == TM.onIdx[c] ? TM.chkA[c].v : 1)); tx += 24 + 12; }
         /* a value that cycles: its dots under it, the lit one gliding along; a value just changed fades up */
         int dk = !it->tool ? 0 : !strcmp(it->u, "size") ? 1 : !strcmp(it->u, "color") ? 2 : !strcmp(it->u, "bg") ? 3 : 0; float va = TM.vkC == c && it->tool && !strcmp(TM.vkU, it->u) ? TM.vkA.v : 1, vy0 = dk ? -5 : 0;
-        float right = 6 + 232 - 18; if (dk >= 2) { swatch_draw(dk - 2, dk == 2 ? (color_idx() < 0 ? 0 : color_idx()) : bg_idx(), right - 13, yy + h / 2, 13); right -= 26 + 10; }
+        float right = 6 + 232 - 18;
+        if (it->tool && (!strcmp(it->u, "bold") || !strcmp(it->u, "outline"))) { /* a switch of the subtitles' look: a small track and knob, as Settings draws them */
+          int on = !strcmp(it->u, "bold") ? bold_on() : outline_on(); float tw = 44, th = 26, tx0 = right - tw, ty0 = yy + h / 2 - th / 2, kr = th / 2 - 3;
+          gfx_rrect(tx0, ty0, tw, th, th / 2, on ? ACC3 : WHITE_A(56)); gfx_circle(on ? tx0 + tw - 3 - kr : tx0 + 3 + kr, ty0 + th / 2, kr, on ? ACC_FG : WHITE_A(220)); right -= tw + 10; }
+        if (dk >= 2) { swatch_draw(dk - 2, dk == 2 ? (color_idx() < 0 ? 0 : color_idx()) : bg_idx(), right - 13, yy + h / 2, 13); right -= 26 + 10; }
         if (it->vl[0]) { if (it->vw <= 0) it->vw = text_width(it->vl, 22, 700, 0); float vw = it->vw; text_draw(it->vl, right, yy + h / 2 - text_line_height(22) / 2.0f + vy0 + 6 * (1 - va), 22, 700, col_alpha(ACC3, va), 0, 0, ALIGN_RIGHT);
           if (dk == 1) cycle_dots(dk, 7, size_idx(), right, yy + h / 2 + 14, 9, 2.5f, WHITE_A(64), ACC3, 1);
           right -= vw + 10; } if (it->sw) { gfx_circle(right - 9, yy + h / 2, 9, it->sw); gfx_ring(right - 18, yy + h / 2 - 9, 18, 18, 9, 2, BLACK_A(77)); right -= 18 + 10; }
@@ -2453,7 +2575,12 @@ static void dly_draw(void) {
     else if (i == 2) icon_draw(paused() ? "p_play" : "p_pause", bx[i] + B / 2 - 17, cy - 17, 34, c);
     else text_draw(dn, bx[i] + bw[i] / 2, cy - text_line_height(26) / 2.0f, 26, 700, c, 0, 0, ALIGN_CENTER); }
   /* the delay: large, a small lift when it changes; under it what it means */
-  { char v[32]; if (P.subDelay == 0) snprintf(v, sizeof v, "0.00 s"); else snprintf(v, sizeof v, "%s%.2f s", P.subDelay > 0 ? "+" : "\xe2\x88\x92", fabs(P.subDelay));
+  if (P.dlyKind) { int hv = atoi(store_get("subsPos", "0")); char v[32]; if (!hv) snprintf(v, sizeof v, "0%%"); else snprintf(v, sizeof v, "%s%d%%", hv > 0 ? "+" : "\xe2\x88\x92", abs(hv));
+    float e = (float)((now_() - P.dlyAt) / 0.22); e = e < 0 ? 0 : e > 1 ? 1 : e; float lift = 6 * (1 - ease_apply(EASE_OUT, e));
+    text_draw(v, vx + VW / 2, cy - 30 - lift, 40, 800, WHITE_A(255), -0.4f, 0, ALIGN_CENTER);
+    const char *m = hv > 0 ? T("Subtitles higher") : hv < 0 ? T("Subtitles lower") : T("Subtitle height");
+    text_draw(m, vx + VW / 2, cy + 18, 20, 600, WHITE_A(160), 0.3f, VW, ALIGN_CENTER); }
+  else { char v[32]; if (P.subDelay == 0) snprintf(v, sizeof v, "0.00 s"); else snprintf(v, sizeof v, "%s%.2f s", P.subDelay > 0 ? "+" : "\xe2\x88\x92", fabs(P.subDelay));
     float e = (float)((now_() - P.dlyAt) / 0.22); e = e < 0 ? 0 : e > 1 ? 1 : e; float lift = 6 * (1 - ease_apply(EASE_OUT, e));
     text_draw(v, vx + VW / 2, cy - 30 - lift, 40, 800, WHITE_A(255), -0.4f, 0, ALIGN_CENTER);
     const char *m = P.subDelay > 0 ? T("Subtitles later") : P.subDelay < 0 ? T("Subtitles earlier") : T("Subtitle delay");

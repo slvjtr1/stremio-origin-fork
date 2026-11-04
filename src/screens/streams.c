@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "core/hit.h"
 #include "core/stremio.h"
 #include "core/json.h"
@@ -45,6 +46,7 @@ static struct {
   /* the best pick: where the focus came to rest (its hint after 3 s), OK held on it, its details panel */
   double restAt; int restKey; int holding, swelled; double holdAt; int info; Tween infoK; QT infoY; float infoH, infoW, infoFrom[4], infoTo[4]; const Stream *infoS; SGlass pglass;
   /* measured once, not per frame: each row's header line (in layout), the chips' words and widths (chipsLaid), the total */
+  char tag[MAXITEMS][6][20]; unsigned char ntag[MAXITEMS]; /* each row's quality, as pills: 4K, DV, HDR10, REMUX, Atmos, its size */
   char nm[MAXITEMS][600]; int total, chipsLaid; char chLbl[MAXG + 1][120], chCnt[MAXG + 1][12]; float chW[MAXG + 1]; unsigned chLg;
 } S;
 int streams_open(void) { return S.open; }
@@ -63,8 +65,8 @@ static void rebuild(void) {
   for (int g = 0; g < S.ng && n < MAXITEMS - 1; g++) { if (!S.groups[g].n) continue; if (S.filter >= 0 && g != S.filter) continue;
     for (int i = 0; i < S.groups[g].n && n < MAXITEMS - 1; i++) { const Stream *s = &S.groups[g].items[i]; S.items[n] = s; S.itemGroup[n] = g; S.kind[n] = S.groups[g].resume ? R_RESUME : R_PLAIN;
       nw[n] = was_seen(s) ? 0 : now; n++; } } /* rows new to the list fade in (never pop) */
-  /* best stream on: the pick for this TV right after the resume row */
-  if (best_on() && S.filter < 0 && n) { const Stream *list[MAXITEMS]; int m = 0; for (int i = 0; i < n; i++) if (S.kind[i] == R_PLAIN) list[m++] = S.items[i];
+  /* the pick for this TV right after the resume row (best stream on, or Best match for this TV) */
+  if (best_row_on() && S.filter < 0 && n) { best_prepare(S.type, S.vid[0] ? S.vid : S.id); const Stream *list[MAXITEMS]; int m = 0; for (int i = 0; i < n; i++) if (S.kind[i] == R_PLAIN) list[m++] = S.items[i];
     BestRate r; const Stream *b = m ? best_pick(list, m, best_dur(sb_meta_cached(S.type, S.id), S.type), NULL, -1, &r) : NULL;
     if (b) { int at = S.kind[0] == R_RESUME ? 1 : 0; memmove(S.items + at + 1, S.items + at, (n - at) * sizeof *S.items); memmove(S.itemGroup + at + 1, S.itemGroup + at, (n - at) * sizeof *S.itemGroup);
       memmove(S.kind + at + 1, S.kind + at, (n - at) * sizeof *S.kind); memmove(nw + at + 1, nw + at, (n - at) * sizeof *nw);
@@ -192,13 +194,36 @@ static const char *row_desc(int i) {
 #define DS_LH 37.0f   /* 26px at 1.42 */
 #define ICO 26.0f     /* the play mark before the best and resume names, and its room */
 static float head_h(void) { return 26 + text_line_height(24) + 10; }
+#define TAG_H 34.0f
+#define TAG_PX 19
+/* a stream's quality read from its words (as the best pick reads it), for its pills: the picture first, then its
+   source, the sound, the size; the addon's own emoji and words stay below as they were */
+static int tags_of(const Stream *s, char (*t)[20]) {
+  char inf[2048], l[2048]; best_stream_info(s, inf, sizeof inf); size_t k = 0; for (; inf[k] && k + 1 < sizeof l; k++) l[k] = (char)tolower((unsigned char)inf[k]); l[k] = 0; int n = 0;
+  const char *r = best_res_of(inf); if (r && *r) snprintf(t[n++], 20, "%s", r);
+  char h[48]; best_hdr_of(inf, h, sizeof h); for (char *p = h; *p && n < 3;) { char *e = strstr(p, " \xc2\xb7 "); size_t m = e ? (size_t)(e - p) : strlen(p); if (m && m < 20) snprintf(t[n++], 20, "%.*s", (int)m, p); if (!e) break; p = e + 4; }
+  const char *src = strstr(l, "remux") ? "REMUX" : (strstr(l, "bluray") || strstr(l, "blu-ray") || strstr(l, "bdrip") || strstr(l, "brrip")) ? "BluRay" : (strstr(l, "web-dl") || strstr(l, "webdl")) ? "WEB-DL" : strstr(l, "webrip") ? "WEBRip" : strstr(l, "hdtv") ? "HDTV" : NULL;
+  if (src && n < 6) snprintf(t[n++], 20, "%s", src);
+  char a[48]; best_audio_of(inf, a, sizeof a); if (a[0] && n < 6) snprintf(t[n++], 20, "%.19s", a);
+  return n;
+}
+static float tags_draw(int i, float x, float y, float maxW, int rtl, int f) {
+  float used = 0;
+  for (int k = 0; k < S.ntag[i]; k++) { const char *t = S.tag[i][k]; float w = text_width(t, TAG_PX, 700, 0.4f) + 24; if (used + w > maxW) break;
+    float px = rtl ? x - used - w : x + used; int lead = k == 0 && (!strcmp(t, "4K") || strstr(t, "p")); /* the picture: filled */
+    if (lead) gfx_rrect(px, y, w, TAG_H, TAG_H / 2, f ? ACC_FG : WHITE_A(235));
+    else { gfx_rrect(px, y, w, TAG_H, TAG_H / 2, f ? col_alpha(ACC_FG, 0.14f) : WHITE_A(16)); gfx_ring(px, y, w, TAG_H, TAG_H / 2, 1, f ? col_alpha(ACC_FG, 0.4f) : WHITE_A(52)); }
+    text_draw(t, px + w / 2, y + (TAG_H - text_line_height(TAG_PX)) / 2, TAG_PX, 700, lead ? (f ? ACC : RGB(17, 17, 17)) : (f ? ACC_FG : WHITE_A(228)), 0.4f, 0, ALIGN_CENTER);
+    used += w + 8; }
+  return used; }
 static void layout(void) {
   if (S.laid) return; S.laid = 1; float y = 0; int lastG = -2;
   for (int i = 0; i < S.n; i++) { int g = S.itemGroup[i];
     S.headY[i] = -1; if (S.filter < 0 && S.kind[i] == R_PLAIN && g != lastG) { S.headY[i] = y; y += head_h(); } if (S.kind[i] == R_PLAIN) lastG = g;
     char *nm = S.nm[i]; row_name(i, nm, sizeof S.nm[i]); const char *ds = row_desc(i); int ico = S.kind[i] != R_PLAIN;
     int nl = text_wrap_count(nm, LW - 48 - (ico ? ICO + 10 : 0), 2, NM_PX, 600, 0.2f), dl = ds[0] ? text_wrap_count(ds, LW - 48, DS_MAX, DS_PX, 400, 0) : 0;
-    S.itemY[i] = y; S.itemH[i] = 18 + nl * NM_LH + 8 + dl * DS_LH + 20; y += S.itemH[i] + 8; }
+    S.ntag[i] = S.kind[i] == R_PLAIN ? (unsigned char)tags_of(S.items[i], S.tag[i]) : 0; /* (the best and resume rows say it in words already) */
+    S.itemY[i] = y; S.itemH[i] = 18 + nl * NM_LH + 8 + (S.ntag[i] ? TAG_H + 10 : 0) + dl * DS_LH + 20; y += S.itemH[i] + 8; }
 }
 static void tick(float dt) {
   tween_tick(&S.x, dt > 0.034f ? 0.034f : dt); tween_tick(&S.op, dt > 0.034f ? 0.034f : dt); tween_tick(&S.out, dt); if (S.closing && !S.out.on && S.out.v <= 0) S.closing = 0;
@@ -339,6 +364,7 @@ static void draw(void) {
     float tx = rtl ? lx - 24 + nx : x0 + 24 + nx, ty = iy + 18 + ny; uint32_t nc = f ? ACC_FG : ACC3;
     if (ico) { icon_draw("play", rtl ? tx - ICO : tx, ty + (NM_LH - ICO) / 2 + 1, ICO, nc); tx += rtl ? -(ICO + 10) : ICO + 10; }
     int nl = text_draw_wrapped(nm, tx, ty + (NM_LH - text_line_height(NM_PX)) / 2, LW - 48 - (ico ? ICO + 10 : 0), 2, NM_PX, 600, nc, 0.2f, al, NM_LH); ty += nl * NM_LH + 8;
+    if (S.ntag[i]) { tags_draw(i, rtl ? lx - 24 + nx : x0 + 24 + nx, ty, LW - 48, rtl, f); ty += TAG_H + 10; }
     if (ds[0]) text_draw_wrapped(ds, rtl ? lx - 24 + nx : x0 + 24 + nx, ty + (DS_LH - text_line_height(DS_PX)) / 2, LW - 48, DS_MAX, DS_PX, 400, f ? ACC_FG : WHITE_A(204), 0, al, DS_LH);
     if (S.kind[i] != R_PLAIN && f) { float ha = (float)((now - S.restAt - 3) / 0.4); ha = ha < 0 ? 0 : ha > 1 ? 1 : ha; /* resting on it 3 s: how to see all of it, faint */
       if (S.holding || S.info) ha = 0;
@@ -350,3 +376,4 @@ static void draw(void) {
   gfx_offset_pop(); gfx_opacity_pop();
 }
 /* movie streams minimised (opened, then closed with Left/Back): hint how to bring them back */
+

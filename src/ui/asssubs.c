@@ -41,7 +41,7 @@ typedef struct Inst {
   pthread_t th; pthread_mutex_t mu; pthread_cond_t cv; int dead;
   MkvSession *mkv; int track; char url[4096], lang[16];
   /* from the main thread (under mu) */
-  double t, tAt; int playing; double fps; unsigned gen; int fw, fh, vw, vh; float vx, vy, vww, vhh, scale;
+  double t, tAt; int playing; double fps; unsigned gen; int fw, fh, vw, vh; float vx, vy, vww, vhh, scale, lift;
   /* to it */
   Frame *pending; int slow, fail;
 } Inst;
@@ -120,14 +120,14 @@ static void *run(void *arg) {
   ASS_Renderer *rd = lib ? ass_renderer_init(lib) : NULL; ASS_Track *tr = lib ? ass_new_track(lib) : NULL;
   if (!rd || !tr) { fprintf(stderr, "[ass] libass would not start\n"); pthread_mutex_lock(&A->mu); A->fail = 1; pthread_mutex_unlock(&A->mu); goto out; }
   ass_set_cache_limits(rd, 800, 12); ass_set_hinting(rd, ASS_HINTING_NONE); ass_set_shaper(rd, ASS_SHAPING_COMPLEX);
-  int fontsDone = 0; long long attach = -1; unsigned cursor = 0, gen = ~0u; int haveHeader = 0, fw = 0, fh = 0, vw = 0, vh = 0; float scale = 0;
+  int fontsDone = 0; long long attach = -1; unsigned cursor = 0, gen = ~0u; int haveHeader = 0, fw = 0, fh = 0, vw = 0, vh = 0; float scale = 0, lift = 0;
   long long nextAt = -1, lastNow = -1; int anim = 0; double slowSince = 0, warmAt = wall(); unsigned warmGen = ~0u; int level = 0;
   struct { int n, frames; double sum, max, at; } stat = { 0, 0, 0, 0, wall() }; /* a line in the log every 30 s while it renders */
   for (;;) {
     pthread_mutex_lock(&A->mu);
     if (A->dead) { pthread_mutex_unlock(&A->mu); break; }
     double t = A->t + (A->playing ? wall() - A->tAt : 0), fps = A->fps > 1 ? A->fps : 24; int playing = A->playing; unsigned g = A->gen;
-    int nfw = A->fw, nfh = A->fh, nvw = A->vw, nvh = A->vh; float nsc = A->scale, vx = A->vx, vy = A->vy, vww = A->vww, vhh = A->vhh;
+    int nfw = A->fw, nfh = A->fh, nvw = A->vw, nvh = A->vh; float nsc = A->scale, nlift = A->lift, vx = A->vx, vy = A->vy, vww = A->vww, vhh = A->vhh;
     int fed = 0;
     if (!haveHeader && mkv_listed(A->mkv)) { mkv_style(A->mkv, A->track, 1); char *h = mkv_track_header(A->mkv, A->track); if (h) { ass_process_codec_private(tr, h, (int)strlen(h)); free(h); } haveHeader = 1; attach = mkv_attachments_at(A->mkv); }
     if (haveHeader) fed = mkv_events_since(A->mkv, A->track, &cursor, feed, tr); /* (under the reader's own lock, quick) */
@@ -136,6 +136,7 @@ static void *run(void *arg) {
     if (!fontsDone) { fontsDone = 1; ass_set_fonts(rd, font, fam, ASS_FONTPROVIDER_NONE, NULL, 0); /* first lines in the bundled font at once */
       if (attach >= 0 && load_fonts(A, lib, attach)) { ass_set_fonts(rd, font, fam, ASS_FONTPROVIDER_NONE, NULL, 1); gen = ~0u; } }
     int resized = nfw != fw || nfh != fh || nvw != vw || nvh != vh || nsc != scale;
+    if (nlift != lift) { lift = nlift; ass_set_line_position(rd, lift > 0 ? lift * 100 : 0); resized = 1; } /* the viewer's height: lines at the bottom raised (everything again) */
     if (resized) { fw = nfw; fh = nfh; vw = nvw; vh = nvh; scale = nsc; ass_set_frame_size(rd, fw, fh); if (vw > 0 && vh > 0) ass_set_storage_size(rd, vw, vh);
       /* the picture's own rectangle inside the frame: the script is laid out over it */
       float k = fw / 1920.0f; int l = (int)(vx * k), tp = (int)(vy * (fh / 1080.0f)), rr = fw - (int)((vx + vww) * k), bb = fh - (int)((vy + vhh) * (fh / 1080.0f));
@@ -224,14 +225,14 @@ int asssubs_too_slow(void) {
   if (!cur || failSaid) return 0; pthread_mutex_lock(&cur->mu); int f = cur->fail; pthread_mutex_unlock(&cur->mu);
   if (f) failSaid = 1; return f;
 }
-void asssubs_tick(double t, int playing, double fps, float vx, float vy, float vw, float vh, int videoW, int videoH, float scale) {
+void asssubs_tick(double t, int playing, double fps, float vx, float vy, float vw, float vh, int videoW, int videoH, float scale, float lift) {
   Inst *A = cur; if (!A) return;
   float k = gfx_scale(); int fw = (int)(1920 * k + 0.5f), fh = (int)(1080 * k + 0.5f); if (fw > 1920) { fw = 1920; fh = 1080; } /* the drawable's pixels, at most full HD */
   pthread_mutex_lock(&A->mu);
   double pred = A->t + (A->playing ? wall() - A->tAt : 0);
-  int nudge = fabs(pred - t) > 0.3 || playing != A->playing || fw != A->fw || fh != A->fh || videoW != A->vw || videoH != A->vh || scale != A->scale || vx != A->vx || vy != A->vy || vw != A->vww || vh != A->vhh;
+  int nudge = fabs(pred - t) > 0.3 || playing != A->playing || fw != A->fw || fh != A->fh || videoW != A->vw || videoH != A->vh || scale != A->scale || lift != A->lift || vx != A->vx || vy != A->vy || vw != A->vww || vh != A->vhh;
   if (fabs(pred - t) > 0.3) A->gen++; /* a seek (or a delay changed): everything again at once */
-  A->t = t; A->tAt = wall(); A->playing = playing; A->fps = fps; A->fw = fw; A->fh = fh; A->vw = videoW; A->vh = videoH; A->scale = scale; A->vx = vx; A->vy = vy; A->vww = vw; A->vhh = vh;
+  A->t = t; A->tAt = wall(); A->playing = playing; A->fps = fps; A->fw = fw; A->fh = fh; A->vw = videoW; A->vh = videoH; A->scale = scale; A->lift = lift; A->vx = vx; A->vy = vy; A->vww = vw; A->vhh = vh;
   if (nudge) pthread_cond_signal(&A->cv);
   Frame *f = A->pending; A->pending = NULL;
   pthread_mutex_unlock(&A->mu);

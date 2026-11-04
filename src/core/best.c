@@ -15,7 +15,9 @@
 #include "core/json.h"
 #include "core/net.h"
 #include "core/store.h"
+#include "core/stremio.h"
 #include "platform/plat.h"
+#include <strings.h>
 #include <pthread.h>
 #include <time.h>
 #include <SDL2/SDL.h>
@@ -164,7 +166,10 @@ static int other_audio(const char *l) {
 /* the languages a stream's text names (its audio, as addons write it: words, short tags, flags), against the user's
    audio and subtitle languages from the settings: a stream in the user's language first; one naming only others (a
    Russian dub for a French viewer) last, played only when nothing else can be; none named, the original: as it was */
-static char prefAudio[8], prefSubs[8];
+static char prefAudio[8], prefSubs[8], origLang[8]; static int userAudio;
+/* the title's own language (an anime: Japanese; a Korean series: Korean...): its audio comes first, a dub of it
+   after, unless the user chose an audio language (Settings > Audio > Auto audio track); unknown: as before */
+void best_set_orig(const char *code, int ua) { snprintf(origLang, sizeof origLang, "%s", code ? code : ""); userAudio = ua; }
 void best_set_langs(const char *audio, const char *subs) { snprintf(prefAudio, sizeof prefAudio, "%s", audio ? audio : ""); snprintf(prefSubs, sizeof prefSubs, "%s", subs ? subs : ""); }
 static const struct { const char *code, *w[9], *flag, *flag2; } LANG[] = {
   { "eng", { "english", "eng", NULL }, "\xf0\x9f\x87\xac\xf0\x9f\x87\xa7", "\xf0\x9f\x87\xba\xf0\x9f\x87\xb8" },
@@ -191,10 +196,12 @@ static unsigned langs_named(const char *raw, const char *l) { unsigned m = 0; fo
     if (!f && LANG[i].flag && strstr(raw, LANG[i].flag)) f = 1; if (!f && LANG[i].flag2 && strstr(raw, LANG[i].flag2)) f = 1;
     if (f) m |= 1u << i; } return m; }
 static int lang_index(const char *code) { for (int i = 0; i < NLANG; i++) if (code && !strcmp(LANG[i].code, code)) return i; return -1; }
-static int lang_score(const char *raw, const char *l) { int ia = lang_index(prefAudio), is = lang_index(prefSubs), ie = lang_index("eng"); if (ia < 0) ia = ie; /* (no audio language set: English) */
+static int lang_score(const char *raw, const char *l) { int io = lang_index(origLang), ia = !userAudio && io >= 0 ? io : lang_index(prefAudio), is = lang_index(prefSubs), ie = lang_index("eng"); if (ia < 0) ia = ie; /* (no audio language set: English) */
+  int orig = !userAudio && io >= 0 && ia == io; /* the title's own language leads */
   unsigned m = langs_named(raw, l); int multi = has_word(l, "multi") || has_word(l, "dual") || strstr(l, "multi audio") != NULL, sc = 0;
-  if (ia >= 0 && m) { if (m & (1u << ia)) sc += 60; else if (ie >= 0 && (m & (1u << ie))) sc += 0; else if (multi) sc -= 20; else sc -= 160; } /* the user's audio named: first; else English (as one with none named, the original); only others named: last */
-  if (is >= 0 && is != ia) { const char *sw[] = { "vost", "vostfr", "subbed", "subs", "sub", NULL }; int subWord = 0; for (int k = 0; sw[k]; k++) if (has_word(l, sw[k])) subWord = 1; if (subWord && (m & (1u << is))) sc += 12; }
+  if (ia >= 0 && m) { if (m & (1u << ia)) sc += 60; else if (ie >= 0 && (m & (1u << ie))) sc += orig && ia != ie && !multi ? -40 : 0; else if (multi) sc += orig ? 10 : -20; else sc -= 160; } /* the audio wanted named: first; else English (as one with none named, the original; a dub when the title is not in English); only others named: last */
+  if (is >= 0 && is != ia) { const char *sw[] = { "vost", "vostfr", "subbed", "subs", "sub", "esub", "esubs", "msub", "msubs", "engsub", "multisub", "subtitles", "subtitled", NULL }; int subWord = 0; for (int k = 0; sw[k]; k++) if (has_word(l, sw[k])) subWord = 1;
+    if (subWord && (m & (1u << is))) sc += 12; else if (subWord && orig) sc += 8; } /* in another language than the viewer's: its subtitles named, better */
   return sc; }
 static int rate(const Stream *s, const TvCaps *c, double mbps, double dur, BestRate *o, int *resOut) {
   char t[2048], l[2048]; best_stream_info(s, t, sizeof t); lower(t, l, sizeof l); blank(l, "._-[]()");
@@ -270,6 +277,27 @@ int best_dts_mode(void) { return 0; } /* the scoring test: Auto, as the web app 
 #endif
 #ifndef SB_BEST_PURE
 int best_on(void) { return !strcmp(store_get("autoBest", "false"), "true"); }
+int best_row_on(void) { return best_on() || strcmp(store_get("bestRow", "true"), "false"); }
+/* the language a title was made in: an anime (Kitsu, MyAnimeList, AniList, AniDB ids, the Anime genre) Japanese, else the
+   first country its metadata names; "" when it can't be told */
+static const char *orig_of(const cJSON *m, const char *id) {
+  static const char *AN[] = { "kitsu:", "mal:", "anilist:", "anidb:" }; for (int i = 0; i < 4; i++) if (id && !strncmp(id, AN[i], strlen(AN[i]))) return "jpn";
+  const cJSON *g; cJSON_ArrayForEach(g, js_arr(m, "genres")) if (cJSON_IsString(g) && !strcasecmp(g->valuestring, "anime")) return "jpn";
+  const cJSON *cn = cJSON_GetObjectItemCaseSensitive(m, "country"); const char *c = cJSON_IsString(cn) ? cn->valuestring : cJSON_IsArray(cn) && cJSON_IsString(cJSON_GetArrayItem(cn, 0)) ? cJSON_GetArrayItem(cn, 0)->valuestring : NULL;
+  if (!c || !*c) return "";
+  static const struct { const char *c, *l; } CL[] = { { "United States", "eng" }, { "USA", "eng" }, { "United Kingdom", "eng" }, { "UK", "eng" }, { "Canada", "eng" }, { "Australia", "eng" }, { "Ireland", "eng" }, { "New Zealand", "eng" },
+    { "Japan", "jpn" }, { "South Korea", "kor" }, { "Korea", "kor" }, { "China", "chi" }, { "Hong Kong", "chi" }, { "Taiwan", "chi" }, { "France", "fre" }, { "Spain", "spa" }, { "Mexico", "spa" }, { "Argentina", "spa" }, { "Colombia", "spa" },
+    { "Germany", "ger" }, { "Austria", "ger" }, { "Italy", "ita" }, { "Brazil", "por" }, { "Portugal", "por" }, { "Russia", "rus" }, { "Ukraine", "ukr" }, { "Poland", "pol" }, { "Turkey", "tur" }, { "India", "hin" },
+    { "Sweden", "swe" }, { "Netherlands", "dut" }, { "Israel", "heb" }, { "Egypt", "ara" }, { "Saudi Arabia", "ara" }, { "United Arab Emirates", "ara" }, { "Lebanon", "ara" }, { "Syria", "ara" }, { "Jordan", "ara" }, { "Kuwait", "ara" }, { "Morocco", "ara" } };
+  size_t n = strcspn(c, ",/"); while (n && c[n - 1] == ' ') n--; /* the first country */
+  for (size_t i = 0; i < sizeof CL / sizeof CL[0]; i++) if (strlen(CL[i].c) == n && !strncasecmp(c, CL[i].c, n)) return CL[i].l;
+  return "";
+}
+void best_prepare(const char *type, const char *vid) {
+  best_set_langs(store_get("defaultAudioTrack", ""), store_get("subsLang", ""));
+  char id[96]; snprintf(id, sizeof id, "%s", vid ? vid : ""); { char *c = strchr(id, ':'); if (c && strncmp(id, "tt", 2)) c = strchr(c + 1, ':'); if (c) *c = 0; } /* the title's id from an episode's ("tt1:2:3", "kitsu:1:4") */
+  best_set_orig(orig_of(sb_meta_cached(type, id), id), !strcmp(store_get("enableDefaultAudioTrack", "false"), "true"));
+}
 int best_dur(const cJSON *meta, const char *type) {
   const cJSON *rt = meta ? cJSON_GetObjectItemCaseSensitive(meta, "runtime") : NULL; char b[64] = "";
   if (cJSON_IsString(rt) && rt->valuestring) snprintf(b, sizeof b, "%s", rt->valuestring); else if (cJSON_IsNumber(rt)) snprintf(b, sizeof b, "%g", rt->valuedouble);
@@ -456,7 +484,7 @@ static void on_done(int total, void *ud) { (void)total; if ((unsigned)(uintptr_t
 static void on_caps(const TvCaps *c, void *ud) { (void)c; if (!F.on || (unsigned)(uintptr_t)ud != F.tok) return; sb_streams_ex(F.type, F.vid, on_part, on_done, on_ans, ud); }
 unsigned best_choose(const char *type, const char *vid, int durMin, BestStatusCb status, BestDoneCb done, void *ud) {
   static unsigned tokN; flow_end(); memset(&F, 0, sizeof F);
-  { const char *au = store_get("defaultAudioTrack", ""), *su = store_get("subsLang", ""); best_set_langs(au, su); } /* the user's audio and subtitle languages, for this choice */
+  best_prepare(type, vid); /* the user's audio and subtitle languages and the title's own, for this choice */
   F.tok = ++tokN; F.on = 1; F.wait = -1; F.t0 = app_now(); F.dur = durMin > 0 ? durMin : 100; F.status = status; F.cb = done; F.ud = ud;
   snprintf(F.type, sizeof F.type, "%s", type); snprintf(F.vid, sizeof F.vid, "%s", vid);
   unsigned tok = F.tok; say();

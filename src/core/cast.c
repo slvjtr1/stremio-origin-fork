@@ -142,7 +142,7 @@ static void on_msg(Client *c, const char *s) {
     else if (!strcmp(t, "account")) { const cJSON *u = cJSON_GetObjectItemCaseSensitive(j, "user"); char *us = u ? cJSON_PrintUnformatted(u) : NULL;
       if (H.account) H.account(js(j, "authKey"), us ? us : ""); free(us); }
     else if (!strcmp(t, "settings")) { static const char *K[] = { "autoBest", "subsLang", "defaultAudioTrack", "enableDefaultAudioTrack", "subtitleSize", "subsColor", "subsBgStyle",
-        "subsOutlineColor", "subsAssStyle", "enableNextVideo", "bingeWatch", "seekStep", "aspectMode", "bgTrailer", "bgTrailerVol", "uiSound", "uiSoundVol", "accent", "ssDelay", "uiLang" };
+        "subsOutlineColor", "subsOutline", "subsOutlineWidth", "subsShadow", "subsShadowStrength", "subsShadowSoft", "subsShadowDist", "subsFont", "subsBold", "subsPos", "subsAssStyle", "enableNextVideo", "bingeWatch", "seekStep", "aspectMode", "bgTrailer", "bgTrailerVol", "uiSound", "uiSoundVol", "accent", "ssDelay", "uiLang", "subsAuto", "subsFollow", "bestRow", "skipIntro", "clockFmt", "homeRows", "appIcon" };
       /* (every setting the phone and the TV share, the language too; never one of this TV's own: its USB drive, Dolby Vision conversion) */
       const cJSON *pr = cJSON_GetObjectItemCaseSensitive(j, "prefs");
       for (int i = 0; i < (int)(sizeof K / sizeof *K); i++) { const cJSON *v = cJSON_GetObjectItemCaseSensitive(pr, K[i]); if (cJSON_IsString(v) && strlen(v->valuestring) < 64 && H.pref) H.pref(K[i], v->valuestring); } }

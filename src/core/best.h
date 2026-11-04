@@ -55,6 +55,9 @@ void best_audio_of(const char *label, char *out, size_t cap);
 typedef void (*BestStatusCb)(const char *text, void *ud);
 typedef void (*BestDoneCb)(const Stream *s, const BestRate *r, void *ud);
 void best_set_langs(const char *audio, const char *subs); /* the user's languages: streams in them first, ones naming only others last */
+void best_set_orig(const char *code, int userAudio); /* the title's own language ("" unknown): its audio first unless the user set one */
+void best_prepare(const char *type, const char *id);  /* both, for this title (its metadata, its id) */
+int  best_row_on(void);                              /* Settings > Playback > Best match for this TV: first in the streams */
 unsigned best_choose(const char *type, const char *vid, int durMin, BestStatusCb status, BestDoneCb done, void *ud);
 void best_choose_cancel(unsigned tok);
 void best_skip(const char *url);       /* a stream that failed to play: left out of the next choices (until the app restarts) */
