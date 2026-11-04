@@ -1,41 +1,31 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "items": [
     {
-      "icon": "wn_subs",
-      "title": "Subtitles your way",
-      "text": "Outline and shadow, six fonts and bold, and one press brings them back in sync. Arabic joins and reads right to left as it should."
-    },
-    {
-      "icon": "p_skip",
-      "title": "Skip intro, recap and credits",
-      "text": "A button shows up at the right moment: press OK, or let it skip by itself."
-    },
-    {
-      "icon": "trailer",
-      "title": "Trailers on the whole screen",
-      "text": "Five seconds in, the trailer fills the screen. Press any key and the page is back at once."
-    },
-    {
-      "icon": "chip_search",
-      "title": "Cleaner, faster search",
-      "text": "Real films and series only: no clips, fan uploads or adult titles."
-    },
-    {
       "icon": "set_lang",
-      "title": "Arabic from end to end",
-      "text": "The whole app in Arabic or English, and titles and descriptions in the language you choose."
+      "title": "Arabic titles, built in",
+      "text": "Titles and descriptions come in Arabic or English with nothing to add. Switch any time in Settings › Language."
     },
     {
-      "icon": "eye",
-      "title": "No spoilers",
-      "text": "Blur unwatched episodes keeps their pictures and stories hidden until you watch them."
+      "icon": "g_phone",
+      "title": "Links open on your phone",
+      "text": "A link from an addon shows a code: scan it and the app's site tells you where it goes, then opens it with one tap."
+    },
+    {
+      "icon": "set_logs",
+      "title": "Help in one scan",
+      "text": "Settings › About › Share logs opens a page with your code and a report ready to send."
+    },
+    {
+      "icon": "g_sync",
+      "title": "Updates that get through",
+      "text": "The app checks GitHub, then its site. Rooted TVs can also install and update it from Homebrew Channel."
     }
   ],
   "support": {
     "title": "Thank you",
     "message": "Thank you!",
-    "url": "https://github.com/slvjtr1/stremio-origin-fork/releases",
+    "url": "https://slvjtr1.github.io/stremio-origin-fork/",
     "github": "https://github.com/slvjtr1/stremio-origin-fork"
   }
 }

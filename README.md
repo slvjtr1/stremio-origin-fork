@@ -26,7 +26,7 @@
 | **Skip intro, recap and credits** | A button shows up at the right moment. Press OK, or let it skip by itself. |
 | **Trailers on the whole screen** | A title's trailer plays behind its page, and after five seconds it fills the screen. Any key brings the page back at once. |
 | **Clean search** | Real, released films and series only. Clips, fan uploads, adult titles and unwanted themes are left out, and results arrive sooner. |
-| **Arabic from end to end** | The whole app in Arabic or English. Titles and descriptions follow the app or a language you pick, from TMDB. |
+| **Arabic from end to end** | The whole app in Arabic or English. Titles and descriptions follow the app or a language you pick, built in: nothing to set up. |
 | **No spoilers** | Blur unwatched episodes hides their stills and stories on the title page, in the player and in reviews until you watch them. |
 | **Your Home, your rows** | Choose 8, 12, 16 or 24 catalogs on Home. Your addons come first; Cinemeta's lists fill any space left. |
 | **The best stream, in one press** | Picked for your TV and your connection, with quality tags on every source. |
@@ -39,14 +39,18 @@ Also inside: DTS sound converted on the TV, Dolby Vision on TVs that support it,
 
 For LG TVs running webOS 3 and later (ARM). Tested on webOS 4.4; see [compatibility](docs/compatibility.md).
 
-1. Download `tv.stremioorigin.app_<version>_arm.ipk` from the [latest release](https://github.com/slvjtr1/stremio-origin-fork/releases/latest).
-2. Install it with [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop) or `ares-install`, on a TV in Developer Mode or a rooted TV with Homebrew Channel.
-3. New versions install from inside the app: **Settings › About**.
+**Homebrew Channel (rooted TVs):** add the repository `https://slvjtr1.github.io/stremio-origin-fork/apps.json`, then install Stremio Origin.
+
+**Developer Mode:** download `tv.stremioorigin.app_<version>_arm.ipk` from the [latest release](https://github.com/slvjtr1/stremio-origin-fork/releases/latest) and install it with [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop) or `ares-install`.
+
+New versions install from inside the app: **Settings › About**. Everything else (install steps, updates, help) is on the [site](https://slvjtr1.github.io/stremio-origin-fork/).
 
 ## Good to know
 
 - **Language:** Settings › Language. The app follows the TV's language until you choose one.
-- **Titles and descriptions in Arabic** need a free TMDB key: Settings › Keys, then scan the code with your phone and paste it. Choose *Same as the app*, *English* or *Arabic*.
+- **Titles and descriptions:** Settings › Language. Choose *Same as the app*, *English* or *Arabic*.
+- **Links from addons** show a code: scan it and the site opens the link on your phone.
+- **Something wrong?** Settings › About › Share logs, then scan the code: the site fills in the report.
 - **Blur unwatched episodes:** Settings › Playback.
 - **Catalogs on Home:** Settings › Appearance.
 
@@ -60,7 +64,7 @@ For LG TVs running webOS 3 and later (ARM). Tested on webOS 4.4; see [compatibil
 
 ```sh
 tools/build.sh webos        # the app
-tools/release.sh 1.1.0      # version, package and checksum in dist/
+tools/release.sh 1.2.0      # version, package and checksum in dist/, the site's Homebrew files in docs/
 ```
 
 ## Credits
