@@ -40,7 +40,9 @@ int  sb_addon_on(const cJSON *addon);  /* not switched off on this TV ("adOn_<ke
 void sb_addon_key(const cJSON *addon, char *out, size_t cap);  /* its manifest id, or its URL */
 
 /* ---- catalogs ---- */
-int  sb_home_defs(CatalogDef *out, int max);
+int  sb_home_defs(CatalogDef *out, int max);   /* the chosen number of rows and a few spares */
+int  sb_home_rows(void);
+int  sb_text_blocked(const char *s);             /* adult or LGBT terms: left out of search */                         /* Settings > Appearance > Catalogs on Home */
 int  sb_disc_defs(CatalogDef *out, int max);
 /* cached copy first (cb with cached=1), then the fresh one if it differs; the list is malloc'd for the callback owner */
 void sb_catalog(const CatalogDef *def, void (*cb)(ItemList *list, int cached, void *ud), void *ud);

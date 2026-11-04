@@ -98,10 +98,10 @@ static void urlenc(const char *s, char *out, size_t cap) { size_t o = 0; for (; 
 static void live(void) {
   char q[48]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;
   S.tok++; S.topDone = 0; S.topFail = 0; S.allFailed = 0; for (int c = 0; c < S.ncat; c++) { S.catDone[c] = 0; S.catFail[c] = 0; itemlist_clear(&S.cat[c]); } S.ncat = 0; S.drawn = 1;
-  if (!*p) { itemlist_clear(&S.items); S.nsug = 0; S.loading = 0; S.final = 1; results_draw_state(); return; }
+  if (!*p || sb_text_blocked(p)) { itemlist_clear(&S.items); S.nsug = 0; S.loading = 0; S.final = 1; results_draw_state(); return; } /* (nothing looked up for it) */
   S.loading = 1; S.final = 0;
   sb_suggest(p, on_sug, (void *)(uintptr_t)S.tok);
-  S.catAt = app_now() + 0.5; S.catPending = 1;
+  S.catAt = app_now() + 0.35; S.catPending = 1;
 }
 static void cat_go(void) {
   char q[48]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;

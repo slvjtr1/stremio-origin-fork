@@ -26,7 +26,7 @@
 #define NF 6
 #define NB (NF + 1)          /* the categories, then the sort */
 #define COLS 5
-#define MAXSHOW 200
+#define MAXSHOW 100000
 #define LW 300.0f            /* the posters */
 #define LH 450.0f
 #define LSTEP 352.0f
@@ -249,10 +249,15 @@ static int key(int k) {
 }
 static void tick(float dt) {
   if (L.built && L.ver != lib_version()) { L.ver = lib_version();
-    int nw = L.n; LibIt *was = nw ? malloc(sizeof(LibIt) * (size_t)nw) : NULL; if (was) for (int i = 0; i < nw; i++) was[i] = *at(i); /* the grid as it was, to find one taken out */
+    /* the grid as it was (its ids; the cards themselves round the focus), to find one taken out: the order stays, so the
+       first place where they differ is the one gone (a big library: no copy of every card, no pass over every pair) */
+    int nw = L.n; char (*wid)[64] = nw ? malloc((size_t)nw * 64) : NULL; if (wid) for (int i = 0; i < nw; i++) snprintf(wid[i], 64, "%s", at(i)->it.id);
+    LibIt near[5]; int nearAt = L.idx - 2; for (int d = 0; d < 5; d++) { const LibIt *o = at(nearAt + d); if (o) near[d] = *o; else memset(&near[d], 0, sizeof near[d]); }
     load(); render();
-    if (was && L.n == nw - 1) for (int i = 0; i < nw; i++) { int in = 0; for (int j = 0; j < L.n && !in; j++) in = !strcmp(at(j)->it.id, was[i].it.id); if (!in) { L.remIt = was[i]; L.remIdx = i; L.remAt = app_now(); break; } }
-    free(was); if (!L.n) { L.zone = 0; L.ri = L.tab; } paint(); } /* the library changed (the card menu, a sync) */
+    if (wid && L.n == nw - 1) { int i = 0; while (i < L.n && !strcmp(at(i)->it.id, wid[i])) i++;
+      int ok = 1; for (int j = i; j < L.n && ok; j++) ok = !strcmp(at(j)->it.id, wid[j + 1]); /* (the rest moved up by one: it was taken out, nothing else changed) */
+      if (ok && i - nearAt >= 0 && i - nearAt < 5 && near[i - nearAt].it.id[0]) { L.remIt = near[i - nearAt]; L.remIdx = i; L.remAt = app_now(); } }
+    free(wid); if (!L.n) { L.zone = 0; L.ri = L.tab; } paint(); } /* the library changed (the card menu, a sync) */
   for (int i = 0; i < NB; i++) { tween_tick(&L.bx[i], dt); tween_tick(&L.la[i], dt); tween_tick(&L.bw[i], dt); }
   pill_tick(&L.pc, dt); pill_tick(&L.ps, dt); pill_tick(&L.pf, dt); timer_tick(&L.press, dt); nudge_tick(&L.nudge, dt);
   tween_tick(&L.gridY, dt); tween_tick(&L.sortDot, dt); tween_tick(&L.fsc, dt); tween_tick(&L.osc, dt); tween_tick(&L.ringA, dt); timer_tick(&L.ringPop, dt); timer_tick(&L.gridIn, dt); timer_tick(&L.headIn, dt); timer_tick(&L.factsIn, dt);
