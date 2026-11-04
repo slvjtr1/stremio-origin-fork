@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # scrub_ipk.py <file.ipk>: the archives record who built them (the user and group names, the ids); the package
 # carries "root" and 0 instead, so nothing of the build machine travels with it. The contents are unchanged.
+# File modes are set as on a Mac build: 0644, and 0755 for the app binary and its .so libraries.
 import io, sys, tarfile
 
 def scrub_tar(blob, gz):
@@ -9,6 +10,9 @@ def scrub_tar(blob, gz):
     dst = tarfile.open(fileobj=out, mode='w:gz' if gz else 'w', format=tarfile.GNU_FORMAT)
     for m in src.getmembers():
         m.uid = m.gid = 0; m.uname = m.gname = 'root'
+        if m.isfile():   # packaged on Windows every file comes out 0666: the app binary and its libraries must stay executable
+            m.mode &= ~0o022
+            if m.name.endswith(('/stremioorigin', '.so')): m.mode |= 0o755
         dst.addfile(m, src.extractfile(m) if m.isfile() else None)
     dst.close(); return out.getvalue()
 

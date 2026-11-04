@@ -21,7 +21,7 @@ git -C "$SRC" apply --whitespace=nowarn "$ROOT/tools/engine/engine.patch"
 DEPS="${ENGINE_DEPS:-$W/deps}"; mkdir -p "$DEPS"
 if [ ! -f "$DEPS/nuvio_boost-src/boost/version.hpp" ]; then
   curl -fsSL -o "$DEPS/boost.tar.bz2" https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.bz2
-  echo "1bed88e40401b2cb7a1f76d4bab499e352fa4d0c5f31c0dbae64e24d34d7513b  $DEPS/boost.tar.bz2" | shasum -a 256 -c -
+  echo "1bed88e40401b2cb7a1f76d4bab499e352fa4d0c5f31c0dbae64e24d34d7513b  $DEPS/boost.tar.bz2" | { command -v shasum >/dev/null && shasum -a 256 -c - || sha256sum -c -; }
   rm -rf "$DEPS/nuvio_boost-src"; mkdir -p "$DEPS/nuvio_boost-src"; tar -xjf "$DEPS/boost.tar.bz2" -C "$DEPS/nuvio_boost-src" --strip-components 1; rm -f "$DEPS/boost.tar.bz2"
 fi
 if [ ! -d "$DEPS/nuvio_libtorrent-src/.git" ]; then
