@@ -1080,8 +1080,10 @@ static void open_guide(int tour) {
 static int env_on(const char *k) { const char *v = getenv(k); return v && *v && strcmp(v, "0"); }
 /* once Home is up and nothing else is open: the first start ever (the tour), or the first start of a new version */
 /* a guide or the version's page is due (the first start, or a new version): its pictures are got ready from the start */
+/* a new x.y: its page; a fix (x.y.z) comes in quietly, its page in Settings > About */
+static int new_ver(const char *seen) { int a = 0, b = 0, c = 0, d = 0; if (sscanf(seen, "%d.%d", &a, &b) < 2 || sscanf(W.ver, "%d.%d", &c, &d) < 2) return strcmp(seen, W.ver) != 0; return a != c || b != d; }
 static int due = -1;
-static int is_due(void) { if (due < 0) { int has = load(); const char *seen = store_get("whatsNewSeen", ""); due = getenv("SB_GUIDE") || getenv("SB_WHATSNEW") || (!store_get("guideSeen", NULL) && !seen[0]) || (has && strcmp(seen, W.ver)); } return due; }
+static int is_due(void) { if (due < 0) { int has = load(); const char *seen = store_get("whatsNewSeen", ""); due = getenv("SB_GUIDE") || getenv("SB_WHATSNEW") || (!store_get("guideSeen", NULL) && !seen[0]) || (has && new_ver(seen)); } return due; }
 int welcome_ready(void) { return !is_due() || W.checked || preload(); }
 void welcome_tick(void) {
   if (W.open || (!W.checked && is_due())) { int r = preload(); static double since; if (!since) since = app_now(); if (!W.open && !r && app_now() - since < 4) return; } /* (kept fresh while it shows; it opens once they are in, 4 s at most) */
@@ -1089,12 +1091,12 @@ void welcome_tick(void) {
   W.checked = 1; if (getenv("SB_STRESS")) return;
   int has = load(), forceG = env_on("SB_GUIDE"), forceW = env_on("SB_WHATSNEW");
   const char *seen = store_get("whatsNewSeen", ""); int first = !store_get("guideSeen", NULL) && !seen[0];
-  if (forceG || (!forceW && first)) open_guide(1); else if (has && (forceW || strcmp(seen, W.ver))) open_guide(0);
+  if (forceG || (!forceW && first)) open_guide(1); else if (has && (forceW || new_ver(seen))) open_guide(0);
 }
 void welcome_open_now(void) {
   if (W.checked || W.open || getenv("SB_STRESS")) return;
   W.checked = 1; int has = load(); const char *seen = store_get("whatsNewSeen", ""); int first = !store_get("guideSeen", NULL) && !seen[0];
-  if (first) open_guide(1); else if (has && strcmp(seen, W.ver)) open_guide(0); else return;
+  if (first) open_guide(1); else if (has && new_ver(seen)) open_guide(0); else return;
   W.in.on = 0; W.fromSignIn = 1; /* already in: the loading fades off it, its glows carrying on */
 }
 void welcome_show_guide(void) { if (W.open && !W.closing) return; load(); W.checked = 1; open_guide(1); }

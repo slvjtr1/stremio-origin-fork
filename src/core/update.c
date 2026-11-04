@@ -104,12 +104,21 @@ static int notes_from(const char *md, char out[5][256]) {
 static void pill_show(void);
 static double nextAt; static int forceCheck, pillPend; /* the next check while the app stays open; a check that skips the 6-hour rest; a notice that waits for the film to end */
 static int reached; /* the release list or the listing answered: finding nothing for this package then means nothing newer */
+/* a fix (same x.y, a later .z): no notice, it installs itself when the TV has been left alone for a while */
+static int quiet;
+static int is_fix(const char *v, const char *cur) {
+  int a1 = 0, b1 = 0, c1 = 0, a2 = 0, b2 = 0, c2 = 0; if (sscanf(v, "%d.%d.%d", &a1, &b1, &c1) < 2 || sscanf(cur, "%d.%d.%d", &a2, &b2, &c2) < 2) return 0;
+  return a1 == a2 && b1 == b2 && c1 > c2;
+}
+#define QUIET_IDLE 90.0f /* seconds with no key pressed */
 static void done(const Rel *best, int manual) {
   char at[32]; snprintf(at, sizeof at, "%.0f", now_ms()); store_set("updAt", at);
   if (best && U.cur[0] && ver_cmp(best->ver, U.cur) > 0) {
     U.avail = *best; U.has = 1; U.state = UPD_AVAIL; store_set("updVer", best->ver);
     fprintf(stderr, "[update] %s available (running %s)\n", best->ver, U.cur);
-    if (!manual) { if (player_open()) pillPend = 1; else pill_show(); } /* (never over a film: after it) */
+    quiet = !manual && is_fix(best->ver, U.cur) && !getenv("SB_UPD_NOQUIET");
+    if (quiet) fprintf(stderr, "[update] %s is a fix: installs itself when the TV is left alone\n", best->ver);
+    else if (!manual) { if (player_open()) pillPend = 1; else pill_show(); } /* (never over a film: after it) */
   } else {
     int none = best || reached;
     U.has = 0; U.state = none ? UPD_NONE : UPD_ERROR; store_remove("updVer");
@@ -196,7 +205,9 @@ static void on_install(const char *payload, void *ud) {
     int noChannel = strstr(e, "does not exist") || strstr(e, "Unknown service") || strstr(e, "Denied") || strstr(e, "not allowed") || strstr(e, "Not permitted");
     U.state = UPD_AVAIL; snprintf(U.msg, sizeof U.msg, "%s", noChannel ? T("Install it from the Homebrew Channel") : T1("The update failed: {e}", "e", e));
     if (U.job) { plat_luna_cancel(U.job); U.job = 0; } relaunch_cancel();
-    fprintf(stderr, "[update] install failed: %s\n", e); toast(noChannel ? T("Install it from the Homebrew Channel") : T("The update failed"), 2500, NULL);
+    fprintf(stderr, "[update] install failed: %s\n", e);
+    if (quiet) { quiet = 0; pill_show(); } /* the quiet way did not work: the notice, as for any update */
+    else toast(noChannel ? T("Install it from the Homebrew Channel") : T("The update failed"), 2500, NULL);
     changed(); cJSON_Delete(j); return;
   }
   if (cJSON_IsString(st) && st->valuestring) { char pc[16] = ""; if (cJSON_IsNumber(pg)) snprintf(pc, sizeof pc, " %d%%", (int)(pg->valuedouble + 0.5)); snprintf(U.msg, sizeof U.msg, "%s%s", T(st->valuestring), pc); }
@@ -213,7 +224,7 @@ void update_install(void) {
   cJSON *p = cJSON_CreateObject(); cJSON_AddStringToObject(p, "ipkUrl", U.avail.url); cJSON_AddStringToObject(p, "ipkHash", U.avail.sha); cJSON_AddStringToObject(p, "id", SB_APP_ID); cJSON_AddTrueToObject(p, "subscribe");
   char *ps = cJSON_PrintUnformatted(p); cJSON_Delete(p);
   U.job = plat_luna_subscribe("luna://org.webosbrew.hbchannel.service/install", ps, on_install, NULL); free(ps);
-  if (!U.job) { U.state = UPD_AVAIL; snprintf(U.msg, sizeof U.msg, "%s", T("Install it from the Homebrew Channel")); relaunch_cancel(); changed(); } /* no Channel (or the Mac preview) */
+  if (!U.job) { U.state = UPD_AVAIL; snprintf(U.msg, sizeof U.msg, "%s", T("Install it from the Homebrew Channel")); relaunch_cancel(); if (quiet) { quiet = 0; pill_show(); } changed(); } /* no Channel (or the Mac preview) */
 }
 
 /* ---- the notice ---- */
@@ -307,6 +318,8 @@ void update_tick(float dt) {
   if (!U.started && app_now() > 8 && app_splash_done && !player_open() && app_idle() > 1) { U.started = 1; nextAt = app_now() + 6 * 3600; forceCheck = 1; update_check(0); forceCheck = 0; }
   else if (U.started && nextAt && app_now() >= nextAt && !player_open() && app_idle() > 1 && U.state != UPD_CHECKING && U.state != UPD_INSTALLING) { nextAt = app_now() + 6 * 3600; forceCheck = 1; update_check(0); forceCheck = 0; }
   if (pillPend && !player_open() && !U.pill && U.pa.v <= 0.001f) { pillPend = 0; pill_show(); }
+  if (quiet && U.has && U.state == UPD_AVAIL && !player_open() && app_idle() > QUIET_IDLE) { /* the fix, while nobody is watching */
+    fprintf(stderr, "[update] installing the fix %s quietly\n", U.avail.ver); U.openAt = 0; update_install(); }
   { static int autoI = -1; if (autoI < 0) autoI = getenv("SB_UPD_AUTOINSTALL") != NULL; /* development: Install pressed 3 s after the notice (the whole update, untouched) */
     if (autoI && U.has && U.state == UPD_AVAIL && U.shown && app_now() - U.shownAt > 3) { autoI = 0; U.openAt = 0; update_install(); } }
 }
