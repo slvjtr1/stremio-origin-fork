@@ -56,7 +56,7 @@ static void on_connected(int n) { static int was; if (n > was) toast(T("Phone co
 
 void castlink_start(void) {
   static CastHooks h; const char *dn = plat_device_name();
-  h.plat = strstr(dn, "webOS") ? "webos" : strstr(dn, "Android") ? "androidtv" : "mac"; h.ver = update_current(); h.name = tv_name;
+  h.plat = strstr(dn, "webOS") ? "webos" : "mac"; h.ver = update_current(); h.name = tv_name;
   h.get = store_get; h.set = store_set; h.play = on_play; h.cmd = on_cmd; h.key = on_key; h.state = on_state; h.pairing = on_pairing; h.connected = on_connected; h.account = on_account; h.pref = on_pref; h.tracks = player_cast_tracks; h.track = player_cast_track;
   cast_start(&h);
 }

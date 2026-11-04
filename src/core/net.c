@@ -31,7 +31,7 @@ static CURLcode (*f_global_init)(long);
 static void (*f_easy_reset)(CURL *); /* (optional: without it every request opens its own connection, as before) */
 static char caPath[1024];
 /* "StremioOrigin/1.0.0 (webOS; native)": the running version, the platform it runs on */
-static const char *ua(void) { static char u[96]; if (!u[0]) { const char *d = plat_device_name(); snprintf(u, sizeof u, "StremioOrigin/%s (%s; native)", update_current(), strstr(d, "webOS") ? "webOS" : strstr(d, "Android") ? "Android TV" : "Mac"); } return u; }
+static const char *ua(void) { static char u[96]; if (!u[0]) { const char *d = plat_device_name(); snprintf(u, sizeof u, "StremioOrigin/%s (%s; native)", update_current(), strstr(d, "webOS") ? "webOS" : "Mac"); } return u; }
 
 static int resolve(void) {
 #if defined(SB_MAC)

@@ -70,7 +70,7 @@ static void ids(void) {
     snprintf(tvId, sizeof tvId, "%.8s-%.4s-%.4s-%.4s-%.12s", x, x + 8, x + 12, x + 16, x + 20); H.set("castId", tvId); }
   mac[0] = 0; struct ifaddrs *ifs = NULL; if (getifaddrs(&ifs) != 0) return;
   for (struct ifaddrs *i = ifs; i; i = i->ifa_next) { if (!i->ifa_addr || i->ifa_addr->sa_family != AF_INET || (i->ifa_flags & IFF_LOOPBACK) || !(i->ifa_flags & IFF_UP)) continue;
-    char p[128]; snprintf(p, sizeof p, "/sys/class/net/%s/address", i->ifa_name); FILE *f = fopen(p, "r"); /* (Linux: webOS, Android TV) */
+    char p[128]; snprintf(p, sizeof p, "/sys/class/net/%s/address", i->ifa_name); FILE *f = fopen(p, "r"); /* (Linux: webOS) */
     if (f) { if (fgets(mac, sizeof mac, f)) mac[strcspn(mac, "\r\n")] = 0; fclose(f); }
     if (mac[0]) break; }
   freeifaddrs(ifs);

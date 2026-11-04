@@ -1,5 +1,5 @@
 /* What differs per device, behind one small interface. The core never includes a platform
-   header: webOS, the Mac preview, and later Android TV and Tizen each implement this file. */
+   header: webOS and the Mac preview each implement this file. */
 #ifndef SB_PLAT_H
 #define SB_PLAT_H
 #include <SDL2/SDL.h>

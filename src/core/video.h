@@ -1,6 +1,6 @@
 /* Video playback behind one small interface: the TV's own media pipeline on webOS (the picture
-   is drawn on the video plane under the app's transparent window), a stub on the Mac preview,
-   and later the Android TV and Tizen players. The core never sees a platform call. */
+   is drawn on the video plane under the app's transparent window) and a stub on the Mac preview.
+   The core never sees a platform call. */
 #ifndef SB_VIDEO_H
 #define SB_VIDEO_H
 typedef enum { VID_IDLE = 0, VID_LOADING, VID_PLAYING, VID_PAUSED, VID_BUFFERING, VID_ENDED, VID_ERROR } VidState;
