@@ -1285,5 +1285,7 @@
  "Made for its remote": "مصمم لريموته",
  "The D-pad, OK and Back do everything. Captions, Audio and Info keys go straight to their lists; Menu opens Settings, Search opens Search.": "الأسهم وموافق والرجوع تكفي لكل شيء. أزرار الترجمة والصوت والمعلومات تفتح قوائمها مباشرة؛ القائمة تفتح الإعدادات، والبحث يفتح البحث.",
  "Sound and picture as made": "الصوت والصورة كما صُنعا",
- "On Google TV, Dolby Atmos, DTS and TrueHD go to your receiver as they are, and the screen follows the film's frame rate.": "على Google TV، يصل Dolby Atmos وDTS وTrueHD إلى جهاز الصوت كما هي، وتتبع الشاشة معدل إطارات الفيلم."
+ "On Google TV, Dolby Atmos, DTS and TrueHD go to your receiver as they are, and the screen follows the film's frame rate.": "على Google TV، يصل Dolby Atmos وDTS وTrueHD إلى جهاز الصوت كما هي، وتتبع الشاشة معدل إطارات الفيلم.",
+ "Skip button time": "مدة زر التخطي",
+ "How long the Skip button stays before it goes by itself": "كم يبقى زر التخطي قبل أن يختفي وحده"
 }

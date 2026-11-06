@@ -72,7 +72,7 @@ static const Opt APPICON[] = { { "origin", "Origin" }, { "classic", "Classic" } 
 static const Opt ACCENT_OPTS[] = { { "logo", "From the logo" }, { "adaptive", "From the artwork" }, { "purple", "Purple" }, { "violet", "Violet" }, { "fuchsia", "Fuchsia" }, { "pink", "Pink" }, { "rose", "Rose" }, { "red", "Red" }, { "orange", "Orange" }, { "amber", "Amber" }, { "gold", "Gold" }, { "lime", "Lime" }, { "green", "Green" }, { "emerald", "Emerald" }, { "teal", "Teal" }, { "cyan", "Cyan" }, { "sky", "Sky" }, { "blue", "Blue" }, { "indigo", "Indigo" }, { "graphite", "Graphite" } };
 #define NCAT 11
 #define MAXROWS 48
-static Setting playBase[12], playS[13], subsBase[18], subsS[18], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[7], picS[6], accS[8];
+static Setting playBase[13], playS[14], subsBase[18], subsS[18], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[7], picS[6], accS[8];
 static Cat cats[NCAT]; static int ncat; /* (Keys leaves when this build carries every key) */
 static int cat_of(const Setting *opts) { for (int i = 0; i < ncat; i++) if (cats[i].opts == opts) return i; return -1; }
 
@@ -169,7 +169,7 @@ static int about_opts(void) {
    removed, so each reads its default again. Not touched: the account, library, addons, keys, the app's language. */
 static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
   "bingeWatch", "enableNextVideo", "blurUnseen", "clockFmt", "defaultAudioTrack", "dtsMode", "dv7Convert", "enableDefaultAudioTrack", "homeRows",
-  "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
+  "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "skipShowSec", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
   "subsFollow", "subsFont", "subsLang", "subsOutline", "subsOutlineColor", "subsOutlineWidth", "subsPos", "subsShadow", "subsShadowDist",
   "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "filmEnhance", "brightBoost", "darkSee", "voiceClear", "evenVolume", "subsNoSdh", "kbLang", "libSort", NULL };
 static void enter(const void *p); static void show_cat(int i, int dir);
@@ -187,7 +187,7 @@ static void play_layout(void) {
   int on = strcmp(store_get("bgTrailer", "true"), "false") != 0, n = 0;
   playS[n++] = playBase[4]; /* the best stream first */
   playS[n++] = playBase[9];
-  for (int i = 0; i < 4; i++) { playS[n++] = playBase[i]; if (i == 1) { playS[n++] = playBase[8]; playS[n++] = playBase[10]; } }
+  for (int i = 0; i < 4; i++) { playS[n++] = playBase[i]; if (i == 1) { playS[n++] = playBase[8]; playS[n++] = playBase[12]; playS[n++] = playBase[10]; } }
   playS[n++] = playBase[11]; /* what Search shows */
   if (on) playS[n++] = playBase[6];
   const TvCaps *tc = best_caps(); if (tc && tc->dv) playS[n++] = playBase[7];
@@ -227,6 +227,7 @@ static void build(void) {
   set_s(&playBase[9], "bestRow", "Best match for this TV", "First in the streams: what this TV plays best, in the title’s own language, subtitles named", OO, 2, "true");
   set_s(&playBase[11], "searchKnownOnly", "Search well-known services only", "Results are films and series on Netflix, Prime Video, Disney+ and the like", OO, 2, "true");
   set_s(&playBase[10], "blurUnseen", "Blur unwatched episodes", "Their pictures stay blurred and their stories hidden until you watch them: no spoilers", OO, 2, "false");
+  set_s(&playBase[12], "skipShowSec", "Skip button time", "How long the Skip button stays before it goes by itself", SEEK, 5, "10");
   set_s(&playBase[8], "skipIntro", "Skip intro, recap and credits", "A button that skips them when you press OK, or automatically", SKIPO, 3, "button");
   set_s(&playBase[6], "bgTrailerVol", "Volume", "The sound comes up softly to this level", SVOL, 10, "70"); playBase[6].sub = 1; /* (shown right under the trailers while they are on: play_layout; drawn as theirs, set in) */
   usb_row();

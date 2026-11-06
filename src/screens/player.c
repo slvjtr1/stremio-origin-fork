@@ -143,7 +143,7 @@ static struct {
     /* the same conversion for a Dolby Vision profile 7 picture: dv the picture goes out as 8.1, copyA the audio track as
        it is, dvTried started once already, dvSeen what the TV showed was checked */
     int dv, copyA, dvTried, dvSeen; double dvAt; } dts;
-  int assPlain; /* styled subtitles were too slow here: plain for the rest of this film */ double lastSave; int marked; char aspect[8]; const char *res; char infoKey[256]; int pausedShown; double pausedAt; int clean; Mo cleanK; /* clean: paused and untouched 17 s, the frame alone (cleanK 0..1: how far it has gone) */
+  int assPlain; /* styled subtitles were too slow here: plain for the rest of this film */ double lastSave; int marked; char aspect[8]; const char *res; char infoKey[256]; int pausedShown; double pausedAt; int clean; Mo cleanK; /* clean: paused and untouched 10 s, the frame alone (cleanK 0..1: how far it has gone) */
   /* torrents: resolved by the engine first; the file's own subtitles and chapters from the stream itself */
   int isP2p, resolving; double posTick; int mkvTracksOk, chapWant;
   Nudge nudge; double nameAt;
@@ -1011,7 +1011,8 @@ static int looks_recap(double s, double e) {
 static void paint_prompt(void) { if (P.prompt.k) P.shown = P.prompt; }
 static void go_next(void);
 static void next_auto(void);
-#define SKIP_SHOW_S 5.0 /* how long Skip intro / recap / credits stays up unpressed */
+static double skip_show_s(void) { double v = atof(store_get("skipShowSec", "10")); return v < 3 || v > 60 ? 10 : v; } /* how long Skip intro / recap / credits stays up unpressed (Settings › Playback) */
+#define SKIP_SHOW_S skip_show_s()
 static void dismiss_prompt(void) { if (P.prompt.k) P.dismissed[P.prompt.k] = 1; P.prompt.k = 0; if (P.mode == 3) P.mode = 0; paint_prompt(); }
 static void prompt_go(int i) {
   if (!P.prompt.k || i >= P.prompt.nbtn) return; const char *id = P.prompt.b[i].id;
@@ -2018,7 +2019,7 @@ void player_tick(float dt) {
     /* (the player has no screensaver of its own any more: the app's one comes over a paused film) */
     int pz = paused() && P.mode != 2; if (pz && !P.pausedShown) { if (!P.pausedAt) P.pausedAt = now_(); if (now_() - P.pausedAt > 0.35) { P.pausedShown = 1; show_osd(1); } }
     else if (!pz) { P.pausedAt = 0; P.pausedShown = 0; P.clean = 0; }
-    if (pz && P.pausedShown && !P.clean && P.mode <= 1 && P.seekT < 0 && now_() - fmax(P.lastAct, P.pausedAt) >= 17) { P.clean = 1; hide_osd(); } /* paused and untouched 17 s: the frame alone, full screen */
+    if (pz && P.pausedShown && !P.clean && P.mode <= 1 && P.seekT < 0 && now_() - fmax(P.lastAct, P.pausedAt) >= 10) { P.clean = 1; hide_osd(); } /* paused and untouched 10 s: the frame alone, full screen */
     mo_to(&P.cleanK, P.clean ? 1 : 0, P.clean ? .6f : .25f, C_EASE, 0); mo_tick(&P.cleanK, dt);
     if (P.seekT >= 0 && now_() >= P.seekCommitAt) commit_seek();
     if (P.seekTxtUntil && now_() >= P.seekTxtUntil) { P.seekTxtUntil = 0; P.skOn = 0; P.skm = 0; }
