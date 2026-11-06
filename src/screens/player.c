@@ -87,7 +87,7 @@ static void mo_tick(Mo *m, float dt) { if (!m->on) return; m->t += dt; if (m->t 
 static float kf(double at, float dur, const float *c, float delay) { if (!at) return 1; return bez(c, (float)((app_now() - at - delay * ANIM_SPEED) / (dur * ANIM_SPEED))); }
 
 /* ---- state ---- */
-#define MAXBTN 8
+#define MAXBTN 12
 #define MAXROW 64
 typedef struct { int k; /* 0 note 1 skel 2 ep 3 src 4 chip; ls: a subtitle row's list, 1 OpenSubtitles 2 the addons' */ char lb[200], sub[120], ov[300], th[512], vl[48]; int on, spin, tool, sp; int i, ls; const cJSON *v; Stream *st; char u[1024]; float d, hh, ww, vw; uint32_t sw; } TItem; /* hh, ww, vw: measured on first draw (items are made fresh, zeroed) */
 typedef struct { char title[64], vl[32]; TItem *items; int n; } TCol;
@@ -913,7 +913,7 @@ static void next_up(void) {
 static void build_btns(void) {
   const char *fid = P.nbtn && P.bIdx < P.nbtn ? P.btns[P.bIdx].id : NULL; /* the focus stays on the same button when the row changes */
   P.nbtn = 0; int i = 0;
-  #define B(ID, IC, LB, BIG) do { P.btns[i].id = ID; P.btns[i].icon = IC; snprintf(P.btns[i].lb, 48, "%s", LB); P.btns[i].big = BIG; P.btns[i].nx = 0; i++; } while (0)
+  #define B(ID, IC, LB, BIG) do { if (i >= MAXBTN) break; P.btns[i].id = ID; P.btns[i].icon = IC; snprintf(P.btns[i].lb, 48, "%s", LB); P.btns[i].big = BIG; P.btns[i].nx = 0; i++; } while (0)
   B("pp", "p_pause", "", 1); if (!P.isTrailer && P.next.has) { B("nxt", "p_next", T("Next episode"), 0); P.btns[i - 1].nx = 1; }
   if (!P.isTrailer) { B("beg", "restart", T("Play from the beginning"), 0); P.btns[i - 1].nx = 1; } /* films and episodes alike */
   P.nL = i;
