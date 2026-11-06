@@ -322,6 +322,11 @@ static int same_times(SubSync *j, const Cue *c, int n) {
 /* each reference's answer; several are asked for, and the job decides once one is clearly right or two agree */
 typedef struct { double f, d, r, m; int ok, local; } RefAns;
 #define REF_TRIES 6
+/* the first few references come down side by side while the first is matched: the answer comes sooner */
+#define PRE_N 3
+typedef struct { SubSync *j; const char *url; unsigned char *b; size_t len; pthread_t t; int started; } Pre;
+static unsigned char *fetch(SubSync *j, const char *url, size_t max, size_t *len);
+static void *pre_main(void *a) { Pre *p = a; p->b = fetch(p->j, p->url, REF_BYTES, &p->len); return NULL; }
 static int agree(const SubSync *j, const RefAns *a, const RefAns *b) {
   double t0, t1; x_span(j, &t0, &t1);
   if (a->local || b->local) { double l0 = j->center - REF_LOCAL, l1 = j->center + REF_LOCAL; if (l0 > t0) t0 = l0; if (l1 < t1) t1 = l1; } /* (an answer for the playhead's surroundings: compared there) */
@@ -336,9 +341,13 @@ static void *ref_main(void *arg) {
   rank(j);
   { int use = 0; for (int i = 0; i < j->nc; i++) use += j->c[i].score >= 0; fprintf(stderr, "[sync] %d candidate reference(s), %d usable (cinema recordings and split discs left out)\n", j->nc, use); }
   RefAns ans[REF_TRIES]; int na = 0, tried = 0, fails = 0, done = 0; double prints[REF_TRIES][3]; int np = 0;
+  Pre pre[PRE_N]; memset(pre, 0, sizeof pre);
+  for (int i = 0; i < j->nc && i < PRE_N && !j->cancel; i++) { if (j->c[i].score < 0) break; pre[i].j = j; pre[i].url = j->c[i].r.url; pre[i].started = !pthread_create(&pre[i].t, NULL, pre_main, &pre[i]); }
   for (int i = 0; i < j->nc && !j->cancel && tried < REF_TRIES && !done; i++) { const RefCand *c = &j->c[i]; if (c->score < 0) break; tried++;
     fprintf(stderr, "[sync] reference %d: %s from %s, %s, rank %.2f (%s)\n", tried, c->r.lang[0] ? c->r.lang : "?", c->r.from, c->r.hm ? "found by the file's hash" : c->r.own ? "carried by the stream" : c->score >= 3 ? "file name match" : "another subtitle of this video", c->score, c->r.rel[0] ? c->r.rel : c->r.url);
-    j->stage = 1; size_t len = 0; unsigned char *b = fetch(j, c->r.url, REF_BYTES, &len); if (!b) { fails++; continue; }
+    j->stage = 1; size_t len = 0; unsigned char *b;
+    if (i < PRE_N && pre[i].started) { pthread_join(pre[i].t, NULL); pre[i].started = 0; b = pre[i].b; len = pre[i].len; pre[i].b = NULL; } else b = fetch(j, c->r.url, REF_BYTES, &len);
+    if (!b) { fails++; continue; }
     Cue *cs = NULL; int n = subs_parse_body(b, len, &cs); free(b);
     if (n < 20) { fprintf(stderr, "[sync] reference unreadable (%d lines)\n", n); subs_free(cs, n); fails++; continue; }
     if (same_times(j, cs, n)) { subs_free(cs, n);
@@ -373,6 +382,8 @@ static void *ref_main(void *arg) {
   if (r.st == SYNC_OK) fprintf(stderr, "[sync] lined up: %+.2f s%s\n", r.d, fabs(r.f - 1) > 0.001 ? ", speed fixed" : "");
   else { r.st = na ? SYNC_UNSURE : fails && fails == tried ? SYNC_NOSUB : tried ? SYNC_UNSURE : SYNC_NOREF;
     if (!j->cancel) fprintf(stderr, "[sync] %s\n", r.st == SYNC_UNSURE ? "no reference gave a clear answer" : r.st == SYNC_NOSUB ? "the references could not be read" : "no other subtitle made for this file"); }
+  { int left = 0; for (int i = 0; i < PRE_N; i++) left |= pre[i].started; if (left) j->cancel = 1; /* (the answer is in: downloads still going are stopped) */
+    for (int i = 0; i < PRE_N; i++) { if (pre[i].started) pthread_join(pre[i].t, NULL); free(pre[i].b); } }
   finish(j, r); return NULL;
 }
 SubSync *subsync_start_ref(const Cue *X, int nx, double center, const SubQuery *q, const char *curUrl, const char *curLang, const SyncRef *refs, int nrefs) {

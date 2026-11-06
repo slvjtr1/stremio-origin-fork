@@ -89,3 +89,39 @@ size_t sub_clean(char *s) {
   while (o && (out[o - 1] == '\n' || out[o - 1] == ' ')) o--;
   memcpy(s, out, o); s[o] = 0; free(cp); free(out); return o;
 }
+
+/* ---- sound descriptions: [coughs], (gunshots), ♪ MUSIC ♪ and speakers' names (JOHN:) go ----
+   A bracket counts when it opens a word (at a line's start, after a space or a dash): "friend(s)" keeps its letters.
+   Brackets of every kind, full-width ones too; they must close within the line's next 300 bytes. */
+int sub_sdh_hide = 1;
+static int open_br(const unsigned char *p, int *ol, const char **cl) {
+  if (*p == '(') { *ol = 1; *cl = ")"; return 1; } if (*p == '[') { *ol = 1; *cl = "]"; return 1; } if (*p == '{') { *ol = 1; *cl = "}"; return 1; }
+  if (p[0] == 0xef && p[1] == 0xbc && p[2] == 0x88) { *ol = 3; *cl = "\xef\xbc\x89"; return 1; } /* （ ） */
+  if (p[0] == 0xef && p[1] == 0xbc && p[2] == 0xbb) { *ol = 3; *cl = "\xef\xbc\xbd"; return 1; } /* ［ ］ */
+  if (p[0] == 0xe3 && p[1] == 0x80 && p[2] == 0x90) { *ol = 3; *cl = "\xe3\x80\x91"; return 1; } /* 【 】 */
+  return 0;
+}
+static int word_start(const char *s, const char *p) { if (p == s) return 1; unsigned char c = (unsigned char)p[-1]; return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '-' || c == '"' || c == '\'' || c >= 0x80; }
+static int caps_only(const char *a, const char *b) { int up = 0; for (const char *p = a; p < b; p++) { unsigned char c = (unsigned char)*p; if (c >= 'a' && c <= 'z') return 0; if (c >= 'A' && c <= 'Z') up++; else if (c >= 0x80) return 0; } return up >= 2; }
+size_t sub_strip_sdh(char *s) {
+  char *o = s; const char *p = s;
+  while (*p) {
+    int ol; const char *cl;
+    if (open_br((const unsigned char *)p, &ol, &cl) && word_start(s, p)) { /* (…) [ … ]: gone with what is inside */
+      const char *e = strstr(p + ol, cl); if (e && e - p <= 300) { p = e + strlen(cl); *o++ = ' '; continue; } }
+    if (!strncmp(p, "\xe2\x99\xaa", 3)) { /* ♪ IN CAPITALS ♪: a description of the music, not its words */
+      const char *e = strstr(p + 3, "\xe2\x99\xaa"); const char *nl = strchr(p + 3, '\n'); if (e && (!nl || e < nl) && caps_only(p + 3, e)) { p = e + 3; *o++ = ' '; continue; } }
+    *o++ = *p++;
+  }
+  *o = 0;
+  /* JOHN: / MAN 2: at a line's start (after a dash): the name goes, the words stay */
+  char *r = s, *w = s; int ls = 1;
+  while (*r) {
+    if (ls) { char *q = r; while (*q == ' ' || *q == '-') q++; char *e = q; int up = 0;
+      while ((*e >= 'A' && *e <= 'Z') || (*e >= '0' && *e <= '9') || *e == ' ' || *e == '.' || *e == '\'' || *e == '#') { if (*e >= 'A' && *e <= 'Z') up++; e++; }
+      if (up >= 3 && *e == ':' && e - q <= 30 && (e[1] == ' ' || e[1] == '\n' || !e[1]) && !(e > q && e[-1] >= '0' && e[-1] <= '9' && e[1] >= '0' && e[1] <= '9')) {
+        while (r < q) *w++ = *r++; r = e + 1; } }
+    ls = *r == '\n'; if (*r) *w++ = *r++;
+  }
+  *w = 0; return (size_t)(w - s);
+}

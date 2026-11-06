@@ -21,7 +21,7 @@ static int tc(const char *s, double *out, const char **end) {
 }
 static int cmp_cue(const void *a, const void *b) { double x = ((const Cue *)a)->s, y = ((const Cue *)b)->s; return x < y ? -1 : x > y; }
 static void cue_add(Cue **cues, int *n, int *cap, double s, double e, const char *t) {
-  char *c = strdup(t); if (!c) return; sub_clean(c); if (!*c) { free(c); return; } /* the line without its clutter (every file: the addons', the AI-translated ones, OpenSubtitles'); nothing left: no line */
+  char *c = strdup(t); if (!c) return; if (sub_sdh_hide) sub_strip_sdh(c); sub_clean(c); if (!*c) { free(c); return; } /* the line without its clutter (every file: the addons', the AI-translated ones, OpenSubtitles'); nothing left: no line */
   if (*n == *cap) { *cap = *cap ? *cap * 2 : 256; *cues = realloc(*cues, *cap * sizeof **cues); }
   (*cues)[*n].s = s; (*cues)[*n].e = e; (*cues)[*n].t = c; (*n)++;
 }

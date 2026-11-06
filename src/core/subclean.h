@@ -8,4 +8,7 @@
 #define SB_SUBCLEAN_H
 #include <stddef.h>
 size_t sub_clean(char *s);   /* returns the new length */
+/* sound descriptions out ([coughs], (gunshots), ♪ MUSIC ♪, JOHN:), before sub_clean; on while sub_sdh_hide (Settings) */
+extern int sub_sdh_hide;
+size_t sub_strip_sdh(char *s);
 #endif
