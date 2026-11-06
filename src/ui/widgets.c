@@ -455,14 +455,46 @@ void pill_tick(Pill *p, float dt) { tween_tick(&p->x, dt); tween_tick(&p->y, dt)
 #define SP_H 14
 int spoiler_on(void) { static unsigned ser = ~0u; static int on; if (store_serial() != ser) { ser = store_serial(); on = !strcmp(store_get("blurUnseen", "false"), "true"); } return on; }
 int spoiler_failed(const char *src) { return !src || !*src || img_shaped_failed(src, SP_W, SP_H, 0, 1); }
-int spoiler_draw(const char *src, float x, float y, float w, float h, float r) {
-  if (!src || !*src) return 0; GLuint t = img_get_shaped(src, SP_W, SP_H, 0, 1); if (!t) return 0;
+/* the nine layers and the veil, drawn over x, y, w, h */
+static void spoiler_layers(GLuint t, float x, float y, float w, float h, float r) {
   static const float D[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 0.7f, 0.7f }, { -0.7f, 0.7f }, { 0.7f, -0.7f }, { -0.7f, -0.7f } };
   const float du = 1.4f / SP_W, dv = 1.4f / SP_H; /* about a texel and a half of the tiny copy */
-  gfx_opacity_push(gfx_tex_fade(t));
   gfx_image(t, x, y, w, h, r, WHITE_A(255), 0, 0, 1, 1);
   for (int k = 0; k < 8; k++) { float ou = D[k][0] * du, ov = D[k][1] * dv; /* layer k+2 of k+2: 1/(k+2) keeps every layer's share equal */
     gfx_image(t, x, y, w, h, r, WHITE_A((int)(255.0f / (k + 2) + 0.5f)), ou, ov, 1 + ou, 1 + ov); }
   gfx_rrect(x, y, w, h, r, BLACK_A(56));
+}
+/* each still's blur is drawn once into a small picture of its own (the same nine layers: it is just as soft, the
+   tiny copy has nothing sharper to give) and shown after as one picture with its corners: a list of episodes costs
+   what a list of plain stills costs. Two new ones a frame at most (the rest keep the waiting look a frame longer) */
+#define SPC_N 32
+#define SPC_W 192
+#define SPC_H 108
+int gfx_in_target(void);
+static struct { GfxTarget tg; GLuint src; unsigned long long key; unsigned used; } spc[SPC_N];
+static unsigned spcFrame, spcMade;
+static unsigned long long sp_key(const char *s) { unsigned long long h = 1469598103934665603ULL; for (; *s; s++) h = (h ^ (unsigned char)*s) * 1099511628211ULL; return h; }
+static GLuint spoiler_baked(const char *src, GLuint t) {
+  unsigned fr = gfx_frame(); if (fr != spcFrame) { spcFrame = fr; spcMade = 0; }
+  unsigned long long k = sp_key(src); int old = 0;
+  for (int i = 0; i < SPC_N; i++) { if (spc[i].key == k && spc[i].tg.tex) { if (spc[i].src == t) { spc[i].used = fr; return spc[i].tg.tex; } old = i + 1; break; } }
+  if (spcMade >= 2 || gfx_in_target()) return 0;
+  int s = old ? old - 1 : -1;
+  if (s < 0) { for (int i = 0; i < SPC_N; i++) if (!spc[i].tg.tex) { s = i; break; } }
+  if (s < 0) { s = 0; for (int i = 1; i < SPC_N; i++) if (spc[i].used < spc[s].used) s = i; } /* the one not drawn for longest goes */
+  if (!spc[s].tg.tex && !gfx_target_create(&spc[s].tg, SPC_W, SPC_H)) return 0; /* (no drawing into textures here: the layers each frame) */
+  spcMade++; spc[s].key = k; spc[s].src = t; spc[s].used = fr;
+  float lh = SPC_H * (float)SB_W / SPC_W; /* the target's height in layout units */
+  gfx_target_begin(&spc[s].tg, 0xff000000u); spoiler_layers(t, 0, 0, SB_W, lh, 0); gfx_target_end();
+  return spc[s].tg.tex;
+}
+int spoiler_draw(const char *src, float x, float y, float w, float h, float r) {
+  if (!src || !*src) return 0; GLuint t = img_get_shaped(src, SP_W, SP_H, 0, 1); if (!t) return 0;
+  static int noCache = -1; if (noCache < 0) noCache = getenv("SB_SPOILER_LAYERS") != NULL; /* (development: the old way, to compare) */
+  GLuint b = noCache ? 0 : spoiler_baked(src, t);
+  gfx_opacity_push(gfx_tex_fade(t));
+  if (b) gfx_image(b, x, y, w, h, r, WHITE_A(255), 0, 1, 1, 0); /* (a target is upside down) */
+  else if (noCache || gfx_in_target()) spoiler_layers(t, x, y, w, h, r);
+  else { gfx_opacity_pop(); return 0; } /* made next frame: the waiting look meanwhile */
   gfx_opacity_pop(); return 1;
 }
