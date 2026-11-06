@@ -39,6 +39,8 @@ Also inside: DTS sound converted on the TV, Dolby Vision on TVs that support it,
 
 For LG TVs running webOS 3 and later (ARM). Tested on webOS 4.4; see [compatibility](docs/compatibility.md).
 
+**Google TV and Android TV (9 or later):** in the [Downloader](https://www.aftvnews.com/downloader/) app, enter the code **2141492**: it downloads the latest APK. Or download [`StremioOrigin-AndroidTV.apk`](https://github.com/slvjtr1/stremio-origin-fork/releases/latest/download/StremioOrigin-AndroidTV.apk) yourself. Allow installs from Downloader when Android asks.
+
 **Homebrew Channel (rooted TVs):** add the repository `https://slvjtr1.github.io/stremio-origin-fork/apps.json`, then install Stremio Origin.
 
 **Developer Mode:** download `tv.stremioorigin.app_<version>_arm.ipk` from the [latest release](https://github.com/slvjtr1/stremio-origin-fork/releases/latest) and install it with [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop) or `ares-install`.
