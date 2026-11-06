@@ -1,4 +1,5 @@
 /* Sign in: a code to scan with the phone on the left, email and password on the right. */
+#include "core/accounts.h"
 #include "screens/login.h"
 #include "screens/splash.h"
 #include "core/keys.h"
@@ -80,7 +81,7 @@ static int key(int k) {
     if (k == K_UP) { L.editing = 0; SDL_StopTextInput(); return 1; }
     return 1;
   }
-  if (k == K_BACK) { app_quit(); return 1; } /* nowhere to go back to: Back closes the app */
+  if (k == K_BACK) { if (accounts_back()) return 1; app_quit(); return 1; } /* another account kept here: back to it; none: Back closes the app */
   if ((k == K_DOWN && L.zone == 2) || (k == K_UP && L.zone == 0) || k == K_LEFT || k == K_RIGHT) { nudge_start(&L.nudge, k); return 1; }
   if (k == K_DOWN) L.zone = L.zone < 2 ? L.zone + 1 : 2;
   else if (k == K_UP) L.zone = L.zone > 0 ? L.zone - 1 : 0;
