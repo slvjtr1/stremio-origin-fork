@@ -280,10 +280,10 @@ void sb_catalog_page(const CatalogDef *d, int skip, void (*cb)(ItemList *, int, 
 int sb_search_defs(const char *q, CatalogDef *out, int max) {
   int n = 0; cJSON *a = sb_addons(); const cJSON *ad; if (!a) return 0; static const char *const SN[1] = { "search" };
   if (tmdb_has_key() && n + 2 <= max) { char enc[300], p[400]; addon_urlenc(q, enc, sizeof enc); /* TMDB's search first: Arabic or English names, in your language */
-    snprintf(p, sizeof p, "search/movie?query=%s", enc); tm_def(&out[n++], "TMDB", "movie", p, "");
-    snprintf(p, sizeof p, "search/tv?query=%s", enc); tm_def(&out[n++], "TMDB", "series", p, ""); }
+    snprintf(p, sizeof p, "search/movie?query=%s%s", enc, tmdbcat_search_strict() ? "&sk=1" : ""); tm_def(&out[n++], "TMDB", "movie", p, "");
+    snprintf(p, sizeof p, "search/tv?query=%s%s", enc, tmdbcat_search_strict() ? "&sk=1" : ""); tm_def(&out[n++], "TMDB", "series", p, ""); }
   cJSON_ArrayForEach(ad, a) { if (!sb_addon_on(ad)) continue; const cJSON *cats = js_arr(js_obj(ad, "manifest"), "catalogs"), *cat; char base[512]; addon_base(ad, base, sizeof base);
-    if (tmdb_has_key() && !strncmp(base, CINEMETA, strlen(CINEMETA))) continue; /* (TMDB's search instead) */
+    if (tmdb_has_key() && (!strncmp(base, CINEMETA, strlen(CINEMETA)) || tmdbcat_search_strict())) continue; /* (TMDB's search instead; strict: TMDB's alone, each title checked) */
     if (cats) cJSON_ArrayForEach(cat, cats) { const char *ctype = js_str(cat, "type", NULL), *cid = js_str(cat, "id", NULL);
       if (!ctype || !cid || !addon_cat_accepts(cat, SN, 1) || n >= max) continue;
       char path[512], te[96], ie[300], ex[300] = ""; addon_urlenc(ctype, te, sizeof te); addon_urlenc(cid, ie, sizeof ie); snprintf(path, sizeof path, "%s/catalog/%s/%s", base, te, ie);

@@ -13,4 +13,6 @@ int  tmdbcat_is(const char *url);                    /* a "tmdb:" address */
 void tmdbcat_make(const char *path, char *out, size_t cap);
 /* TMDB's genre id for Cinemeta's English genre name (movie or series); 0 when it has none */
 int  tmdbcat_genre(const char *type, const char *name);
+/* Search shows only titles that stream on a well-known service (Netflix, Prime Video, Disney+...): Settings, on by default */
+int  tmdbcat_search_strict(void);
 #endif
