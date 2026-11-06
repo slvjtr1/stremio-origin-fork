@@ -14,12 +14,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include "core/hit.h"
-#include "core/httpd.h"
 #include "core/tmdb.h"
-#include "ui/qr.h"
+#include "core/store.h"
 
 #define SKEYS "abcdefghijklmnopqrstuvwxyz1234567890"
 #define NK 36
+static const char *const AKEYS[36] = { "ا", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع",
+  "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي", "ة", "ى", "ء", "أ", "إ", "آ", "ؤ", "ئ" };
+#define K_SPACE NK
+#define K_BKSP (NK + 1)
+#define K_CLR (NK + 2)
+#define K_LANG (NK + 3)
+#define NKEYS (NK + 4)
+static const int LASTCOL[4] = { 0, 1, 4, 5 };       /* the last row's keys by column: the language, Space (three wide), backspace, Clear */
+static int last_key(int c) { return c <= 0 ? K_LANG : c <= 3 ? K_SPACE : c == 4 ? K_BKSP : K_CLR; }
+static int last_idx(int ki) { return ki == K_LANG ? 0 : ki == K_SPACE ? 1 : ki == K_BKSP ? 2 : 3; }
 #define SCOLS 6
 #define SMAX 24
 #define NCAT 16
@@ -31,25 +40,25 @@
 #define RIGHT_X (72.0f + 620)
 #define GRID_W (SB_W - 72 - RIGHT_X)
 static struct {
-  int zone; /* 0 kb, 1 sug, 2 res */ int kr, kc, si, ri; char q[48]; unsigned tok; int built;
+  int zone; /* 0 kb, 1 sug, 2 res */ int kr, kc, si, ri; char q[128]; unsigned tok; int built; int ar; /* the keyboard in Arabic */ int hist; /* the chips are the recent searches */
   ItemList items; char sug[6][128]; int nsug; int loading, final;
   ItemList top, cat[NCAT]; int topDone, ncat, catDone[NCAT], topFail, catFail[NCAT], allFailed; double liveAt, catAt; int livePending, catPending;
   Tween kfx, kfy, kfw, caretX; double caretAt; int caretSeen; /* (the text cursor's glide and breath) */
   Tween sugX; Ring ring; Tween gridY; Timer1 in; Timer1 gridIn; Nudge nudge; int kfShown;
   int drawn;                                  /* a search ran once: the hint line speaks from then on */
-  char qrUrl[300]; int qrOk; double qrAt, typedAt; int seq, seqKnown, phone; /* typing on the phone */
   char pu[SMAX][512];                         /* each result's poster address, resolved when the results change */
 } S;
 static int rows_of(void) { return (NK + SCOLS - 1) / SCOLS; }
-static int key_at(int r, int c) { if (r < rows_of()) return r * SCOLS + c; return NK + (c / 2 < 2 ? c / 2 : 2); } /* the last row: Space, backspace, (clear) */
+static int key_at(int r, int c) { if (r < rows_of()) return r * SCOLS + c; return last_key(c); }
 static void live(void);
-static void set_q(const char *q) { snprintf(S.q, sizeof S.q, "%.40s", q); S.liveAt = app_now() + 0.26; S.livePending = 1; }
+static void set_q(const char *q) { snprintf(S.q, sizeof S.q, "%s", q); S.liveAt = app_now() + 0.26; S.livePending = 1; }
 static void type_key(int ki) {
-  char q[64]; snprintf(q, sizeof q, "%s", S.q); size_t n = strlen(q);
-  if (ki < NK) { if (n < 40) { q[n] = SKEYS[ki]; q[n + 1] = 0; } }
-  else if (ki == NK) { if (n && q[n - 1] != ' ') { q[n] = ' '; q[n + 1] = 0; } }  /* space */
-  else if (ki == NK + 1) { if (n) { n--; while (n && ((unsigned char)q[n] & 0xc0) == 0x80) n--; q[n] = 0; } } /* backspace */
-  else if (ki == NK + 2) q[0] = 0;                                                  /* clear */
+  char q[128]; snprintf(q, sizeof q, "%s", S.q); size_t n = strlen(q);
+  if (ki < NK) { const char *c = S.ar ? AKEYS[ki] : NULL; if (c) { if (n + strlen(c) < 100) snprintf(q + n, sizeof q - n, "%s", c); } else if (n < 100) { q[n] = SKEYS[ki]; q[n + 1] = 0; } }
+  else if (ki == K_SPACE) { if (n && q[n - 1] != ' ') { q[n] = ' '; q[n + 1] = 0; } }  /* space */
+  else if (ki == K_BKSP) { if (n) { n--; while (n && ((unsigned char)q[n] & 0xc0) == 0x80) n--; q[n] = 0; } } /* backspace (a whole letter) */
+  else if (ki == K_CLR) q[0] = 0;                                                  /* clear */
+  else if (ki == K_LANG) { S.ar = !S.ar; store_set("kbLang", S.ar ? "ar" : "en"); return; } /* English / Arabic */
   set_q(q);
 }
 static void results_draw_state(void) {
@@ -81,13 +90,12 @@ static void merge(void) {
   if (changed && n) timer_start(&S.gridIn, 0.3f); /* new results fade in */
   int all = S.topDone && !S.catPending; for (int c = 0; c < S.ncat; c++) all = all && S.catDone[c]; S.final = all; S.loading = !S.final;
   int failed = all && S.topFail; for (int c = 0; c < S.ncat; c++) failed = failed && S.catFail[c]; S.allFailed = failed && !n; /* every source failed: said in the hint line, never as a card */
-  if (S.phone && n && SCR == SCR_SEARCH) { S.phone = 0; S.zone = 2; S.ri = 0; topNav.active = 0; } /* typed on the phone: the results take the focus */
   results_draw_state();
 }
 static void on_sug(ItemList *l, char names[6][128], int nn, void *ud) {
   if ((unsigned)(uintptr_t)ud != S.tok) { if (l) itemlist_free(l); return; }
   itemlist_clear(&S.top); S.topFail = !l || l->total < 0; if (l) { S.top = *l; free(l); }
-  S.nsug = 0; for (int i = 0; i < nn && S.nsug < 6; i++) { int dup = 0; for (int k = 0; k < S.nsug; k++) if (!strcasecmp(S.sug[k], names[i])) dup = 1; if (!dup && names[i][0]) snprintf(S.sug[S.nsug++], 128, "%s", names[i]); }
+  S.hist = 0; S.nsug = 0; for (int i = 0; i < nn && S.nsug < 6; i++) { int dup = 0; for (int k = 0; k < S.nsug; k++) if (!strcasecmp(S.sug[k], names[i])) dup = 1; if (!dup && names[i][0]) snprintf(S.sug[S.nsug++], 128, "%s", names[i]); }
   S.topDone = 1; merge();
 }
 /* a catalog's answer: the query's token above, the catalog's place in the low 5 bits */
@@ -95,16 +103,31 @@ static void on_cat(ItemList *l, int cached, void *ud) { (void)cached; uintptr_t 
   if ((unsigned)(t >> 5) != (S.tok & 0x7ffffff) || c >= S.ncat) { itemlist_free(l); return; } itemlist_clear(&S.cat[c]); S.catFail[c] = l->total < 0; if (!S.catFail[c]) { int k = 0; for (int i = 0; i < l->n; i++) if (!notice_item(&l->items[i])) k++; else fprintf(stderr, "[search] catalog %d sent a notice, left out: %s (%s)\n", c, l->items[i].name, l->items[i].id); S.catFail[c] = l->n > 0 && !k; } /* only notices: failed too */
   S.cat[c] = *l; free(l); S.catDone[c] = 1; merge(); }
 static void urlenc(const char *s, char *out, size_t cap) { size_t o = 0; for (; *s && o + 4 < cap; s++) { unsigned char c = *s; if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') out[o++] = c; else o += snprintf(out + o, cap - o, "%%%02X", c); } out[o] = 0; }
+#define HIST_MAX 10
+static void hist_show(void) { /* the chips while nothing is typed: the recent searches, then Clear history */
+  const cJSON *h = store_node("searchHistory"), *x; S.nsug = 0; S.hist = 0;
+  if (cJSON_IsArray(h)) cJSON_ArrayForEach(x, h) { if (S.nsug >= 5) break; if (cJSON_IsString(x) && *x->valuestring) snprintf(S.sug[S.nsug++], 128, "%s", x->valuestring); }
+  if (S.nsug) { snprintf(S.sug[S.nsug++], 128, "%s", T("Clear history")); S.hist = 1; }
+}
+static void hist_add(const char *q) {
+  char t[128]; snprintf(t, sizeof t, "%s", q); char *e = t + strlen(t); while (e > t && e[-1] == ' ') *--e = 0; const char *p = t; while (*p == ' ') p++; if (strlen(p) < 2) return;
+  cJSON *h = store_node("searchHistory"); if (!cJSON_IsArray(h)) { h = cJSON_CreateArray(); store_set_node("searchHistory", h); }
+  for (int i = cJSON_GetArraySize(h) - 1; i >= 0; i--) { const cJSON *x = cJSON_GetArrayItem(h, i); if (cJSON_IsString(x) && !strcasecmp(x->valuestring, p)) cJSON_DeleteItemFromArray(h, i); } /* once, at the front */
+  cJSON_InsertItemInArray(h, 0, cJSON_CreateString(p)); while (cJSON_GetArraySize(h) > HIST_MAX) cJSON_DeleteItemFromArray(h, HIST_MAX);
+  store_set_node("searchHistory", h);
+}
+static void hist_clear(void) { store_set_node("searchHistory", cJSON_CreateArray()); S.nsug = 0; S.hist = 0; S.zone = 0; toast(T("Search history cleared"), 2000, NULL); }
 static void live(void) {
-  char q[48]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;
+  char q[128]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;
   S.tok++; S.topDone = 0; S.topFail = 0; S.allFailed = 0; for (int c = 0; c < S.ncat; c++) { S.catDone[c] = 0; S.catFail[c] = 0; itemlist_clear(&S.cat[c]); } S.ncat = 0; S.drawn = 1;
-  if (!*p || sb_text_blocked(p)) { itemlist_clear(&S.items); S.nsug = 0; S.loading = 0; S.final = 1; results_draw_state(); return; } /* (nothing looked up for it) */
+  if (!*p || sb_text_blocked(p)) { itemlist_clear(&S.items); S.nsug = 0; S.hist = 0; if (!*p) hist_show(); S.loading = 0; S.final = 1; results_draw_state(); return; } /* (nothing looked up for it: the recent searches) */
+  S.hist = 0;
   S.loading = 1; S.final = 0;
   sb_suggest(p, on_sug, (void *)(uintptr_t)S.tok);
   S.catAt = app_now() + 0.35; S.catPending = 1;
 }
 static void cat_go(void) {
-  char q[48]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;
+  char q[128]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;
   CatalogDef defs[NCAT]; int n = sb_search_defs(p, defs, NCAT);
   if (!n) { char enc[200]; urlenc(p, enc, sizeof enc); const char *ty[2] = { "movie", "series" }; /* no installed catalog searches: Cinemeta's */
     for (int i = 0; i < 2; i++) { memset(&defs[n], 0, sizeof defs[n]); snprintf(defs[n].type, sizeof defs[n].type, "%s", ty[i]); snprintf(defs[n].url, sizeof defs[n].url, CINEMETA "/catalog/%s/top/search=%s.json", ty[i], enc); n++; } }
@@ -112,24 +135,14 @@ static void cat_go(void) {
   fprintf(stderr, "[search] \"%s\" in %d catalog(s)\n", p, n);
   for (int c = 0; c < n; c++) sb_catalog_url(defs[c].url, defs[c].type, 20, on_cat, (void *)(uintptr_t)(((uintptr_t)(S.tok & 0x7ffffff) << 5) | (uintptr_t)c));
 }
-/* the QR for typing on the phone, and what arrives from it (asked only while Search is up) */
-static void phone_ask(void) { if (S.qrOk) { httpd_start(); return; } S.qrAt = app_now(); S.qrOk = httpd_url("", S.qrUrl, sizeof S.qrUrl); }
-static void phone_tick(void) {
-  double now = app_now();
-  if (!S.qrOk && now - S.qrAt >= 2.5) phone_ask(); /* no network address yet: again in a moment */
-  if (!S.qrOk || now - S.typedAt < 2) return; S.typedAt = now;
-  char t[96]; int sq = httpd_typed(S.seqKnown ? S.seq : 0, t, sizeof t);
-  if (!S.seqKnown) { S.seqKnown = 1; S.seq = sq; return; } /* what was typed before this visit stays out */
-  if (sq > S.seq) { S.seq = sq; S.phone = 1; app_glow_kick(); snprintf(S.q, sizeof S.q, "%.40s", t); S.livePending = 0; live(); }
-}
-static void enter(const void *p) { (void)p; S.zone = (S.zone == 2 && S.items.n) ? 2 : 0; timer_start(&S.in, 0.42f); results_draw_state(); S.typedAt = app_now() - 0.8; phone_ask(); }
+static void enter(const void *p) { (void)p; S.zone = (S.zone == 2 && S.items.n) ? 2 : 0; timer_start(&S.in, 0.42f); { const char *kl = store_get("kbLang", NULL); S.ar = kl ? !strcmp(kl, "ar") : !strcmp(i18n_lang(), "ar"); } if (!S.q[0]) hist_show(); results_draw_state(); }
 static void leave(void) {} /* Search keeps its query and results for when you come back */
 static const Item *focused(void) { return S.zone == 2 && S.ri < S.items.n ? &S.items.items[S.ri] : NULL; }
 static int key(int k) {
   int rows = rows_of(), C = SGC; int z0 = S.zone, kr0 = S.kr, kc0 = S.kc, si0 = S.si, ri0 = S.ri;
   if (S.zone == 0) {
-    if (k == K_LEFT) { if (S.kr == rows) S.kc = S.kc >= 2 ? S.kc - 2 : 0; else S.kc = S.kc > 0 ? S.kc - 1 : 0; }
-    else if (k == K_RIGHT) { int edge = S.kr == rows ? S.kc >= 4 : S.kc >= SCOLS - 1; if (edge) { if (S.nsug) { S.zone = 1; S.si = 0; } else if (S.items.n) { S.zone = 2; S.ri = 0; } } else S.kc = S.kc + (S.kr == rows ? 2 : 1) < SCOLS ? S.kc + (S.kr == rows ? 2 : 1) : SCOLS - 1; }
+    if (k == K_LEFT) { if (S.kr == rows) { int i = last_idx(last_key(S.kc)); S.kc = LASTCOL[i > 0 ? i - 1 : 0]; } else S.kc = S.kc > 0 ? S.kc - 1 : 0; }
+    else if (k == K_RIGHT) { int edge = S.kr == rows ? last_key(S.kc) == K_CLR : S.kc >= SCOLS - 1; if (edge) { if (S.nsug) { S.zone = 1; S.si = 0; } else if (S.items.n) { S.zone = 2; S.ri = 0; } } else if (S.kr == rows) S.kc = LASTCOL[last_idx(last_key(S.kc)) + 1]; else S.kc++; }
     else if (k == K_UP) { if (S.kr > 0) S.kr--; else { topnav_focus(); return 1; } }
     else if (k == K_DOWN) { if (S.kr < rows) S.kr++; }
     else if (k == K_OK) type_key(key_at(S.kr, S.kc));
@@ -140,7 +153,7 @@ static int key(int k) {
     else if (k == K_RIGHT) { if (S.si < S.nsug - 1) S.si++; }
     else if (k == K_DOWN) { if (S.items.n) { S.zone = 2; S.ri = 0; } }
     else if (k == K_UP) { topnav_focus(); return 1; }
-    else if (k == K_OK) { snprintf(S.q, sizeof S.q, "%.40s", S.sug[S.si]); S.livePending = 0; live(); }
+    else if (k == K_OK) { if (S.hist && S.si == S.nsug - 1) { hist_clear(); return 1; } snprintf(S.q, sizeof S.q, "%s", S.sug[S.si]); S.livePending = 0; live(); }
     else if (k == K_BACK) { S.zone = 0; return 1; }
     if (k != K_OK && z0 == S.zone && si0 == S.si) nudge_start(&S.nudge, k);
   } else {
@@ -149,7 +162,7 @@ static int key(int k) {
     else if (k == K_RIGHT) { if (c < C - 1 && S.ri < S.items.n - 1) S.ri++; }
     else if (k == K_UP) { if (r > 0) S.ri -= C; else if (S.nsug) S.zone = 1; }
     else if (k == K_DOWN) { if (S.ri + C < S.items.n) S.ri += C; else if (r < (S.items.n - 1) / C) S.ri = S.items.n - 1; }
-    else if (k == K_OK) { app_open_item(&S.items.items[S.ri]); return 1; }
+    else if (k == K_OK) { hist_add(S.q); app_open_item(&S.items.items[S.ri]); return 1; }
     else if (k == K_BACK) { S.zone = 0; return 1; }
     if (z0 == S.zone && ri0 == S.ri) nudge_start(&S.nudge, k);
   }
@@ -158,19 +171,17 @@ static int key(int k) {
 static void key_rect(int ki, float *x, float *y, float *w) {
   float kx = LEFT_X, ky = TOP_Y + 76 + 18;
   if (ki < NK) { *x = kx + (ki % SCOLS) * 92; *y = ky + (ki / SCOLS) * 74; *w = 84; }
-  else { *x = kx + (ki - NK) * 184; *y = ky + rows_of() * 74; *w = 176; }
+  else { int c0 = LASTCOL[last_idx(ki)], c1 = ki == K_SPACE ? 3 : c0; *x = kx + c0 * 92; *y = ky + rows_of() * 74; *w = (c1 - c0 + 1) * 92 - 8; }
   if (app_rtl()) *x = SB_W - *x - *w;
 }
 /* the text art of the results around the focus, for their pages (drawn there at 520x175): ready when one opens */
 static void logos_ahead(void) { static double at0; double now = app_now(); if (now - at0 < 0.5 || S.zone != 2) return; at0 = now;
   for (int i = S.ri - SGC; i <= S.ri + SGC; i++) { if (i < 0 || i >= S.items.n) continue; char lu[512]; sb_logo_of(&S.items.items[i], lu, sizeof lu); if (lu[0]) img_prefetch_pri(lu, 520, 175); } }
 static void tick(float dt) {
-  { static unsigned seen; unsigned h = httpd_hits(); if (h != seen) { if (seen && SCR == SCR_SEARCH) app_glow_kick(); seen = h; } } /* the phone opened the page: the glows feel it */
   logos_ahead();
   timer_tick(&S.in, dt); timer_tick(&S.gridIn, dt); nudge_tick(&S.nudge, dt); tween_tick(&S.kfx, dt); tween_tick(&S.caretX, dt); tween_tick(&S.kfy, dt); tween_tick(&S.kfw, dt); tween_tick(&S.sugX, dt); ring_tick(&S.ring, dt); tween_tick(&S.gridY, dt);
   if (S.livePending && app_now() >= S.liveAt) { S.livePending = 0; live(); }
   if (S.catPending && app_now() >= S.catAt) { S.catPending = 0; cat_go(); }
-  phone_tick();
   int act = !topNav.active;
   float x, y, w; key_rect(key_at(S.kr, S.kc), &x, &y, &w);
   if (!S.kfShown) { tween_set(&S.kfx, x); tween_set(&S.kfy, y); tween_set(&S.kfw, w); S.kfShown = 1; } else { tween_to(&S.kfx, x, 0.14f, EASE_OUT); tween_to(&S.kfy, y, 0.14f, EASE_OUT); tween_to(&S.kfw, w, 0.14f, EASE_OUT); }
@@ -178,7 +189,7 @@ static void tick(float dt) {
   if (act && S.zone == 2 && S.ri < S.items.n) { float gx = (app_rtl() ? SB_W - RIGHT_X - 236 - (S.ri % SGC) * 272 : RIGHT_X + (S.ri % SGC) * 272), gy = row * SPITCH; ring_to(&S.ring, gx, gy, 0); } else ring_hide(&S.ring);
 }
 static void ptr_off(void) { if (topNav.active) topNav.active = 0; }
-static void key_focus(int ki, int b) { (void)b; int kr = ki < NK ? ki / SCOLS : rows_of(), kc = ki < NK ? ki % SCOLS : (ki - NK) * 2; ptr_off(); if (S.zone != 0 || S.kr != kr || S.kc != kc) { S.zone = 0; S.kr = kr; S.kc = kc; } }
+static void key_focus(int ki, int b) { (void)b; int kr = ki < NK ? ki / SCOLS : rows_of(), kc = ki < NK ? ki % SCOLS : LASTCOL[last_idx(ki)]; ptr_off(); if (S.zone != 0 || S.kr != kr || S.kc != kc) { S.zone = 0; S.kr = kr; S.kc = kc; } }
 static void sug_focus(int i, int b) { (void)b; ptr_off(); if (S.zone != 1 || S.si != i) { S.zone = 1; S.si = i; } }
 static void res_focus(int i, int b) { (void)b; ptr_off(); if (S.zone != 2 || S.ri != i) { S.zone = 2; S.ri = i; } }
 static void draw(void) {
@@ -197,30 +208,23 @@ static void draw(void) {
     double since = app_now() - S.caretAt; float ca = since < 0.6 ? 1 : 0.35f + 0.65f * (0.5f + 0.5f * cosf((float)((since - 0.6) * 6.2832 / 1.1)));
     float cx = rtl ? tx - S.caretX.v - 3 : tx + S.caretX.v; gfx_rrect(cx, qy + 20, 3, 36, 1.5f, col_alpha(ACC2 | 0xff000000u, ca)); }
   /* the keyboard: the accent block slides under the focused key */
-  for (int i = 0; i < NK + 3; i++) { float x, y, w; key_rect(i, &x, &y, &w); hit_add(x, y, w, 66, key_focus, NULL, i, 0); gfx_rrect(x, y, w, 66, 14, WHITE_A(15)); } /* every key's plate, under the accent too: no hole where it glides to */
+  for (int i = 0; i < NKEYS; i++) { float x, y, w; key_rect(i, &x, &y, &w); hit_add(x, y, w, 66, key_focus, NULL, i, 0); gfx_rrect(x, y, w, 66, 14, WHITE_A(15)); } /* every key's plate, under the accent too: no hole where it glides to */
   if (act && S.zone == 0) { gfx_offset_push(nudge_x(&S.nudge), nudge_y(&S.nudge)); gfx_rrect(S.kfx.v, S.kfy.v, S.kfw.v, 66, 14, ACC); gfx_offset_pop(); }
-  for (int i = 0; i < NK + 3; i++) { float x, y, w; key_rect(i, &x, &y, &w); int f = act && S.zone == 0 && key_at(S.kr, S.kc) == i;
+  for (int i = 0; i < NKEYS; i++) { float x, y, w; key_rect(i, &x, &y, &w); int f = act && S.zone == 0 && key_at(S.kr, S.kc) == i;
     float nx = f ? nudge_x(&S.nudge) : 0, ny = f ? nudge_y(&S.nudge) : 0;
     uint32_t fg = f ? ACC_FG : WHITE_A(219);
-    if (i < NK) { char s[2] = { (char)(SKEYS[i] >= 'a' ? SKEYS[i] - 32 : SKEYS[i]), 0 }; text_draw(s, x + w / 2 + nx, y + (66 - text_line_height(28)) / 2 + ny, 28, 700, fg, 0, 0, ALIGN_CENTER); }
-    else if (i == NK + 2) text_draw(T("Clear"), x + w / 2 + nx, y + (66 - text_line_height(24)) / 2 + ny, 24, 700, fg, 0.4f, w - 16, ALIGN_CENTER);
-    else if (i == NK) text_draw(T("Space"), x + w / 2 + nx, y + (66 - text_line_height(24)) / 2 + ny, 24, 700, fg, 0.4f, w - 16, ALIGN_CENTER);
+    if (i < NK) { char s[2] = { (char)(SKEYS[i] >= 'a' ? SKEYS[i] - 32 : SKEYS[i]), 0 }; text_draw(S.ar ? AKEYS[i] : s, x + w / 2 + nx, y + (66 - text_line_height(28)) / 2 + ny, 28, 700, fg, 0, 0, ALIGN_CENTER); }
+    else if (i == K_CLR) text_draw(T("Clear"), x + w / 2 + nx, y + (66 - text_line_height(22)) / 2 + ny, 22, 700, fg, 0, w - 10, ALIGN_CENTER);
+    else if (i == K_LANG) text_draw(S.ar ? "EN" : "ع", x + w / 2 + nx, y + (66 - text_line_height(26)) / 2 + ny, 26, 700, fg, 0, w - 10, ALIGN_CENTER); /* the other language's: what pressing it gives */
+    else if (i == K_SPACE) text_draw(T("Space"), x + w / 2 + nx, y + (66 - text_line_height(24)) / 2 + ny, 24, 700, fg, 0.4f, w - 16, ALIGN_CENTER);
     else icon_draw("backspace", x + w / 2 - 15 + nx, y + 18 + ny, 30, fg); }
-  /* the QR for typing on the phone, under the keyboard (the code only where the TV has a network address) */
-  if (S.qrOk) { float qy = TOP_Y + 76 + 18 + (rows_of() + 1) * 74 + 30, qx = rtl ? SB_W - LEFT_X - 150 : LEFT_X;
-    if (!qr_draw(S.qrUrl, qx, qy, 150, 14, 8)) gfx_rrect(qx, qy, 150, 150, 14, WHITE_A(20));
-    const char *t1 = T("Type on your phone"), *t2 = T("Scan with your phone's camera, then type there"); float tw = 552 - 150 - 22, lh2 = 31;
-    static int n2; static unsigned n2Lg; if (n2Lg != i18n_gen()) { n2Lg = i18n_gen(); n2 = text_wrap_count(t2, tw, 3, 23, 400, 0); } /* once per language */
-    float th = text_line_height(24) + 6 + n2 * lh2, ty = qy + 75 - th / 2, tx = rtl ? qx - 22 : qx + 150 + 22;
-    text_draw(t1, tx, ty, 24, 700, WHITE_A(255), 0, tw, rtl ? ALIGN_RIGHT : ALIGN_LEFT);
-    text_draw_wrapped(t2, tx, ty + text_line_height(24) + 6 + (lh2 - text_line_height(23)) / 2, tw, 3, 23, 400, WHITE_A(191), 0, rtl ? ALIGN_RIGHT : ALIGN_LEFT, lh2); }
   /* the right side: hint, suggestions, the grid */
   float rx = rtl ? SB_W - RIGHT_X : RIGHT_X, ry = TOP_Y; int al = rtl ? ALIGN_RIGHT : ALIGN_LEFT;
   if (S.q[0] && !S.items.n && !S.final) { /* the loading line */
     float lx = rtl ? rx - 220 : rx, ly = ry + 14; gfx_rrect(lx, ly, 220, 3, 2, WHITE_A(31)); gfx_clip_push(lx, ly, 220, 3);
     float ph = fmodf((float)app_now() / 1.1f, 1), p = ease_apply(EASE_IN_OUT, ph), sx = lx + 220 * 0.4f * (-1 + 3.5f * p);
     gfx_rrect_h(sx, ly, 44, 3, 2, col_alpha(ACC2, 0), ACC2); gfx_rrect_h(sx + 44, ly, 44, 3, 2, ACC2, col_alpha(ACC2, 0)); gfx_clip_pop(); }
-  else if (S.drawn) { static char h[160], hq[48]; static int hn = -1; static unsigned hLg; /* the hint line: made when the query, the results or the language change */
+  else if (S.drawn) { static char h[160], hq[128]; static int hn = -1; static unsigned hLg; /* the hint line: made when the query, the results or the language change */
     int hs = S.items.n ? 1 : S.allFailed ? 2 : 0;
     if (hLg != i18n_gen() || hn != hs || strcmp(hq, S.q)) { hLg = i18n_gen(); hn = hs; snprintf(hq, sizeof hq, "%s", S.q);
       if (!S.q[0]) snprintf(h, sizeof h, "%s", T("Type to search films and series")); else if (hs == 2) snprintf(h, sizeof h, "%s", T("Search is unavailable right now. Try again in a moment"));

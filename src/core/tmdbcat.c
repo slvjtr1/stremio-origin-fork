@@ -24,7 +24,7 @@ static void map_save(void) {
 static const char *map_get(const char *k) { const cJSON *v = cJSON_GetObjectItemCaseSensitive(map, k); return cJSON_IsString(v) ? v->valuestring : NULL; }
 
 /* ---- one list being answered ---------------------------------------------------------------------------------- */
-typedef struct { NetCb cb; void *ud; cJSON *res; int pending, done, so; char kind; } Job; /* kind: 'm', 't' or 0 (each result says); so: the well-known services' titles only */
+typedef struct { NetCb cb; void *ud; cJSON *res; int pending, done, so; char kind; char alt[3][900]; int nalt, ai; } Job; /* kind: 'm', 't' or 0 (each result says); so: the well-known services' titles only */
 typedef struct { Job *j; char key[24]; } Ext;
 static char kind_of(const Job *j, const cJSON *r) {
   if (j->kind) return j->kind;
@@ -72,6 +72,7 @@ static void on_ext(int st, const unsigned char *b, size_t len, void *ud) {
 }
 static void on_list(int st, const unsigned char *b, size_t len, void *ud) {
   (void)len; Job *j = ud; cJSON *x = st == 200 ? net_json(b) : NULL; const cJSON *rs = js_arr(x, "results");
+  if (rs && !cJSON_GetArraySize(rs) && j->ai < j->nalt) { net_json_free(x); fprintf(stderr, "[search] nothing: asked again as \"%s\"\n", j->alt[j->ai]); if (tmdb_request(j->alt[j->ai++], on_list, j)) return; j->cb(404, NULL, 0, j->ud); free(j); return; } /* a spelling slip: the next way of writing it */
   if (!rs) { net_json_free(x); j->cb(st == 200 ? 404 : (st ? st : -1), NULL, 0, j->ud); free(j); return; }
   map_load(); j->res = cJSON_Duplicate(rs, 1); net_json_free(x); j->pending = 1; /* (the list's own count, let go below) */
   const cJSON *r; cJSON_ArrayForEach(r, j->res) {
@@ -82,6 +83,31 @@ static void on_list(int st, const unsigned char *b, size_t len, void *ud) {
   if (--j->pending <= 0) finish(j);
 }
 
+/* ---- a search that finds nothing, written again: the slips people make in Arabic (ه for ة at a word's end and back,
+   ى / ي, the alef with or without its hamza), then without its last word ------------------------------------------------ */
+static void url_dec(const char *s, char *o, size_t cap) { size_t n = 0; for (; *s && n + 1 < cap; s++) { if (*s == '%' && isxdigit((unsigned char)s[1]) && isxdigit((unsigned char)s[2])) { char h[3] = { s[1], s[2], 0 }; o[n++] = (char)strtol(h, NULL, 16); s += 2; } else o[n++] = *s == '+' ? ' ' : *s; } o[n] = 0; }
+static void url_enc(const char *s, char *o, size_t cap) { size_t n = 0; for (; *s && n + 4 < cap; s++) { unsigned char c = (unsigned char)*s; if (isalnum(c) || strchr("-_.~", c)) o[n++] = (char)c; else n += (size_t)snprintf(o + n, cap - n, "%%%02X", c); } o[n] = 0; }
+static int word_end(const char *p) { return !p[0] || p[0] == ' '; }
+/* how: 1 the word-end letters swapped (ه <-> ة, ى <-> ي), 2 every letter in its plain form (ا, ه, ي), 3 the last word left out */
+static int rewrite(const char *in, int how, char *out, size_t cap) {
+  size_t n = 0; int arabic = 0;
+  if (how == 3) { snprintf(out, cap, "%s", in); char *e = out + strlen(out); while (e > out && e[-1] == ' ') *--e = 0; char *sp = strrchr(out, ' '); if (!sp) return 0; while (sp > out && sp[-1] == ' ') sp--; *sp = 0; return strlen(out) >= 2; }
+  for (const unsigned char *p = (const unsigned char *)in; *p && n + 3 < cap;) {
+    if (p[0] == 0xd8 || p[0] == 0xd9) { arabic = 1; unsigned c = (unsigned)(p[0] << 8 | p[1]); const char *end = (const char *)p + 2; unsigned w = c;
+      if (how == 1 && word_end(end)) w = c == 0xd987 ? 0xd8a9 : c == 0xd8a9 ? 0xd987 : c == 0xd989 ? 0xd98a : c == 0xd98a ? 0xd989 : c;
+      if (how == 2) w = (c == 0xd8a3 || c == 0xd8a5 || c == 0xd8a2) ? 0xd8a7 : c == 0xd8a9 ? 0xd987 : c == 0xd989 ? 0xd98a : c;
+      out[n++] = (char)(w >> 8); out[n++] = (char)(w & 0xff); p += 2; continue; }
+    out[n++] = (char)*p++; }
+  out[n] = 0; return arabic && strcmp(out, in) != 0;
+}
+static void search_alts(Job *j, const char *path, const char *tail) {
+  const char *q = strstr(path, "query="); if (!q) return; q += 6; const char *qe = strchr(q, '&');
+  char enc[400], raw[400]; snprintf(enc, sizeof enc, "%.*s", (int)(qe ? qe - q : (long)strlen(q)), q); url_dec(enc, raw, sizeof raw);
+  char seen[3][400]; int ns = 0;
+  for (int how = 1; how <= 3 && j->nalt < 3; how++) { char v[400], ve[600]; if (!rewrite(raw, how, v, sizeof v)) continue;
+    int dup = 0; for (int i = 0; i < ns; i++) if (!strcmp(seen[i], v)) dup = 1; if (dup) continue; snprintf(seen[ns++], sizeof seen[0], "%s", v);
+    url_enc(v, ve, sizeof ve); snprintf(j->alt[j->nalt++], sizeof j->alt[0], "%.*s%s%s%s", (int)(q - path), path, ve, qe ? qe : "", tail); }
+}
 int tmdbcat_search_strict(void) { return strcmp(store_get("searchKnownOnly", "true"), "false") != 0; } /* Settings: on unless turned off */
 int tmdbcat_is(const char *url) { return url && !strncmp(url, "tmdb:", 5); }
 void tmdbcat_make(const char *path, char *out, size_t cap) { snprintf(out, cap, "tmdb:%s:%s", tmdb_lang(), path); }
@@ -92,6 +118,7 @@ void tmdbcat_url(const char *url, int page, NetCb cb, void *ud) {
   char path[700]; snprintf(path, sizeof path, "/%s", c + 1); size_t pl = strlen(path); if (pl > 5 && !strcmp(path + pl - 5, ".json")) path[pl - 5] = 0;
   char full[900]; snprintf(full, sizeof full, "%s%clanguage=%s&include_adult=false&page=%d", path, strchr(path, '?') ? '&' : '?', lg, page < 1 ? 1 : page);
   Job *j = calloc(1, sizeof *j); j->cb = cb; j->ud = ud; j->so = !strncmp(path, "/search/", 8) && tmdbcat_search_strict();
+  if (!strncmp(path, "/search/", 8)) { char tail[120]; snprintf(tail, sizeof tail, "%clanguage=%s&include_adult=false&page=%d", strchr(path, '?') ? '&' : '?', lg, page < 1 ? 1 : page); search_alts(j, path, tail); }
   j->kind = strstr(path, "/multi") || strstr(path, "/all/") ? 0 : (!strncmp(path, "/tv", 3) || strstr(path, "/tv/") || strstr(path, "/tv?")) ? 't' : 'm';
   if (!tmdb_request(full, on_list, j)) { free(j); cb(-1, NULL, 0, ud); } /* no key */
 }
