@@ -27,6 +27,7 @@
 #include "screens/revpanel.h"
 #include "ui/qrcard.h"
 #include "ui/confirm.h"
+#include "core/accounts.h"
 #include "core/update.h"
 #include "screens/logcard.h"
 #include "screens/welcome.h"
@@ -49,6 +50,7 @@ static const Opt SVOL[] = { { "10", "10%" }, { "20", "20%" }, { "30", "30%" }, {
 static const Opt LANG_OPTS[] = { { "", "Off" }, { "eng", "English" }, { "ara", "Arabic" }, { "fre", "French" }, { "spa", "Spanish" }, { "ger", "German" }, { "ita", "Italian" }, { "por", "Portuguese" }, { "rus", "Russian" }, { "tur", "Turkish" }, { "pol", "Polish" }, { "dut", "Dutch" }, { "swe", "Swedish" }, { "heb", "Hebrew" }, { "hin", "Hindi" }, { "jpn", "Japanese" }, { "kor", "Korean" }, { "chi", "Chinese" } };
 static const Opt SEEK[] = { { "5", "5s" }, { "10", "10s" }, { "15", "15s" }, { "20", "20s" }, { "30", "30s" } };
 static const Opt AUDL[] = { { "orig", "Original language" }, { "eng", "English" }, { "ara", "Arabic" }, { "jpn", "Japanese" }, { "fre", "French" }, { "spa", "Spanish" }, { "ger", "German" }, { "ita", "Italian" }, { "por", "Portuguese" }, { "rus", "Russian" }, { "tur", "Turkish" }, { "pol", "Polish" }, { "dut", "Dutch" }, { "swe", "Swedish" }, { "heb", "Hebrew" }, { "hin", "Hindi" }, { "kor", "Korean" }, { "chi", "Chinese" } };
+static const Opt UPL[] = { { "off", "Off" }, { "C", "C" }, { "B", "B" }, { "A", "A: the strongest" } };
 static const Opt DTSM[] = { { "auto", "Auto" }, { "convert", "Convert" }, { "off", "Off" } }; /* DTS sound: found out by playing, always converted, or left to the TV */
 static const Opt ASPECT[] = { { "fit", "Original" }, { "fill", "Fill the screen" }, { "zoom", "Zoom" } };
 static const Opt SIZES[] = { { "0", "72%" }, { "1", "80%" }, { "2", "100%" }, { "3", "120%" }, { "4", "140%" }, { "5", "160%" }, { "6", "180%" } };
@@ -68,9 +70,9 @@ static const Opt CLOCKO[] = { { "24", "24-hour" }, { "12", "12-hour" } };
 static const Opt HROWS[] = { { "8", "8" }, { "12", "12" }, { "16", "16" }, { "24", "24" } }; /* the addons' catalogs on Home (stremio.c: home_rows) */
 static const Opt APPICON[] = { { "origin", "Origin" }, { "classic", "Classic" } };
 static const Opt ACCENT_OPTS[] = { { "logo", "From the logo" }, { "adaptive", "From the artwork" }, { "purple", "Purple" }, { "violet", "Violet" }, { "fuchsia", "Fuchsia" }, { "pink", "Pink" }, { "rose", "Rose" }, { "red", "Red" }, { "orange", "Orange" }, { "amber", "Amber" }, { "gold", "Gold" }, { "lime", "Lime" }, { "green", "Green" }, { "emerald", "Emerald" }, { "teal", "Teal" }, { "cyan", "Cyan" }, { "sky", "Sky" }, { "blue", "Blue" }, { "indigo", "Indigo" }, { "graphite", "Graphite" } };
-#define NCAT 9
+#define NCAT 11
 #define MAXROWS 48
-static Setting playBase[13], playS[14], subsBase[17], subsS[17], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[7];
+static Setting playBase[12], playS[13], subsBase[18], subsS[18], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[7], picS[6], accS[8];
 static Cat cats[NCAT]; static int ncat; /* (Keys leaves when this build carries every key) */
 static int cat_of(const Setting *opts) { for (int i = 0; i < ncat; i++) if (cats[i].opts == opts) return i; return -1; }
 
@@ -139,6 +141,18 @@ static int keys_opts(void) {
 }
 static void relang(void) { { int l = cat_of(langS); if (l >= 0) { cats[l].n = lang_opts(); if (S.cat == l && S.idx >= cats[l].n) S.idx = cats[l].n - 1; } } for (int i = 0; i < ncat; i++) if (cats[i].opts == keyS) { cats[i].n = keys_opts(); if (S.cat == i && S.idx >= cats[i].n) S.idx = cats[i].n - 1; } S.dirty = 1; }
 static void on_tmdb_card(int on, void *ud) { (void)ud; if (on == tmdbOn) return; relang(); if (on) toast(T("Titles and descriptions in your language"), 2000, NULL); }
+/* Accounts: the one in use, the others kept on this TV (OK switches), and Add account */
+static unsigned accSeen;
+static int acc_opts(void) {
+  int n = 0, na = accounts_n(); accSeen = accounts_serial();
+  for (int i = 0; i < na && n < 7; i++) { Setting *s = &accS[n]; char k[16]; snprintf(k, sizeof k, "__acc%d", i);
+    if (accounts_is_current(i)) { set_s(s, "__accCur", "", T("In use on this TV"), NULL, 0, ""); s->info = 1; }
+    else set_act(s, k, "", T("OK to switch to it"));
+    snprintf(s->lb, sizeof s->lb, "%s", accounts_email(i)[0] ? accounts_email(i) : T("Stremio account")); s->raw = 1; n++; }
+  if (na < ACCOUNTS_MAX) { set_act(&accS[n], "__accAdd", "Add account", "Sign in to another account; this one stays a press away"); n++; }
+  return n;
+}
+static void acc_relayout(void) { for (int i = 0; i < ncat; i++) if (cats[i].opts == accS) { cats[i].n = acc_opts(); if (S.cat == i && S.idx >= cats[i].n) S.idx = cats[i].n - 1; } S.dirty = 1; }
 /* About: the update rows (as the update stands now) and Share logs */
 static unsigned aboutSeen;
 static int about_opts(void) {
@@ -157,7 +171,7 @@ static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "appIcon"
   "bingeWatch", "enableNextVideo", "blurUnseen", "clockFmt", "defaultAudioTrack", "dtsMode", "dv7Convert", "enableDefaultAudioTrack", "homeRows",
   "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
   "subsFollow", "subsFont", "subsLang", "subsOutline", "subsOutlineColor", "subsOutlineWidth", "subsPos", "subsShadow", "subsShadowDist",
-  "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "kbLang", "libSort", NULL };
+  "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "filmEnhance", "brightBoost", "darkSee", "voiceClear", "evenVolume", "subsNoSdh", "kbLang", "libSort", NULL };
 static void enter(const void *p); static void show_cat(int i, int dir);
 static void do_reset(void *ud) { (void)ud;
   for (int i = 0; RESET_KEYS[i]; i++) store_remove(RESET_KEYS[i]);
@@ -174,7 +188,6 @@ static void play_layout(void) {
   playS[n++] = playBase[4]; /* the best stream first */
   playS[n++] = playBase[9];
   for (int i = 0; i < 4; i++) { playS[n++] = playBase[i]; if (i == 1) { playS[n++] = playBase[8]; playS[n++] = playBase[10]; } }
-  playS[n++] = playBase[12]; /* anime's picture */
   playS[n++] = playBase[11]; /* what Search shows */
   if (on) playS[n++] = playBase[6];
   const TvCaps *tc = best_caps(); if (tc && tc->dv) playS[n++] = playBase[7];
@@ -187,6 +200,7 @@ static void subs_layout(void) {
   int ol = strcmp(store_get("subsOutline", "true"), "false") != 0, sh = !strcmp(store_get("subsShadow", "false"), "true"), n = 0;
   subsS[n++] = subsBase[15]; /* picked by themselves (on: in the language under it) */
   subsS[n++] = subsBase[16]; /* kept in sync while the film plays */
+  subsS[n++] = subsBase[17]; /* without [coughs] and the like */
   for (int i = 0; i < 6; i++) subsS[n++] = subsBase[i]; /* language, size, font, bold, colour, the outline's switch */
   if (ol) { subsS[n++] = subsBase[6]; subsS[n++] = subsBase[7]; }
   subsS[n++] = subsBase[8]; if (sh) { subsS[n++] = subsBase[9]; subsS[n++] = subsBase[10]; subsS[n++] = subsBase[11]; }
@@ -209,13 +223,13 @@ static void build(void) {
   set_s(&playBase[4], "autoBest", "Play the best stream automatically", "", OO, 2, "false");
   set_s(&playBase[7], "dv7Convert", "Dolby Vision for Blu-ray copies", "Their picture is converted on this TV so it shows in Dolby Vision, not HDR10", OO, 2, "true");
   set_s(&playBase[9], "bestRow", "Best match for this TV", "First in the streams: what this TV plays best, in the title’s own language, subtitles named", OO, 2, "true");
-  set_s(&playBase[12], "animeEnhance", "Anime upscale", "Anime only: the TV's Super Resolution and gradation tuned for drawn pictures on the way to 4K, then put back. Needs Homebrew Channel root", OO, 2, "true");
   set_s(&playBase[11], "searchKnownOnly", "Search well-known services only", "Results are films and series on Netflix, Prime Video, Disney+ and the like", OO, 2, "true");
   set_s(&playBase[10], "blurUnseen", "Blur unwatched episodes", "Their pictures stay blurred and their stories hidden until you watch them: no spoilers", OO, 2, "false");
   set_s(&playBase[8], "skipIntro", "Skip intro, recap and credits", "A button that skips them when you press OK, or automatically", SKIPO, 3, "button");
   set_s(&playBase[6], "bgTrailerVol", "Volume", "The sound comes up softly to this level", SVOL, 10, "70"); playBase[6].sub = 1; /* (shown right under the trailers while they are on: play_layout; drawn as theirs, set in) */
   usb_row();
   set_s(&subsBase[15], "subsAuto", "Turn on subtitles automatically", "When a film starts: your addons' first, else OpenSubtitles, else the film's own track; synced quietly", OO, 2, "true");
+  set_s(&subsBase[17], "subsNoSdh", "Hide sound descriptions", "[coughs], (gunshots) and speakers' names left out of the lines", OO, 2, "true");
   set_s(&subsBase[16], "subsFollow", "Keep subtitles in sync", "Checked again every few minutes in the background; moved only when they drift", OO, 2, "true");
   set_s(&subsBase[0], "subsLang", "Default subtitles", "Chosen by itself when a film starts", LANG_OPTS, 18, "eng");
   set_s(&subsBase[1], "subtitleSize", "Size", "Also in the player, under Subtitles", SIZES, 7, "2");
@@ -238,6 +252,12 @@ static void build(void) {
   set_s(&audS[2], "dtsMode", "DTS sound", "Auto finds out what this TV plays. Convert if you are not sure. Off leaves it to the TV", DTSM, 3, "auto");
   set_s(&audS[3], "uiSound", "Interface sounds", "A soft click as you move between titles", OO, 2, "true");
   set_s(&audS[4], "uiSoundVol", "Interface sound level", "Of the TV\xe2\x80\x99s volume", SVOL, 10, "30");
+  set_s(&picS[0], "animeEnhance", "Anime upscale", "Anime only: the TV's Super Resolution, gradation and line work tuned for drawn pictures on the way to 4K. Also on a button in the player", UPL, 4, "A");
+  set_s(&picS[1], "filmEnhance", "Upscale films and series", "Sharper detail from the TV's own processor, the frame rate untouched. Also on a button in the player", UPL, 4, "off");
+  set_s(&picS[2], "brightBoost", "Brightness", "The screen's light raised while you watch, energy saving off", OO, 2, "false");
+  set_s(&picS[3], "darkSee", "See in the dark", "Dark scenes clearer in a bright room: the TV's AI brightness for dark areas and a slight lift of black", OO, 2, "false");
+  set_s(&picS[4], "voiceClear", "Clear voice", "Speech clearer through the TV's own dialogue enhancer; stereo and Atmos stay as they are", OO, 2, "true");
+  set_s(&picS[5], "evenVolume", "Even volume", "Loud scenes and quiet speech brought closer together", OO, 2, "false");
   int naud = 6; { Setting t = audS[5]; for (int i = 5; i > 2; i--) audS[i] = audS[i - 1]; audS[2] = t; } /* anime's right under the films' */
   set_s(&lookS[0], "accent", "Accent colour", "Dynamic: the colours of the title you open", ACCENT_OPTS, 20, "logo"); /* first, right under its picture */
   set_s(&lookS[1], "ssDelay", "Screensaver", "After a while without a key, the titles of the moment fill the screen", SS_OPTS, 5, "5");
@@ -254,14 +274,16 @@ static void build(void) {
     s->opts = s->dyn; s->nopts = n; }
   int nl = lang_opts(), nk = keys_opts(), na = addon_opts();
   set_act(&acctS[0], "__logout", "Log out", S.acct); acctS[0].raw = 1;
-  int nab = about_opts();
+  int nab = about_opts(), nacc = acc_opts();
   /* grouped by task: what you watch, what the screens look like, account and system; Log out on its own, last */
   Cat c[NCAT] = {
     { "Watch", "Playback", "set_play", "Best match, seek step, next episode, skip intro", NULL, playS, 8, 0 }, /* (the count: play_layout) */
-    { "Watch", "Subtitles", "set_subs", "Automatic, in sync, language, size, font, outline, shadow, height", "subs", subsS, 17, 0 }, /* (the count: subs_layout) */
+    { "Watch", "Subtitles", "set_subs", "Automatic, in sync, sound descriptions, language, size, font, outline, shadow, height", "subs", subsS, 18, 0 }, /* (the count: subs_layout) */
     { "Watch", "Audio", "set_aud", "Audio language, anime, DTS, interface sounds", NULL, audS, naud, 0 },
+    { "Watch", "Picture and sound", "p_asp", "Upscale, brightness, see in the dark, clear voice. Needs Homebrew Channel root", NULL, picS, 6, 0 },
     { "Screens", "Appearance", "set_look", "Accent colour, app icon, clock, catalogs on Home, motion", "look", lookS, 6, 0 },
     { "Screens", "Language", "set_lang", "The app, and titles and descriptions", NULL, langS, nl, 0 },
+    { "Account and system", "Accounts", "set_acct", "Switch between your Stremio accounts on this TV", NULL, accS, nacc, 0 },
     { "Account and system", "Addons", "set_addon", "", NULL, addonS, na, 0 },
     { "Account and system", "Keys", "set_keys", "Titles and descriptions in your language", "keys", keyS, nk, 0 },
     { "Account and system", "About", "info", "Version, updates, logs and support", "about", supS, nab, 0 },
@@ -292,7 +314,7 @@ static void enter(const void *p) { (void)p;
   memset(&S.hc, 0, sizeof S.hc); memset(&S.ho, 0, sizeof S.ho); memset(&S.hp, 0, sizeof S.hp);
   S.enterAt = app_now(); S.keysAt = -10; S.keysZone = 0;
 }
-static void logout(void) { toast(T("Signing out…"), 1500, NULL); sb_logout(); board_invalidate(); app_go(SCR_LOGIN, NULL, 1); }
+static void logout(void) { toast(T("Signing out…"), 1500, NULL); accounts_logout(); } /* another account kept here takes over; none: the sign-in */
 static void on_sync_addons(int changed, void *ud) { (void)ud; toast(T(changed ? "Addons updated" : "Addons up to date"), 2000, NULL); if (changed) board_invalidate(); { int a = cat_of(addonS); if (a >= 0) { cats[a].n = addon_opts(); if (S.cat == a && S.idx >= cats[a].n) S.idx = cats[a].n - 1; } } S.dirty = 1; }
 static void on_sync_lib(int changed, void *ud) { (void)ud; if (changed) board_invalidate(); }
 static void sync_now(void) { toast(T("Syncing…"), 1500, NULL); sb_pull_library(on_sync_lib, NULL); sb_sync_addons(on_sync_addons, NULL); }
@@ -354,7 +376,7 @@ static float right_w(const Setting *o, int focused) { /* what sits right of the 
 #define DS_PX 26     /* a setting's description: 26 px on 34 px lines, at most 3 lines */
 #define DS_LH 34.0f
 /* the words under a row: only About's rows and the best stream's (its connection measured) keep them */
-static int keep_ds(const Setting *o) { return (o >= supS && o < supS + sizeof supS / sizeof *supS) || !strcmp(o->k, "autoBest"); }
+static int keep_ds(const Setting *o) { return (o >= supS && o < supS + sizeof supS / sizeof *supS) || (o >= accS && o < accS + sizeof accS / sizeof *accS) || !strcmp(o->k, "autoBest"); }
 static int ds_lines(const Setting *o) { if (!o->ds[0] || !keep_ds(o)) return 0; int n = text_wrap_count(o->raw ? o->ds : T(o->ds), CLW - 48 - right_w(o, 0), 3, DS_PX, 400, 0); return n < 1 ? 1 : n; }
 static unsigned hash_s(const char *s, unsigned h) { while (*s) h = h * 31 + (unsigned char)*s++; return h; }
 /* what a row draws beside its words, measured once: again when the layout is redone, its value or the language
@@ -466,6 +488,8 @@ static int key(int k) {
       if (!strcmp(op->k, "__keys")) { settings_open_keys(); return 1; }
       if (!strcmp(op->k, "__sync")) sync_now(); else if (!strcmp(op->k, "__logs")) logcard_show(); else if (!strcmp(op->k, "__guide")) welcome_show_guide();
       else if (!strcmp(op->k, "__support")) { if (welcome_github_url()[0]) { supWant = !supWant; tween_to(&supK, (float)supWant, 0.5f, EASE_IN_OUT); orbs_pulse(supWant ? ORB_RIGHT : ORB_LEFT, 0.6f); } } /* the other code, turned over */ else if (!strcmp(op->k, "__upd")) update_install(); else if (!strcmp(op->k, "__check")) update_check(1); else if (!strcmp(op->k, "__logout")) logout();
+      else if (!strcmp(op->k, "__accAdd")) accounts_add();
+      else if (!strncmp(op->k, "__acc", 5) && op->k[5] >= '0' && op->k[5] <= '9') accounts_switch(atoi(op->k + 5));
       else if (!strcmp(op->k, "__reset")) confirm_show(T("Reset all settings?"), T("Every setting goes back as it came. Your account, library and addons stay as they are."), T("Reset"), do_reset, NULL);
       return 1; } /* (only Log out signs out: a row with no action of its own does nothing) */
     if (is_switch(op)) { set_val(op, !strcmp(cur_val(op), "true") ? "false" : "true", 0); return 1; } /* a switch: OK flips it */
@@ -475,6 +499,7 @@ static int key(int k) {
 static void tick(float dt) {
   ab_tick();
   if (usb_serial() != usbSeen) { usb_row(); play_layout(); S.dirty = 1; } /* a drive came or went, or its switch moved */
+  if (accounts_serial() != accSeen) acc_relayout(); /* an account added or gone */
   if (update_serial() != aboutSeen) { for (int i = 0; i < ncat; i++) if (cats[i].opts == supS) { cats[i].n = about_opts(); if (S.cat == i && S.idx >= cats[i].n) S.idx = cats[i].n - 1; } S.dirty = 1; } /* the update moved on: its rows follow */
   if (S.dirty) layout();
   nudge_tick(&S.nudge, dt); tween_tick(&S.catsY, dt); tween_tick(&S.optsY, dt); tween_tick(&S.pickY, dt); tween_tick(&S.pkA, dt); tween_tick(&S.pkX, dt); tween_tick(&S.loA, dt);

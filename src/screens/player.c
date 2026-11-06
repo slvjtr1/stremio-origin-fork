@@ -24,7 +24,7 @@
 #include "core/p2p.h"
 #include "core/mkvsubs.h"
 #include "core/best.h"
-#include "core/animepic.h"
+#include "core/tvtune.h"
 #include "core/trailer.h"
 #include "core/tmdb.h"
 #include "core/parental.h"
@@ -441,12 +441,14 @@ static struct { SubSync *job; int phase; /* 0 idle, 1 waiting for the reference,
   int quiet, autoWant; unsigned autoTok; double autoAt; /* quiet: the check of a subtitle the app chose by itself, unseen unless it fixes something */
   /* Keep in sync (Settings > Subtitles): the same quiet check again every few minutes of playing, around wherever the film
      is by then; the lines move only when they have drifted (a third of a second or more from where they are now) */
-  int fol, folOff; double folAt, curF, curD; } SY;
+  int fol, folOff; double folAt, curF, curD;
+  int hasRes; SyncResult res; double resAt; /* an answer waiting for a moment between two lines */ } SY;
 static void sync_stop(int keepTimes) {
-  if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.st[0] = 0; SY.quiet = 0; SY.fol = 0;
+  if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.st[0] = 0; SY.quiet = 0; SY.fol = 0; SY.hasRes = 0;
   if (!keepTimes) { free(SY.base); SY.base = NULL; SY.nbase = 0; SY.curF = 1; SY.curD = 0; SY.folAt = 0; SY.folOff = 0; }
 }
-static void sync_end(const char *why) { if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.fol = 0; if (!SY.quiet) snprintf(SY.st, sizeof SY.st, "%s", why); fprintf(stderr, "[subsync] %s%s\n", SY.quiet ? "(by itself) " : "", why); SY.quiet = 0; refresh_tray(4); }
+static int cue_on_screen(void) { double t = video_time() + P.subDelay; for (int i = 0; i < P.ncues; i++) if (P.cues[i].s <= t && t < P.cues[i].e) return 1; return 0; }
+static void sync_end(const char *why) { if (SY.job) { subsync_drop(SY.job); SY.job = NULL; } SY.phase = 0; SY.hasRes = 0; SY.fol = 0; if (!SY.quiet) snprintf(SY.st, sizeof SY.st, "%s", why); fprintf(stderr, "[subsync] %s%s\n", SY.quiet ? "(by itself) " : "", why); SY.quiet = 0; refresh_tray(4); }
 static void sync_undo(void) { /* Reset: the lines' own times again */
   if (SY.base && SY.nbase == P.ncues) { for (int i = 0; i < P.ncues; i++) { P.cues[i].s = SY.base[2 * i]; P.cues[i].e = SY.base[2 * i + 1]; } cueTimesGen++; }
   sync_stop(0);
@@ -491,7 +493,7 @@ static void sync_auto_arm(void) { if (!P.isTrailer) { SY.autoWant = 1; SY.autoTo
 static void sync_auto_tick(void) {
   if (!SY.autoWant || SY.phase) return;
   if (SL.tok != SY.autoTok || strncmp(P.curSub, "ext:", 4) || P.isTrailer || P.subDelay != 0) { SY.autoWant = 0; return; } /* another choice since, or a delay of the viewer's */
-  if (!P.ncues || SL.wait || now_() - SY.autoAt < 3 || ((P.extLoading || P.adxLoading) && now_() - SY.autoAt < 15)) return;
+  if (!P.ncues || SL.wait || now_() - SY.autoAt < 1 || ((P.extLoading || P.adxLoading) && now_() - SY.autoAt < 8)) return; /* (a second once the lines are in; the lists waited for 8 s at most) */
   SY.autoWant = 0; SY.quiet = 1; SY.phase = 1; SY.t0 = now_(); SY.nextAt = 0; SY.center = video_time();
   fprintf(stderr, "[sync] checking the subtitle chosen at the start, by itself (at %.0f s)\n", SY.center);
 }
@@ -505,8 +507,12 @@ static void sync_follow_tick(void) {
 }
 static void sync_tick(void) {
   sync_auto_tick(); sync_follow_tick(); if (!SY.phase) return;
-  if (SY.phase == 2) { SyncResult r; if (!subsync_poll(SY.job, &r)) { int sg = subsync_stage(SY.job); if (sg != SY.stage) { SY.stage = sg; if (!SY.quiet) { snprintf(SY.st, sizeof SY.st, "%s", sync_wait_txt(sg)); refresh_tray(4); } } return; }
-    subsync_drop(SY.job); SY.job = NULL;
+  if (SY.phase == 2) { SyncResult r;
+    if (!SY.hasRes) { if (!subsync_poll(SY.job, &r)) { int sg = subsync_stage(SY.job); if (sg != SY.stage) { SY.stage = sg; if (!SY.quiet) { snprintf(SY.st, sizeof SY.st, "%s", sync_wait_txt(sg)); refresh_tray(4); } } return; }
+      subsync_drop(SY.job); SY.job = NULL; SY.res = r; SY.hasRes = 1; SY.resAt = now_(); }
+    r = SY.res;
+    if (r.st == SYNC_OK && SY.quiet && cue_on_screen() && now_() - SY.resAt < 4) return; /* moved in a gap between two lines: none jumps while it is read */
+    SY.hasRes = 0;
     if (r.st == SYNC_NOREF || r.st == SYNC_NOSUB) SY.folOff = 1; /* (nothing to follow: no more checks for this subtitle) */
     if (r.st == SYNC_NOREF) { sync_end(T("Nothing to sync against")); return; }
     if (r.st == SYNC_NOSUB) { sync_end(T("Couldn’t sync")); return; }
@@ -521,7 +527,7 @@ static void sync_tick(void) {
     P.subDelay = 0; SY.curF = r.f; SY.curD = r.d;
     char n[24]; snprintf(n, sizeof n, "%s%.1f", sh >= 0 ? "+" : "", sh); char st[160]; snprintf(st, sizeof st, "%s %s%s%s", T("Synced"), T1("{n} s", "n", n), fabs(r.f - 1) > 0.001 ? "  ·  " : "", fabs(r.f - 1) > 0.001 ? T("speed fixed") : "");
     int q = SY.quiet; SY.quiet = 0; sync_end(st); if (q) fprintf(stderr, "[sync] (by itself) %s %s s: no notice\n", wasFol ? "drifted, synced again" : "synced", n); else toast(SY.st, 3000, NULL); return; }
-  if (now_() < SY.nextAt) return; SY.nextAt = now_() + 0.5;
+  if (now_() < SY.nextAt) return; SY.nextAt = now_() + 0.25;
   /* waiting for the file's own lines near the playhead */
   int st = mkv ? mkv_state(mkv) : MKV_FALLBACK, listed = mkv && st != MKV_FALLBACK && mkv_listed(mkv);
   if (st == MKV_FALLBACK) { sync_by_ref("not a file whose tracks can be read"); return; }
@@ -897,6 +903,13 @@ void player_chapters(const char *url, const PlayerChapter *list, int n) {
 }
 
 /* ---- buttons ---- */
+static void up_label(char *o, size_t cap) { const char *lv = tvtune_level(is_anime()); if (!strcmp(lv, "off")) snprintf(o, cap, "%s", T(is_anime() ? "Anime upscale off" : "Upscale off")); else snprintf(o, cap, "%s", T1(is_anime() ? "Anime upscale {l}" : "Upscale {l}", "l", lv)); }
+static int up_index(void) { const char *lv = tvtune_level(is_anime()); return !strcmp(lv, "A") ? 3 : !strcmp(lv, "B") ? 2 : !strcmp(lv, "C") ? 1 : 0; }
+static int btn_index(const char *id);
+static void next_up(void) {
+  tvtune_cycle(is_anime()); int b = btn_index("up"); if (b >= 0) { up_label(P.btns[b].lb, 48); P.btns[b].lw = text_width(P.btns[b].lb, 24, 700, 0) + 22; }
+  if (tvtune_state() == 0) toast(T("Upscale needs Homebrew Channel root on this TV"), 3000, NULL);
+}
 static void build_btns(void) {
   const char *fid = P.nbtn && P.bIdx < P.nbtn ? P.btns[P.bIdx].id : NULL; /* the focus stays on the same button when the row changes */
   P.nbtn = 0; int i = 0;
@@ -909,6 +922,7 @@ static void build_btns(void) {
   if (P.isTrailer) { if (trSubsN) B("cc", "p_subs", T("Subtitles"), 0); } /* a trailer's captions: one press on, one off */
   else B("subs", "p_subs", T("Subtitles"), 0);
   if (!P.isTrailer) B("aud", "p_aud", T("Audio"), 0);
+  if (!P.isTrailer && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
   const char *am = !strcmp(P.aspect, "fill") ? "Fill the screen" : !strcmp(P.aspect, "zoom") ? "Zoom" : "Original"; B("asp", "p_asp", T(am), 0);
   #undef B
   P.nbtn = i; if (P.bIdx >= i) P.bIdx = 0; if (fid) for (int k = 0; k < i; k++) if (!strcmp(P.btns[k].id, fid)) P.bIdx = k;
@@ -1112,11 +1126,11 @@ static const float C_GLIDE[4] = { .25f, 1, .5f, 1 }; /* GLIDE_EASE's curve, for 
 static struct {
   Mo tabX, tabW, tabF; int tabSeen; Mo swA; int swDir, swPend; Mo colBX, colBA; int colBSeen; int quiet;
   unsigned colSig[4], rowSig; Mo colA[4], rowA; int onIdx[4], rowOn; Mo chkA[4], rowChk; int vkC; char vkU[8]; Mo vkA;
-  Mo dot[4]; int dotSeen[4]; /* 0 the picture size, 1 subtitle size, 2 colour, 3 background */
+  Mo dot[5]; int dotSeen[5]; /* 0 the picture size, 1 subtitle size, 2 colour, 3 background, 4 the upscale */
   Mo swK[2]; int swFrom[2], swCur[2], swSeen[2]; /* the colour and background swatches: the one before, the one now, how far it has come */
 } TM;
 static void tm_tick(float dt) {
-  Mo *m[] = { &TM.tabX, &TM.tabW, &TM.tabF, &TM.swA, &TM.colBX, &TM.colBA, &TM.rowA, &TM.rowChk, &TM.vkA, &TM.dot[0], &TM.dot[1], &TM.dot[2], &TM.dot[3], &TM.swK[0], &TM.swK[1] };
+  Mo *m[] = { &TM.tabX, &TM.tabW, &TM.tabF, &TM.swA, &TM.colBX, &TM.colBA, &TM.rowA, &TM.rowChk, &TM.vkA, &TM.dot[0], &TM.dot[1], &TM.dot[2], &TM.dot[3], &TM.dot[4], &TM.swK[0], &TM.swK[1] };
   for (size_t i = 0; i < sizeof m / sizeof *m; i++) mo_tick(m[i], dt); for (int i = 0; i < 4; i++) { mo_tick(&TM.colA[i], dt); mo_tick(&TM.chkA[i], dt); }
 }
 static void tm_reset(void) { /* a tray opening: everything where it is, nothing gliding in from an old place */
@@ -1475,7 +1489,7 @@ static void dly_key(int k) {
   else if (k == K_UP || k == K_DOWN) nudge_start(&P.nudge, k);
 }
 static void act(const char *id) {
-  if (!strcmp(id, "pp")) toggle(); else if (!strcmp(id, "beg")) from_start(); else if (!strcmp(id, "asp")) next_aspect(); else if (!strcmp(id, "nxt")) next_auto(); else if (!strcmp(id, "cc")) cc_toggle();
+  if (!strcmp(id, "pp")) toggle(); else if (!strcmp(id, "beg")) from_start(); else if (!strcmp(id, "asp")) next_aspect(); else if (!strcmp(id, "up")) next_up(); else if (!strcmp(id, "nxt")) next_auto(); else if (!strcmp(id, "cc")) cc_toggle();
   else open_tray(!strcmp(id, "eps") ? 1 : !strcmp(id, "src") ? 2 : !strcmp(id, "aud") ? 3 : 4);
   arm_hide();
 }
@@ -1805,7 +1819,7 @@ static void finish_close(void) { sync_stop(0); gfx_target_free(&handSnap); mo_se
 static int closeNext, closeSim, closeArt; static double closeAt, closeT0; /* closeArt: closed on the loading screen (its line and words fade as the logo flies back) */
 static void close_player(int goNext, int goSim) {
   if (!P.open || P.closing) return; if (bestTok) { best_choose_cancel(bestTok); bestTok = 0; } P.closing = 1; closeArt = !P.live && P.artA.v > 0.999f; closeT0 = now_(); sx_begin_quick(0); /* the player's logo moves back to the page */ closeNext = goNext; closeSim = goSim; P.ssOn = 0; P.nx.tok = 0; P.sk.tok = 0;
-  save_progress(1); video_pause(); animepic_stop(); /* the picture as it was */
+  save_progress(1); video_pause(); tvtune_stop(); /* the TV's picture and sound as they were */
   /* the title's own picture fades back over the paused frame, the video goes, then the cover fades onto the app */
   closeAt = now_() + (closeArt ? 0.01 : 0.26); /* the cover fades back over the paused frame (see css()); from the loading screen the art fades at once, under the logo on its way back */
 }
@@ -1976,9 +1990,9 @@ void player_tick(float dt) {
   /* the art stays until the picture really runs: the resume jump is made behind it, and it fades only once playing has
      been steady for a moment (never a frozen first frame, then a spinner) */
   if (!P.live && video_live()) {
-    if (!P.liveT0) { P.liveT0 = now_(); P.steadyAt = 0; apply_aspect(); try_resume(); auto_audio(); load_emb_tracks(); if (!P.isTrailer && is_anime()) animepic_start(); } /* anime only: the TV's picture tuned for it */
+    if (!P.liveT0) { P.liveT0 = now_(); P.steadyAt = 0; apply_aspect(); try_resume(); auto_audio(); load_emb_tracks(); if (!P.isTrailer) tvtune_start(is_anime()); } /* the TV's picture and sound tuned for this title (Settings > Picture and sound) */
     else if (!P.autoAudDone && now_() - P.liveT0 < 12) { static double aaAt; if (now_() - aaAt >= 1) { aaAt = now_(); auto_audio(); } } /* (the TV's list comes a little later) */
-    if (animepic_poll()) toast(T("Anime upscale on"), 3000, NULL); /* three seconds, once, only when the TV took it */
+    { char tm[96]; if (tvtune_poll(tm, sizeof tm)) toast(tm, 3000, NULL); } /* three seconds, once, only when the TV took it */
     int steady = (video_state() == VID_PLAYING || paused()) && !video_settling(); if (!steady) P.steadyAt = 0; else if (!P.steadyAt) P.steadyAt = now_();
     if ((P.steadyAt && now_() - P.steadyAt > 0.35) || now_() - P.liveT0 > 15) { P.live = 1; pg_ask(); fprintf(stderr, "[player] picture running after %.1f s\n", now_() - P.liveT0); if (resumeMsg[0]) { toast(resumeMsg, 2500, NULL); resumeMsg[0] = 0; } } }
   if (!video_live()) P.liveT0 = 0;
@@ -2121,7 +2135,7 @@ static const CueIx *cue_ix(void) {
   return &ix;
 }
 static void draw_mkv_line(const MkvLine *l, float bx, float by, int px, uint32_t col, const SubFx *fx, float bo, int align) {
-  float lh = px * 1.35f; char buf[1024]; snprintf(buf, sizeof buf, "%s", l->t); sub_clean(buf); if (!buf[0]) return; char *lp[12]; int n = 0; for (char *c = strtok(buf, "\n"); c && n < 12; c = strtok(NULL, "\n")) lp[n++] = c;
+  float lh = px * 1.35f; char buf[1024]; snprintf(buf, sizeof buf, "%s", l->t); if (sub_sdh_hide) sub_strip_sdh(buf); sub_clean(buf); if (!buf[0]) return; char *lp[12]; int n = 0; for (char *c = strtok(buf, "\n"); c && n < 12; c = strtok(NULL, "\n")) lp[n++] = c;
   int an = l->an ? l->an : 2; float y = an >= 7 ? by : an >= 4 ? by - n * lh / 2 : by - n * lh; /* numpad: 7-9 hang from the point, 1-3 stand on it */
   if (l->color) col = 0xff000000u | (l->color & 0xffffff); /* a sign keeps its own colour */
   for (int i = 0; i < n; i++) { float tw = text_width(lp[i], px, fx->wt, 0), x0 = align == ALIGN_CENTER ? bx - tw / 2 : align == ALIGN_RIGHT ? bx - tw : bx;
@@ -2273,11 +2287,11 @@ static void draw_osd(void) {
     { static float sv, lx; lglass_stretch(&sv, &lx, P.focX.v, app_dt()); /* the lit button: accent glass that stretches as it glides and settles round */
       if (fa > 0.001f) { float w0 = P.focW.v, h0 = P.focH.v, sw = w0 * (1 + 0.16f * sv), sh = h0 * (1 - 0.08f * sv), px = P.focX.v + w0 / 2 - sw / 2, py = P.focY.v + h0 / 2 - sh / 2; lglass_accent(px, py, sw, sh, sh / 2, fa); } }
     if (P.tipA.v > 0.001f && P.tip[0]) { float ta = P.tipA.v * (P.tipAt && now_() - P.tipAt < .08 ? 0 : fminf(1, kf(P.tipAt, .3f, C_EASE, .08f)));
-      int cyc = fi >= 0 && !strcmp(P.btns[fi].id, "asp") && !strcmp(P.tip, P.btns[fi].lb); /* a button that cycles: one dot per choice under its name, the lit one gliding on each press */
+      int up = fi >= 0 && !strcmp(P.btns[fi].id, "up"), cyc = fi >= 0 && (up || !strcmp(P.btns[fi].id, "asp")) && !strcmp(P.tip, P.btns[fi].lb); /* a button that cycles: one dot per choice under its name, the lit one gliding on each press */
       if (cyc) { /* the name and its dots centred together in the pill's open part, whatever the name's length */
-        float cx = P.focX.v + 70 + (P.focW.v - 70 - 24) / 2; int ai = !strcmp(P.aspect, "fill") ? 1 : !strcmp(P.aspect, "zoom") ? 2 : 0;
+        float cx = P.focX.v + 70 + (P.focW.v - 70 - 24) / 2; int ai = up ? up_index() : !strcmp(P.aspect, "fill") ? 1 : !strcmp(P.aspect, "zoom") ? 2 : 0;
         text_draw(P.tip, cx, P.focY.v + 38 - text_line_height(24) / 2.0f - 8, 24, 700, col_alpha(ACC_FG, ta), 0, 0, ALIGN_CENTER);
-        cycle_dots(0, 3, ai, cx, P.focY.v + 38 + text_line_height(24) / 2.0f + 2, 11, 2.5f, col_alpha(ACC_FG, .3f * ta), col_alpha(ACC_FG, ta), 0); }
+        cycle_dots(up ? 4 : 0, up ? 4 : 3, ai, cx, P.focY.v + 38 + text_line_height(24) / 2.0f + 2, 11, 2.5f, col_alpha(ACC_FG, .3f * ta), col_alpha(ACC_FG, ta), 0); }
       else text_draw(P.tip, P.focX.v + 70, P.focY.v + 38 - text_line_height(24) / 2.0f, 24, 700, col_alpha(ACC_FG, ta), 0, 0, ALIGN_LEFT); }
     for (int i = 0; i < P.nbtn; i++) { float sz = P.btns[i].w, x = P.btns[i].x, y = P.btns[i].y; int f = i == fi;
       if (!f) lglass_shell(x, y, sz, sz, sz / 2, RGBA(16, 16, 24, 90), 0.85f); /* glass at rest */
