@@ -5,6 +5,15 @@ project(origin C CXX)
 set(R ${ORIGIN_ROOT})
 set(D ${R}/ports/androidtv/deps)
 set(TP ${R}/third_party)
+# no build-machine folders in the libraries (source names kept for error messages): the repository, the NDK, the home folder
+file(TO_CMAKE_PATH "$ENV{USERPROFILE}" ORIGIN_HOME)
+if(NOT ORIGIN_HOME)
+  file(TO_CMAKE_PATH "$ENV{HOME}" ORIGIN_HOME)
+endif()
+if(ORIGIN_HOME)
+  add_compile_options(-ffile-prefix-map=${ORIGIN_HOME}=/src)
+endif()
+add_compile_options(-ffile-prefix-map=${ANDROID_NDK}=/ndk -ffile-prefix-map=${R}=/app)
 
 add_subdirectory(${D}/SDL ${CMAKE_BINARY_DIR}/sdl)
 
