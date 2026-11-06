@@ -483,6 +483,7 @@ static int key_in(int k) {
   paint(); return 1;
 }
 static void tick(float dt) {
+  { static unsigned lv; if (D.meta && lv != lib_version()) { int first = !lv; lv = lib_version(); if (!first) load_watched(); } } /* an episode just watched (the player marks it as it ends), from a phone, a sync: its blur and tick change here, not on the next visit */
   nudge_tick(&D.nudge, dt); fpill_tick(&D.pill, dt); faces_tick();
   tween_tick(&D.lowerY, dt); tween_tick(&D.moreA, dt); tween_tick(&D.moreY, dt); tween_tick(&D.btnsA, dt); tween_tick(&D.btnsY, dt);
   timer_tick(&D.pRingPop, dt); tween_tick(&D.pRingA, dt); tween_tick(&D.pRingX, dt); if (D.zone != 3) D.pRingOn = 0; for (int i = 0; i < D.nppl; i++) { Person *p = &D.ppl[i]; tween_tick(&p->a, dt); float f = D.zone == 3 && i == D.pIdx ? 1.f : 0.f; if (p->f.to != f) tween_to(&p->f, f, GLIDE_DUR, GLIDE_EASE); tween_tick(&p->f, dt); }
