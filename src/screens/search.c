@@ -51,7 +51,8 @@ static struct {
 static int rows_of(void) { return (NK + SCOLS - 1) / SCOLS; }
 static int key_at(int r, int c) { if (r < rows_of()) return r * SCOLS + c; return last_key(c); }
 static void live(void);
-static void set_q(const char *q) { snprintf(S.q, sizeof S.q, "%s", q); S.liveAt = app_now() + 0.26; S.livePending = 1; }
+static double typedAt;
+static void set_q(const char *q) { snprintf(S.q, sizeof S.q, "%s", q); S.liveAt = app_now() + 0.26; S.livePending = 1; typedAt = app_now(); }
 static void type_key(int ki) {
   char q[128]; snprintf(q, sizeof q, "%s", S.q); size_t n = strlen(q);
   if (ki < NK) { const char *c = S.ar ? AKEYS[ki] : NULL; if (c) { if (n + strlen(c) < 100) snprintf(q + n, sizeof q - n, "%s", c); } else if (n < 100) { q[n] = SKEYS[ki]; q[n + 1] = 0; } }
@@ -103,20 +104,40 @@ static void on_cat(ItemList *l, int cached, void *ud) { (void)cached; uintptr_t 
   if ((unsigned)(t >> 5) != (S.tok & 0x7ffffff) || c >= S.ncat) { itemlist_free(l); return; } itemlist_clear(&S.cat[c]); S.catFail[c] = l->total < 0; if (!S.catFail[c]) { int k = 0; for (int i = 0; i < l->n; i++) if (!notice_item(&l->items[i])) k++; else fprintf(stderr, "[search] catalog %d sent a notice, left out: %s (%s)\n", c, l->items[i].name, l->items[i].id); S.catFail[c] = l->n > 0 && !k; } /* only notices: failed too */
   S.cat[c] = *l; free(l); S.catDone[c] = 1; merge(); }
 static void urlenc(const char *s, char *out, size_t cap) { size_t o = 0; for (; *s && o + 4 < cap; s++) { unsigned char c = *s; if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') out[o++] = c; else o += snprintf(out + o, cap - o, "%%%02X", c); } out[o] = 0; }
-#define HIST_MAX 10
+/* ---- recent searches: this TV's own, in a file of their own in the app's data (never sent anywhere), written the
+   moment one is added; shown as chips while nothing is typed ---- */
+#define HIST_MAX 12
+static char hist[HIST_MAX][128]; static int nhist = -1; static char histSaved[128]; static double leftAt;
+static void hist_path(char *o, size_t cap) { snprintf(o, cap, "%s/search_history.json", store_data_dir()); }
+static void hist_load(void) {
+  if (nhist >= 0) return; nhist = 0; char p[600]; hist_path(p, sizeof p);
+  FILE *f = fopen(p, "rb"); cJSON *a = NULL;
+  if (f) { char buf[8192]; size_t n = fread(buf, 1, sizeof buf - 1, f); fclose(f); buf[n] = 0; a = cJSON_Parse(buf); }
+  const cJSON *src = cJSON_IsArray(a) ? a : store_node("searchHistory"), *x; /* (once: the list kept with the settings before) */
+  if (cJSON_IsArray(src)) cJSON_ArrayForEach(x, src) if (cJSON_IsString(x) && x->valuestring[0] && nhist < HIST_MAX) snprintf(hist[nhist++], 128, "%s", x->valuestring);
+  cJSON_Delete(a); if (store_node("searchHistory")) store_remove("searchHistory");
+}
+static void hist_write(void) {
+  char p[600], t[620]; hist_path(p, sizeof p); snprintf(t, sizeof t, "%s.tmp", p);
+  cJSON *a = cJSON_CreateArray(); for (int i = 0; i < nhist; i++) cJSON_AddItemToArray(a, cJSON_CreateString(hist[i]));
+  char *js = cJSON_PrintUnformatted(a); cJSON_Delete(a); if (!js) return;
+  FILE *f = fopen(t, "wb"); if (f) { size_t n = strlen(js); int ok = fwrite(js, 1, n, f) == n; ok &= fclose(f) == 0; if (ok) rename(t, p); else remove(t); } free(js); /* whole or not at all */
+}
 static void hist_show(void) { /* the chips while nothing is typed: the recent searches, then Clear history */
-  const cJSON *h = store_node("searchHistory"), *x; S.nsug = 0; S.hist = 0;
-  if (cJSON_IsArray(h)) cJSON_ArrayForEach(x, h) { if (S.nsug >= 5) break; if (cJSON_IsString(x) && *x->valuestring) snprintf(S.sug[S.nsug++], 128, "%s", x->valuestring); }
+  hist_load(); S.nsug = 0; S.hist = 0;
+  for (int i = 0; i < nhist && S.nsug < 5; i++) snprintf(S.sug[S.nsug++], 128, "%s", hist[i]);
   if (S.nsug) { snprintf(S.sug[S.nsug++], 128, "%s", T("Clear history")); S.hist = 1; }
 }
 static void hist_add(const char *q) {
   char t[128]; snprintf(t, sizeof t, "%s", q); char *e = t + strlen(t); while (e > t && e[-1] == ' ') *--e = 0; const char *p = t; while (*p == ' ') p++; if (strlen(p) < 2) return;
-  cJSON *h = store_node("searchHistory"); if (!cJSON_IsArray(h)) { h = cJSON_CreateArray(); store_set_node("searchHistory", h); }
-  for (int i = cJSON_GetArraySize(h) - 1; i >= 0; i--) { const cJSON *x = cJSON_GetArrayItem(h, i); if (cJSON_IsString(x) && !strcasecmp(x->valuestring, p)) cJSON_DeleteItemFromArray(h, i); } /* once, at the front */
-  cJSON_InsertItemInArray(h, 0, cJSON_CreateString(p)); while (cJSON_GetArraySize(h) > HIST_MAX) cJSON_DeleteItemFromArray(h, HIST_MAX);
-  store_set_node("searchHistory", h);
+  hist_load(); snprintf(histSaved, sizeof histSaved, "%s", p);
+  int at = -1; for (int i = 0; i < nhist; i++) if (!strcasecmp(hist[i], p)) at = i;
+  if (at == 0) return; /* already the latest */
+  if (at < 0) at = nhist < HIST_MAX ? nhist++ : HIST_MAX - 1; /* once, at the front */
+  for (int i = at; i > 0; i--) memcpy(hist[i], hist[i - 1], sizeof hist[i]); snprintf(hist[0], sizeof hist[0], "%s", p);
+  hist_write();
 }
-static void hist_clear(void) { store_set_node("searchHistory", cJSON_CreateArray()); S.nsug = 0; S.hist = 0; S.zone = 0; toast(T("Search history cleared"), 2000, NULL); }
+static void hist_clear(void) { hist_load(); nhist = 0; histSaved[0] = 0; hist_write(); S.nsug = 0; S.hist = 0; S.zone = 0; toast(T("Search history cleared"), 2000, NULL); }
 static void live(void) {
   char q[128]; snprintf(q, sizeof q, "%s", S.q); char *e = q + strlen(q); while (e > q && e[-1] == ' ') *--e = 0; const char *p = q; while (*p == ' ') p++;
   S.tok++; S.topDone = 0; S.topFail = 0; S.allFailed = 0; for (int c = 0; c < S.ncat; c++) { S.catDone[c] = 0; S.catFail[c] = 0; itemlist_clear(&S.cat[c]); } S.ncat = 0; S.drawn = 1;
@@ -135,8 +156,10 @@ static void cat_go(void) {
   fprintf(stderr, "[search] \"%s\" in %d catalog(s)\n", p, n);
   for (int c = 0; c < n; c++) sb_catalog_url(defs[c].url, defs[c].type, 20, on_cat, (void *)(uintptr_t)(((uintptr_t)(S.tok & 0x7ffffff) << 5) | (uintptr_t)c));
 }
-static void enter(const void *p) { (void)p; S.zone = (S.zone == 2 && S.items.n) ? 2 : 0; timer_start(&S.in, 0.42f); { const char *kl = store_get("kbLang", NULL); S.ar = kl ? !strcmp(kl, "ar") : !strcmp(i18n_lang(), "ar"); } if (!S.q[0]) hist_show(); results_draw_state(); }
-static void leave(void) {} /* Search keeps its query and results for when you come back */
+static void enter(const void *p) { (void)p;
+  if (S.q[0] && leftAt && app_now() - leftAt > 600) { S.q[0] = 0; itemlist_clear(&S.items); S.zone = 0; S.livePending = 0; S.tok++; S.loading = 0; } /* back after ten minutes: a fresh search, the recent ones under it */
+  S.zone = (S.zone == 2 && S.items.n) ? 2 : 0; timer_start(&S.in, 0.42f); { const char *kl = store_get("kbLang", NULL); S.ar = kl ? !strcmp(kl, "ar") : !strcmp(i18n_lang(), "ar"); } if (!S.q[0]) hist_show(); results_draw_state(); }
+static void leave(void) { leftAt = app_now(); } /* Search keeps its query and results for when you come back (for ten minutes) */
 static const Item *focused(void) { return S.zone == 2 && S.ri < S.items.n ? &S.items.items[S.ri] : NULL; }
 static int key(int k) {
   int rows = rows_of(), C = SGC; int z0 = S.zone, kr0 = S.kr, kc0 = S.kc, si0 = S.si, ri0 = S.ri;
@@ -153,7 +176,7 @@ static int key(int k) {
     else if (k == K_RIGHT) { if (S.si < S.nsug - 1) S.si++; }
     else if (k == K_DOWN) { if (S.items.n) { S.zone = 2; S.ri = 0; } }
     else if (k == K_UP) { topnav_focus(); return 1; }
-    else if (k == K_OK) { if (S.hist && S.si == S.nsug - 1) { hist_clear(); return 1; } snprintf(S.q, sizeof S.q, "%s", S.sug[S.si]); S.livePending = 0; live(); }
+    else if (k == K_OK) { if (S.hist && S.si == S.nsug - 1) { hist_clear(); return 1; } snprintf(S.q, sizeof S.q, "%s", S.sug[S.si]); hist_add(S.q); S.livePending = 0; live(); }
     else if (k == K_BACK) { S.zone = 0; return 1; }
     if (k != K_OK && z0 == S.zone && si0 == S.si) nudge_start(&S.nudge, k);
   } else {
@@ -182,6 +205,7 @@ static void tick(float dt) {
   timer_tick(&S.in, dt); timer_tick(&S.gridIn, dt); nudge_tick(&S.nudge, dt); tween_tick(&S.kfx, dt); tween_tick(&S.caretX, dt); tween_tick(&S.kfy, dt); tween_tick(&S.kfw, dt); tween_tick(&S.sugX, dt); ring_tick(&S.ring, dt); tween_tick(&S.gridY, dt);
   if (S.livePending && app_now() >= S.liveAt) { S.livePending = 0; live(); }
   if (S.catPending && app_now() >= S.catAt) { S.catPending = 0; cat_go(); }
+  if (S.q[0] && S.final && S.items.n && typedAt && app_now() - typedAt > 4 && strcmp(histSaved, S.q)) hist_add(S.q); /* results looked at a while: kept too */
   int act = !topNav.active;
   float x, y, w; key_rect(key_at(S.kr, S.kc), &x, &y, &w);
   if (!S.kfShown) { tween_set(&S.kfx, x); tween_set(&S.kfy, y); tween_set(&S.kfw, w); S.kfShown = 1; } else { tween_to(&S.kfx, x, 0.14f, EASE_OUT); tween_to(&S.kfy, y, 0.14f, EASE_OUT); tween_to(&S.kfw, w, 0.14f, EASE_OUT); }
@@ -226,8 +250,9 @@ static void draw(void) {
     gfx_rrect_h(sx, ly, 44, 3, 2, col_alpha(ACC2, 0), ACC2); gfx_rrect_h(sx + 44, ly, 44, 3, 2, ACC2, col_alpha(ACC2, 0)); gfx_clip_pop(); }
   else if (S.drawn) { static char h[160], hq[128]; static int hn = -1; static unsigned hLg; /* the hint line: made when the query, the results or the language change */
     int hs = S.items.n ? 1 : S.allFailed ? 2 : 0;
+    if (!S.q[0]) hs = 3 + S.hist; /* (the empty page: with or without the recent searches) */
     if (hLg != i18n_gen() || hn != hs || strcmp(hq, S.q)) { hLg = i18n_gen(); hn = hs; snprintf(hq, sizeof hq, "%s", S.q);
-      if (!S.q[0]) snprintf(h, sizeof h, "%s", T("Type to search films and series")); else if (hs == 2) snprintf(h, sizeof h, "%s", T("Search is unavailable right now. Try again in a moment"));
+      if (!S.q[0]) snprintf(h, sizeof h, "%s", S.hist ? T("Recent searches") : T("Type to search films and series")); else if (hs == 2) snprintf(h, sizeof h, "%s", T("Search is unavailable right now. Try again in a moment"));
       else snprintf(h, sizeof h, "%s", T1(S.items.n ? "Results for “{q}”" : "No results for “{q}”", "q", S.q)); }
     text_draw(h, rx, ry, 24, 600, WHITE_A(191), 0, GRID_W, al); }
   ry += text_line_height(24) + 18;
@@ -236,7 +261,7 @@ static void draw(void) {
     float want = S.sugX.v; if (S.zone == 1) { float L = xs[S.si] + want; if (L < 0) want -= L; else if (L + ws[S.si] > GRID_W) want -= L + ws[S.si] - GRID_W; } tween_to(&S.sugX, want, 0.25f, EASE_OUT); /* the focused one whole */
     gfx_clip_push(rtl ? rx - GRID_W : rx, ry, GRID_W, 60);
     for (int i = 0; i < S.nsug; i++) { int f = act && S.zone == 1 && i == S.si; float x = rtl ? rx - xs[i] - S.sugX.v - ws[i] : rx + xs[i] + S.sugX.v, h = 20 + text_line_height(24);
-      float nx = f ? nudge_x(&S.nudge) : 0; hit_add(x, ry, ws[i], h, sug_focus, NULL, i, 0); gfx_rrect(x + nx, ry, ws[i], h, 24, f ? WHITE_A(255) : WHITE_A(18)); text_draw(S.sug[i], x + 20 + nx, ry + 10, 24, 600, f ? RGB(17, 17, 17) : WHITE_A(209), 0, ws[i] - 40, ALIGN_LEFT); }
+      float nx = f ? nudge_x(&S.nudge) : 0; hit_add(x, ry, ws[i], h, sug_focus, NULL, i, 0); gfx_rrect(x + nx, ry, ws[i], h, 24, f ? WHITE_A(255) : WHITE_A(18)); text_draw(S.sug[i], rtl ? x + ws[i] - 20 + nx : x + 20 + nx, ry + 10, 24, 600, f ? RGB(17, 17, 17) : WHITE_A(209), 0, ws[i] - 40, rtl ? ALIGN_RIGHT : ALIGN_LEFT); }
     gfx_clip_pop(); ry += 60; }
   gfx_offset_pop(); gfx_offset_push(0, 0); /* the grid: no rise, it only fades in with the screen */
   float gy = ry + 10; gfx_clip_push(rtl ? rx - GRID_W - 22 : rx - 22, gy - 8, GRID_W + 44, 828); /* (room for the focused poster to grow) */
