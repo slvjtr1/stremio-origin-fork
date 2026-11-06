@@ -35,8 +35,10 @@ static inline float ease_apply(Ease e, float x) {
     default: return 1 - powf(1 - x, 3);  /* EASE_OUT ~ cubic-bezier(.2,.8,.2,1) */
   }
 }
-/* the whole app's motion, one knob: every tween, timer and glide runs this share of the time it asks for */
-#define ANIM_SPEED 0.83f
+/* the whole app's motion, one knob: every tween, timer and glide runs this share of the time it asks for (Reduce
+   motion in Settings: far less, the app snaps from place to place) */
+extern float anim_speed;
+#define ANIM_SPEED (anim_speed)
 static inline void tween_set(Tween *t, float v) { t->from = t->to = t->v = v; t->on = 0; t->t = 0; }
 static inline void tween_to(Tween *t, float target, float dur, Ease e) {
   if (t->to == target && (t->on || t->v == target)) return;

@@ -294,9 +294,18 @@ static const char *orig_of(const cJSON *m, const char *id) {
   return "";
 }
 void best_prepare(const char *type, const char *vid) {
-  best_set_langs(store_get("defaultAudioTrack", ""), store_get("subsLang", ""));
   char id[96]; snprintf(id, sizeof id, "%s", vid ? vid : ""); { char *c = strchr(id, ':'); if (c && strncmp(id, "tt", 2)) c = strchr(c + 1, ':'); if (c) *c = 0; } /* the title's id from an episode's ("tt1:2:3", "kitsu:1:4") */
-  best_set_orig(orig_of(sb_meta_cached(type, id), id), !strcmp(store_get("enableDefaultAudioTrack", "false"), "true"));
+  best_set_langs(best_audio_want(sb_meta_cached(type, id), id), store_get("subsLang", ""));
+  best_set_orig(orig_of(sb_meta_cached(type, id), id), strcmp(store_get("enableDefaultAudioTrack", "true"), "false") != 0);
+}
+const char *best_orig_lang(const cJSON *m, const char *id) { return orig_of(m, id); }
+/* the audio language wanted for this title: anime has its own choice (Japanese unless changed), "orig" is the title's own
+   language (the stream's first track is often a dub: a Russian release of an English film) */
+const char *best_audio_want(const cJSON *m, const char *id) {
+  if (!strcmp(store_get("enableDefaultAudioTrack", "true"), "false")) return "";
+  const char *o = orig_of(m, id); int anime = !strcmp(o, "jpn") && (m || (id && strncmp(id, "tt", 2)));
+  const char *w = anime ? store_get("animeAudioTrack", "jpn") : store_get("defaultAudioTrack", "eng");
+  return !strcmp(w, "orig") ? o : w;
 }
 int best_dur(const cJSON *meta, const char *type) {
   const cJSON *rt = meta ? cJSON_GetObjectItemCaseSensitive(meta, "runtime") : NULL; char b[64] = "";

@@ -63,4 +63,7 @@ void best_choose_cancel(unsigned tok);
 void best_skip(const char *url);       /* a stream that failed to play: left out of the next choices (until the app restarts) */
 
 void best_tick(void);                  /* once a frame: hands back worker results, runs the waits */
+struct cJSON;
+const char *best_orig_lang(const struct cJSON *m, const char *id);   /* the title's own language ("eng", "jpn"...), "" unknown */
+const char *best_audio_want(const struct cJSON *m, const char *id);  /* the audio language Settings want for it ("" none) */
 #endif

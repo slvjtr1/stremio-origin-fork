@@ -24,6 +24,7 @@
 #include "core/p2p.h"
 #include "core/mkvsubs.h"
 #include "core/best.h"
+#include "core/animepic.h"
 #include "core/trailer.h"
 #include "core/tmdb.h"
 #include "core/parental.h"
@@ -91,7 +92,7 @@ static float kf(double at, float dur, const float *c, float delay) { if (!at) re
 typedef struct { int k; /* 0 note 1 skel 2 ep 3 src 4 chip; ls: a subtitle row's list, 1 OpenSubtitles 2 the addons' */ char lb[200], sub[120], ov[300], th[512], vl[48]; int on, spin, tool, sp; int i, ls; const cJSON *v; Stream *st; char u[1024]; float d, hh, ww, vw; uint32_t sw; } TItem; /* hh, ww, vw: measured on first draw (items are made fresh, zeroed) */
 typedef struct { char title[64], vl[32]; TItem *items; int n; } TCol;
 static float fill_ease(double t);
-typedef struct { int k; /* 0 none 1 intro 2 recap 3 outro (the next-up card) 4 skip credits */ int big, nbtn, idx, autoN; double t0, adur; struct { const char *id; char lb[48]; double to; int main; } b[2]; } PPrompt;
+typedef struct { int k; /* 0 none 1 intro 2 recap 3 outro (the next-up card) 4 skip credits */ int big, nbtn, idx, autoN; double t0, adur, hideT0; struct { const char *id; char lb[48]; double to; int main; } b[2]; } PPrompt;
 static struct {
   int open, closing, live, failed, started; double openedAt;
   char type[16], id[64], vid[80], name[256], logo[512], bg[512], poster[512], sname[600], saddon[96], url[SB_URL_MAX], alt[SB_URL_MAX]; int altTried, p2pRetried; double lastPos; int isTrailer, isHls;
@@ -567,11 +568,12 @@ static void aud_label(const VidTrack *t, char *out, size_t cap) { /* "AC3 5.1" *
   int ch = t->channels; snprintf(out, cap, "%s%s", c, ch == 6 ? " 5.1" : ch == 8 ? " 7.1" : ch == 2 ? " 2.0" : ch == 1 ? " 1.0" : "");
 }
 static void auto_audio(void) {
-  if (P.autoAudDone || strcmp(store_get("enableDefaultAudioTrack", "false"), "true")) return; const char *want = store_get("defaultAudioTrack", ""); if (!*want) return;
+  if (P.autoAudDone) return; const cJSON *m = sb_meta_cached(P.type, P.id); const char *want = best_audio_want(m, P.id[0] ? P.id : P.vid); if (!*want) { P.autoAudDone = 1; return; }
   VidTrack ts[16]; int n = aud_list(ts, 16); if (!n) return; int pick = -1;
-  for (int i = 0; i < n; i++) if (lang_match(ts[i].lang, want) && (pick < 0 || (aud_bad(&ts[pick]) && !aud_bad(&ts[i])))) pick = i; /* in that language, one whose sound plays here first */
-  if (pick < 0 && strcmp(want, "eng")) for (int i = 0; i < n; i++) if (lang_match(ts[i].lang, "eng") && (pick < 0 || (aud_bad(&ts[pick]) && !aud_bad(&ts[i])))) pick = i; /* not in the file: English, when the file has it */
-  if (pick >= 0) { P.autoAudDone = 1; set_audio(ts[pick].idx); }
+  const char *order[3] = { want, best_orig_lang(m, P.id[0] ? P.id : P.vid), "eng" }; /* the one chosen, else the title's own language, else English */
+  for (int o = 0; o < 3 && pick < 0; o++) { if (!order[o] || !*order[o]) continue;
+    for (int i = 0; i < n; i++) if (lang_match(ts[i].lang, order[o]) && (pick < 0 || (aud_bad(&ts[pick]) && !aud_bad(&ts[i])))) pick = i; } /* in that language, one whose sound plays here first */
+  P.autoAudDone = 1; if (pick >= 0 && ts[pick].idx != video_audio_current()) { fprintf(stderr, "[audio] %s chosen (wanted %s), whatever the stream plays first\n", ts[pick].lang, want); set_audio(ts[pick].idx); }
 }
 /* No track this TV plays: the file is converted on the TV itself (video copied, the sound as Dolby Digital 5.1) and
    played from a local HLS stream through the same pipeline, from the same moment; the subtitles still read the file.
@@ -611,7 +613,7 @@ static int mkv_aud_bad(const MkvAudio *a) { VidTrack v; memset(&v, 0, sizeof v);
    one this TV can't decode gives way to one it plays in the same language, else it is converted. -1 none fits */
 static int dv7_audio(int *copy) {
   MkvAudio ma[16]; int m = mkv_audio_tracks(mkv, ma, 16), pick = -1; if (!m) return -1;
-  const char *want = !strcmp(store_get("enableDefaultAudioTrack", "false"), "true") ? store_get("defaultAudioTrack", "") : "";
+  const char *want = best_audio_want(sb_meta_cached(P.type, P.id), P.id[0] ? P.id : P.vid);
   for (int i = 0; i < m && pick < 0; i++) if (*want && lang_match(ma[i].lang, want)) pick = i;
   for (int i = 0; i < m && pick < 0; i++) if (ma[i].def) pick = i;
   if (pick < 0) pick = 0;
@@ -703,7 +705,7 @@ static void dts_tick(void) {
   if (kind == 1 && !unsup && !best_dts_mode() && best_learned("dts") < 0 && video_state() == VID_PLAYING) { if (!P.dts.playAt) P.dts.playAt = now_(); else if (now_() - P.dts.playAt >= 3) { best_learn("dts", 1); fprintf(stderr, "[dts] auto: this TV plays DTS itself\n"); } }
   else P.dts.playAt = 0;
   if (!unsup && !aud_bad(t)) return;
-  const char *want = !strcmp(store_get("enableDefaultAudioTrack", "false"), "true") ? store_get("defaultAudioTrack", "") : "";
+  const char *want = best_audio_want(sb_meta_cached(P.type, P.id), P.id[0] ? P.id : P.vid);
   int pick = -1, score = -1;
   for (int i = 0; i < n && P.dts.switches < 4; i++) { if (i == ci || aud_bad(&ts[i])) continue; /* (tracks the TV doesn't name: a few tries at most) */
     int sc = (*want && lang_match(ts[i].lang, want)) ? 2 : (t->lang[0] && !strcasecmp(ts[i].lang, t->lang)) ? 1 : 0; if (sc > score) { score = sc; pick = i; } }
@@ -989,6 +991,7 @@ static int looks_recap(double s, double e) {
 static void paint_prompt(void) { if (P.prompt.k) P.shown = P.prompt; }
 static void go_next(void);
 static void next_auto(void);
+#define SKIP_SHOW_S 5.0 /* how long Skip intro / recap / credits stays up unpressed */
 static void dismiss_prompt(void) { if (P.prompt.k) P.dismissed[P.prompt.k] = 1; P.prompt.k = 0; if (P.mode == 3) P.mode = 0; paint_prompt(); }
 static void prompt_go(int i) {
   if (!P.prompt.k || i >= P.prompt.nbtn) return; const char *id = P.prompt.b[i].id;
@@ -1008,11 +1011,12 @@ static void check_prompt(void) {
   else if (inCred && !P.dismissed[4] && !P.next.has && !P.sim) want = 4; /* nothing to go to: Skip credits ends it */
   if ((want == 1 || want == 2 || want == 4) && !strcmp(store_get("skipIntro", "button"), "off")) want = 0; /* (Settings: no skipping offered) */
   if (want == P.prompt.k) return;
-  P.prompt.k = want; P.prompt.big = big; P.prompt.autoN = 0; P.prompt.nbtn = 0;
+  P.prompt.k = want; P.prompt.big = big; P.prompt.autoN = 0; P.prompt.nbtn = 0; P.prompt.hideT0 = 0;
   if (want == 1 || want == 2 || want == 4) { P.prompt.b[0].id = "skip"; snprintf(P.prompt.b[0].lb, 48, "%s", T(want == 1 ? "Skip intro" : want == 2 ? "Skip recap" : "Skip credits")); P.prompt.b[0].to = want == 1 ? P.intro.e : want == 2 ? P.recap.e : after ? P.outro.e : d - 0.5; P.prompt.b[0].main = 0; P.prompt.nbtn = 1;
     /* Automatically (Settings): the pill fills up and skips by itself when full (about 6 s, less when the part ends
        sooner); OK skips now, a pause stops it. The button alone is the default: nothing is skipped unasked */
-    if (!paused() && !strcmp(store_get("skipIntro", "button"), "auto")) { double e = want == 1 ? P.intro.e : want == 2 ? P.recap.e : P.outro.e, dd = e - t - 1; P.prompt.autoN = 1; P.prompt.t0 = now_(); P.prompt.adur = dd < 2.5 ? 2.5 : dd > 6 ? 6 : dd; } }
+    if (!paused() && !strcmp(store_get("skipIntro", "button"), "auto")) { double e = want == 1 ? P.intro.e : want == 2 ? P.recap.e : P.outro.e, dd = e - t - 1; P.prompt.autoN = 1; P.prompt.t0 = now_(); P.prompt.adur = dd < 2.5 ? 2.5 : dd > 6 ? 6 : dd; }
+    P.prompt.hideT0 = P.prompt.autoN ? 0 : now_(); } /* the button alone: it goes by itself after a few seconds unpressed (a line under it runs out) */
   else if (want == 3) { P.prompt.b[0].id = "credits"; snprintf(P.prompt.b[0].lb, 48, "%s", T("Watch credits")); P.prompt.b[0].main = 0; P.prompt.b[1].id = P.next.has ? "next" : "sim"; snprintf(P.prompt.b[1].lb, 48, "%s", T(P.next.has ? "Next episode" : "Something similar")); P.prompt.b[1].main = 1; P.prompt.nbtn = 2;
     /* credits + autoplay on: "Next episode" fills up and plays by itself unless you pick something */
     if (P.next.has && strcmp(store_get("bingeWatch", "true"), "false") && strcmp(store_get("enableNextVideo", "true"), "false")) { P.prompt.autoN = 1; P.prompt.t0 = now_(); P.prompt.adur = 10; } }
@@ -1479,7 +1483,7 @@ static void back(void) {
   if (P.closing) return;
   if (P.mode == 2) { tray_back(); return; }
   if (P.mode == 4) { dly_close(); return; }
-  if (P.prompt.k && P.prompt.autoN) { P.prompt.autoN = 0; paint_prompt(); return; } /* a countdown running (skip, next episode): Back stops it, the controls up or not; the prompt stays */
+  if (P.prompt.k && P.prompt.autoN) { P.prompt.autoN = 0; if (P.prompt.k != 3) P.prompt.hideT0 = now_(); paint_prompt(); return; } /* a countdown running (skip, next episode): Back stops it, the controls up or not; the prompt stays */
   if (P.mode == 3) { dismiss_prompt(); return; }
   if (P.seekT >= 0) { cancel_seek(); return; }
   if (P.mode == 1 && !paused()) { hide_osd(); return; }
@@ -1801,7 +1805,7 @@ static void finish_close(void) { sync_stop(0); gfx_target_free(&handSnap); mo_se
 static int closeNext, closeSim, closeArt; static double closeAt, closeT0; /* closeArt: closed on the loading screen (its line and words fade as the logo flies back) */
 static void close_player(int goNext, int goSim) {
   if (!P.open || P.closing) return; if (bestTok) { best_choose_cancel(bestTok); bestTok = 0; } P.closing = 1; closeArt = !P.live && P.artA.v > 0.999f; closeT0 = now_(); sx_begin_quick(0); /* the player's logo moves back to the page */ closeNext = goNext; closeSim = goSim; P.ssOn = 0; P.nx.tok = 0; P.sk.tok = 0;
-  save_progress(1); video_pause();
+  save_progress(1); video_pause(); animepic_stop(); /* the picture as it was */
   /* the title's own picture fades back over the paused frame, the video goes, then the cover fades onto the app */
   closeAt = now_() + (closeArt ? 0.01 : 0.26); /* the cover fades back over the paused frame (see css()); from the loading screen the art fades at once, under the logo on its way back */
 }
@@ -1972,7 +1976,9 @@ void player_tick(float dt) {
   /* the art stays until the picture really runs: the resume jump is made behind it, and it fades only once playing has
      been steady for a moment (never a frozen first frame, then a spinner) */
   if (!P.live && video_live()) {
-    if (!P.liveT0) { P.liveT0 = now_(); P.steadyAt = 0; apply_aspect(); try_resume(); auto_audio(); load_emb_tracks(); }
+    if (!P.liveT0) { P.liveT0 = now_(); P.steadyAt = 0; apply_aspect(); try_resume(); auto_audio(); load_emb_tracks(); if (!P.isTrailer && is_anime()) animepic_start(); } /* anime only: the TV's picture tuned for it */
+    else if (!P.autoAudDone && now_() - P.liveT0 < 12) { static double aaAt; if (now_() - aaAt >= 1) { aaAt = now_(); auto_audio(); } } /* (the TV's list comes a little later) */
+    if (animepic_poll()) toast(T("Anime upscale on"), 3000, NULL); /* three seconds, once, only when the TV took it */
     int steady = (video_state() == VID_PLAYING || paused()) && !video_settling(); if (!steady) P.steadyAt = 0; else if (!P.steadyAt) P.steadyAt = now_();
     if ((P.steadyAt && now_() - P.steadyAt > 0.35) || now_() - P.liveT0 > 15) { P.live = 1; pg_ask(); fprintf(stderr, "[player] picture running after %.1f s\n", now_() - P.liveT0); if (resumeMsg[0]) { toast(resumeMsg, 2500, NULL); resumeMsg[0] = 0; } } }
   if (!video_live()) P.liveT0 = 0;
@@ -1980,7 +1986,7 @@ void player_tick(float dt) {
   if (P.live) {
     if (video_width() != P.lastVw || video_height() != P.lastVh) apply_aspect(); /* the picture's size became known or changed */
     if (P.aspRefreshAt && now_() >= P.aspRefreshAt) { P.aspRefreshAt = 0; if (paused()) video_seek(video_time()); }
-    if (paused() && P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2 || P.prompt.k == 4)) { P.prompt.autoN = 0; paint_prompt(); } /* paused: no skipping by itself */
+    if (paused() && P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2 || P.prompt.k == 4)) { P.prompt.autoN = 0; P.prompt.hideT0 = now_(); paint_prompt(); } /* paused: no skipping by itself */
     /* the screensaver: paused and untouched for the time chosen in Settings, the controls fade away and the title's cover takes the screen */
     if (P.ssOn && !paused()) ss_exit();
     /* (the player has no screensaver of its own any more: the app's one comes over a paused film) */
@@ -1995,6 +2001,9 @@ void player_tick(float dt) {
     check_prompt();
     if (P.prompt.autoN && (P.prompt.k == 1 || P.prompt.k == 2 || P.prompt.k == 4) && now_() - P.prompt.t0 >= P.prompt.adur && !paused()) prompt_go(0);
     else if (P.prompt.autoN && P.prompt.k == 3 && now_() - P.prompt.t0 >= 10) { P.prompt.autoN = 0; next_auto(); }
+    { static double lastT; double nw = now_(), step = lastT ? nw - lastT : 0; lastT = nw; /* the skip button's few seconds: they wait while paused or seeking */
+      if (P.prompt.hideT0 && (paused() || P.seekT >= 0)) { P.prompt.hideT0 += step; P.shown.hideT0 = P.prompt.hideT0; }
+      if (P.prompt.hideT0 && (P.prompt.k == 1 || P.prompt.k == 2 || P.prompt.k == 4) && !P.prompt.autoN && nw - P.prompt.hideT0 >= SKIP_SHOW_S) { fprintf(stderr, "[player] skip button not pressed: gone\n"); dismiss_prompt(); } }
     if (!P.live) return; /* a new episode is being found */
     const char *r = res_of_video(video_width(), video_height()); if (*r && !P.isTrailer) P.res = r;
     info_update();
@@ -2298,6 +2307,8 @@ static void draw_osd(void) {
         if (f && !cnt) lglass_accent(x, y, w, h, 37, 1); else lglass_shell(x, y, w, h, 37, RGBA(18, 16, 28, 200), 1); /* glass: lit in the accent when focused */
         if (cnt) { float k = fill_ease((now_() - pr->t0) / pr->adur); if (k > 0) { float fw = h + (w - h) * k; gfx_opacity_push(fminf(1, k * 6)); gfx_clip_push(x, y, fw, h); lglass_accent(x, y, w, h, 37, 1); gfx_clip_pop(); gfx_opacity_pop(); } } /* a pill growing out of its left end, eased */
         if (f) gfx_ring_out(x, y, w, h, 37, 4, acc_a(0.38f));
+        if (!cnt && pr->hideT0 && !strcmp(pr->b[i].id, "skip")) { float k = clampf((float)((now_() - pr->hideT0) / SKIP_SHOW_S), 0, 1), lw = w - 2 * 37, ly = y + h + 12; /* the time left: a line as wide as the button's straight part, emptying to its end */
+          gfx_rrect(x + 37, ly, lw, 5, 2.5f, WHITE_A(46)); if (k < 1) gfx_rrect(x + 37 + lw * k, ly, lw * (1 - k), 5, 2.5f, WHITE_A(220)); }
         if (pr->autoN && !strcmp(pr->b[i].id, "next")) { float k = fill_ease((now_() - pr->t0) / 10); if (k > 0) { gfx_opacity_push(fminf(1, k * 6)); gfx_rrect(x, y, h + (w - h) * k, h, 37, WHITE_A(71)); gfx_opacity_pop(); } }
         if (i < 2) { PG.prX[i] = x; PG.prY[i] = y; PG.prW[i] = w; PG.prH[i] = h; if (PG.npr < i + 1) PG.npr = i + 1; }
         float tx2 = x + 33; if (ic) { icon_draw(ic, tx2, y + 22, 30, f && !cnt ? ACC_FG : WHITE_A(255)); tx2 += 42; } text_draw(pr->b[i].lb, tx2, y + (h - text_line_height(26)) / 2, 26, 700, f && !cnt ? ACC_FG : WHITE_A(255), 0, 0, ALIGN_LEFT); x -= 16; } }

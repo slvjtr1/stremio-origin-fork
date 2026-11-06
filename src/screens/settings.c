@@ -26,6 +26,7 @@
 #include "core/tmdb.h"
 #include "screens/revpanel.h"
 #include "ui/qrcard.h"
+#include "ui/confirm.h"
 #include "core/update.h"
 #include "screens/logcard.h"
 #include "screens/welcome.h"
@@ -47,6 +48,7 @@ static const Opt OO[] = { { "true", "On" }, { "false", "Off" } };
 static const Opt SVOL[] = { { "10", "10%" }, { "20", "20%" }, { "30", "30%" }, { "40", "40%" }, { "50", "50%" }, { "60", "60%" }, { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "100", "100%" } };
 static const Opt LANG_OPTS[] = { { "", "Off" }, { "eng", "English" }, { "ara", "Arabic" }, { "fre", "French" }, { "spa", "Spanish" }, { "ger", "German" }, { "ita", "Italian" }, { "por", "Portuguese" }, { "rus", "Russian" }, { "tur", "Turkish" }, { "pol", "Polish" }, { "dut", "Dutch" }, { "swe", "Swedish" }, { "heb", "Hebrew" }, { "hin", "Hindi" }, { "jpn", "Japanese" }, { "kor", "Korean" }, { "chi", "Chinese" } };
 static const Opt SEEK[] = { { "5", "5s" }, { "10", "10s" }, { "15", "15s" }, { "20", "20s" }, { "30", "30s" } };
+static const Opt AUDL[] = { { "orig", "Original language" }, { "eng", "English" }, { "ara", "Arabic" }, { "jpn", "Japanese" }, { "fre", "French" }, { "spa", "Spanish" }, { "ger", "German" }, { "ita", "Italian" }, { "por", "Portuguese" }, { "rus", "Russian" }, { "tur", "Turkish" }, { "pol", "Polish" }, { "dut", "Dutch" }, { "swe", "Swedish" }, { "heb", "Hebrew" }, { "hin", "Hindi" }, { "kor", "Korean" }, { "chi", "Chinese" } };
 static const Opt DTSM[] = { { "auto", "Auto" }, { "convert", "Convert" }, { "off", "Off" } }; /* DTS sound: found out by playing, always converted, or left to the TV */
 static const Opt ASPECT[] = { { "fit", "Original" }, { "fill", "Fill the screen" }, { "zoom", "Zoom" } };
 static const Opt SIZES[] = { { "0", "72%" }, { "1", "80%" }, { "2", "100%" }, { "3", "120%" }, { "4", "140%" }, { "5", "160%" }, { "6", "180%" } };
@@ -68,7 +70,7 @@ static const Opt APPICON[] = { { "origin", "Origin" }, { "classic", "Classic" } 
 static const Opt ACCENT_OPTS[] = { { "logo", "From the logo" }, { "adaptive", "From the artwork" }, { "purple", "Purple" }, { "violet", "Violet" }, { "fuchsia", "Fuchsia" }, { "pink", "Pink" }, { "rose", "Rose" }, { "red", "Red" }, { "orange", "Orange" }, { "amber", "Amber" }, { "gold", "Gold" }, { "lime", "Lime" }, { "green", "Green" }, { "emerald", "Emerald" }, { "teal", "Teal" }, { "cyan", "Cyan" }, { "sky", "Sky" }, { "blue", "Blue" }, { "indigo", "Indigo" }, { "graphite", "Graphite" } };
 #define NCAT 9
 #define MAXROWS 48
-static Setting playBase[12], playS[13], subsBase[17], subsS[17], audS[5], lookS[5], langS[3], keyS[4], addonS[40], acctS[1], supS[6];
+static Setting playBase[13], playS[14], subsBase[17], subsS[17], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[7];
 static Cat cats[NCAT]; static int ncat; /* (Keys leaves when this build carries every key) */
 static int cat_of(const Setting *opts) { for (int i = 0; i < ncat; i++) if (cats[i].opts == opts) return i; return -1; }
 
@@ -146,8 +148,22 @@ static int about_opts(void) {
   set_act(&supS[n++], "__logs", "Share logs", "Share the code and describe the issue");
   if (welcome_support_url()[0]) set_act(&supS[n++], "__support", "Support the project", "A star on GitHub helps others find it"); /* its codes in view (sized as if last) */
   set_s(&supS[n++], "nerdStats", "Stats for nerds", "Memory, storage and frame times in a corner of the screen", OO, 2, "false"); /* under it: the list scrolls to it */
+  set_act(&supS[n++], "__reset", "Reset all settings", "Every setting back as it came. Your account, library and addons stay");
   return n;
 }
+/* Reset all settings: the keys of the settings (and the small choices made on the way: keyboard, sort, picture shape)
+   removed, so each reads its default again. Not touched: the account, library, addons, keys, the app's language. */
+static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
+  "bingeWatch", "enableNextVideo", "blurUnseen", "clockFmt", "defaultAudioTrack", "dtsMode", "dv7Convert", "enableDefaultAudioTrack", "homeRows",
+  "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
+  "subsFollow", "subsFont", "subsLang", "subsOutline", "subsOutlineColor", "subsOutlineWidth", "subsPos", "subsShadow", "subsShadowDist",
+  "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "kbLang", "libSort", NULL };
+static void enter(const void *p); static void show_cat(int i, int dir);
+static void do_reset(void *ud) { (void)ud;
+  for (int i = 0; RESET_KEYS[i]; i++) store_remove(RESET_KEYS[i]);
+  accent_apply(); board_invalidate(); app_refresh_boards();
+  int c = S.cat, i = S.idx, z = S.zone; enter(NULL); S.cat = c; S.idx = i < cats[c].n ? i : cats[c].n - 1; S.zone = z == 2 ? 1 : z; show_cat(c, 0); S.enterAt = app_now() - 10; /* the same place, every row as it came */
+  toast(T("Settings reset"), 2000, NULL); }
 /* Cache torrents on USB: a switch for the drive there (kept per drive), greyed with "No drive" when there is none */
 static unsigned usbSeen;
 /* Playback's rows as shown: the best stream first; the trailers' volume right under the trailers' switch while they are on, else not at all;
@@ -158,6 +174,7 @@ static void play_layout(void) {
   playS[n++] = playBase[4]; /* the best stream first */
   playS[n++] = playBase[9];
   for (int i = 0; i < 4; i++) { playS[n++] = playBase[i]; if (i == 1) { playS[n++] = playBase[8]; playS[n++] = playBase[10]; } }
+  playS[n++] = playBase[12]; /* anime's picture */
   playS[n++] = playBase[11]; /* what Search shows */
   if (on) playS[n++] = playBase[6];
   const TvCaps *tc = best_caps(); if (tc && tc->dv) playS[n++] = playBase[7];
@@ -192,6 +209,7 @@ static void build(void) {
   set_s(&playBase[4], "autoBest", "Play the best stream automatically", "", OO, 2, "false");
   set_s(&playBase[7], "dv7Convert", "Dolby Vision for Blu-ray copies", "Their picture is converted on this TV so it shows in Dolby Vision, not HDR10", OO, 2, "true");
   set_s(&playBase[9], "bestRow", "Best match for this TV", "First in the streams: what this TV plays best, in the title’s own language, subtitles named", OO, 2, "true");
+  set_s(&playBase[12], "animeEnhance", "Anime upscale", "Anime only: the TV's Super Resolution and gradation tuned for drawn pictures on the way to 4K, then put back. Needs Homebrew Channel root", OO, 2, "true");
   set_s(&playBase[11], "searchKnownOnly", "Search well-known services only", "Results are films and series on Netflix, Prime Video, Disney+ and the like", OO, 2, "true");
   set_s(&playBase[10], "blurUnseen", "Blur unwatched episodes", "Their pictures stay blurred and their stories hidden until you watch them: no spoilers", OO, 2, "false");
   set_s(&playBase[8], "skipIntro", "Skip intro, recap and credits", "A button that skips them when you press OK, or automatically", SKIPO, 3, "button");
@@ -214,16 +232,18 @@ static void build(void) {
   set_s(&subsBase[12], "subsPos", "Height", "Raise or lower the lines. Also in the player, under Subtitles", SHGT, 19, "0");
   set_s(&subsBase[13], "subsBgStyle", "Background", "", BGS, 3, "0");
   set_s(&subsBase[14], "subsAssStyle", "Styled subtitles", "Signs, fonts and effects as the film\xe2\x80\x99s own ASS / SSA subtitles draw them", ASSO, 2, "styled");
-  set_s(&audS[0], "enableDefaultAudioTrack", "Auto audio track", "Pick the audio language below when a film has several", OO, 2, "false");
-  set_s(&audS[1], "defaultAudioTrack", "Default audio language", "", LANG_OPTS + 1, 17, "eng");
+  set_s(&audS[0], "enableDefaultAudioTrack", "Choose the audio language", "Your language below whenever the file has it, whatever the stream plays first", OO, 2, "true");
+  set_s(&audS[1], "defaultAudioTrack", "Audio language", "Films and series. Original: the language they were made in", AUDL, 18, "eng");
+  set_s(&audS[5], "animeAudioTrack", "Anime audio language", "Anime apart: Japanese unless you choose another", AUDL, 18, "jpn");
   set_s(&audS[2], "dtsMode", "DTS sound", "Auto finds out what this TV plays. Convert if you are not sure. Off leaves it to the TV", DTSM, 3, "auto");
   set_s(&audS[3], "uiSound", "Interface sounds", "A soft click as you move between titles", OO, 2, "true");
   set_s(&audS[4], "uiSoundVol", "Interface sound level", "Of the TV\xe2\x80\x99s volume", SVOL, 10, "30");
-  int naud = 5;
+  int naud = 6; { Setting t = audS[5]; for (int i = 5; i > 2; i--) audS[i] = audS[i - 1]; audS[2] = t; } /* anime's right under the films' */
   set_s(&lookS[0], "accent", "Accent colour", "Dynamic: the colours of the title you open", ACCENT_OPTS, 20, "logo"); /* first, right under its picture */
   set_s(&lookS[1], "ssDelay", "Screensaver", "After a while without a key, the titles of the moment fill the screen", SS_OPTS, 5, "5");
   set_s(&lookS[2], "clockFmt", "Clock", "The time at the top of the screens and when a film ends", CLOCKO, 2, "24");
   set_s(&lookS[4], "appIcon", "App icon", "On the start screen and in About", APPICON, 2, "origin");
+  set_s(&lookS[5], "reduceMotion", "Reduce motion", "Quicker moves, still glows and no trailers behind the pages: smoother on a slower TV", OO, 2, "false");
   set_s(&lookS[3], "homeRows", "Catalogs on Home", "From your addons, in their order. Discover shows the rest", HROWS, 4, "8");
   /* language names are shown in their own language, never translated */
   set_s(&langS[0], "uiLang", "Language", "The app restarts in the new language", NULL, 0, "auto");
@@ -239,8 +259,8 @@ static void build(void) {
   Cat c[NCAT] = {
     { "Watch", "Playback", "set_play", "Best match, seek step, next episode, skip intro", NULL, playS, 8, 0 }, /* (the count: play_layout) */
     { "Watch", "Subtitles", "set_subs", "Automatic, in sync, language, size, font, outline, shadow, height", "subs", subsS, 17, 0 }, /* (the count: subs_layout) */
-    { "Watch", "Audio", "set_aud", naud == 5 ? "Default audio language, DTS, interface sounds" : "Default audio language, interface sounds", NULL, audS, naud, 0 },
-    { "Screens", "Appearance", "set_look", "Accent colour, app icon, clock, catalogs on Home", "look", lookS, 5, 0 },
+    { "Watch", "Audio", "set_aud", "Audio language, anime, DTS, interface sounds", NULL, audS, naud, 0 },
+    { "Screens", "Appearance", "set_look", "Accent colour, app icon, clock, catalogs on Home, motion", "look", lookS, 6, 0 },
     { "Screens", "Language", "set_lang", "The app, and titles and descriptions", NULL, langS, nl, 0 },
     { "Account and system", "Addons", "set_addon", "", NULL, addonS, na, 0 },
     { "Account and system", "Keys", "set_keys", "Titles and descriptions in your language", "keys", keyS, nk, 0 },
@@ -446,6 +466,7 @@ static int key(int k) {
       if (!strcmp(op->k, "__keys")) { settings_open_keys(); return 1; }
       if (!strcmp(op->k, "__sync")) sync_now(); else if (!strcmp(op->k, "__logs")) logcard_show(); else if (!strcmp(op->k, "__guide")) welcome_show_guide();
       else if (!strcmp(op->k, "__support")) { if (welcome_github_url()[0]) { supWant = !supWant; tween_to(&supK, (float)supWant, 0.5f, EASE_IN_OUT); orbs_pulse(supWant ? ORB_RIGHT : ORB_LEFT, 0.6f); } } /* the other code, turned over */ else if (!strcmp(op->k, "__upd")) update_install(); else if (!strcmp(op->k, "__check")) update_check(1); else if (!strcmp(op->k, "__logout")) logout();
+      else if (!strcmp(op->k, "__reset")) confirm_show(T("Reset all settings?"), T("Every setting goes back as it came. Your account, library and addons stay as they are."), T("Reset"), do_reset, NULL);
       return 1; } /* (only Log out signs out: a row with no action of its own does nothing) */
     if (is_switch(op)) { set_val(op, !strcmp(cur_val(op), "true") ? "false" : "true", 0); return 1; } /* a switch: OK flips it */
     open_pick(); return 1; }
@@ -468,7 +489,7 @@ static void tick(float dt) {
   if (oz) { float b = S.optY[S.idx] + S.optH[S.idx]; if (b > CLH - 72) { oy = b - CLH + 72; float mx = S.optTot - CLH; if (mx < 0) mx = 0; if (oy > mx) oy = mx; } }
   tween_to(&S.optsY, -oy, 0.22f, EASE_CSS_EASE);
   if (S.zone != 1) wnBtn = 0;
-  hlIn = oz && S.idx < cats[S.cat].n && cats[S.cat].opts[S.idx].sub ? SUBIN : 0; hl_to(&S.ho, oz ? S.optY[S.idx] : 0, oz ? S.optH[S.idx] : 68, oz && !wnBtn, oz && S.idx < cats[S.cat].n && cats[S.cat].opts[S.idx].off ? WHITE_A(34) : ACC); /* a greyed row: a quiet glass highlight, not the accent */
+  hlIn = oz && S.idx < cats[S.cat].n && cats[S.cat].opts[S.idx].sub ? SUBIN : 0; hl_to(&S.ho, oz ? S.optY[S.idx] : 0, oz ? S.optH[S.idx] : 68, oz && !wnBtn, oz && S.idx < cats[S.cat].n && cats[S.cat].opts[S.idx].off ? WHITE_A(34) : oz && S.idx < cats[S.cat].n && !strcmp(cats[S.cat].opts[S.idx].k, "__reset") ? RGB(0xe0, 0x32, 0x2b) : ACC); /* a greyed row: a quiet glass highlight, not the accent */
   if (S.zone == 2) { const Setting *o = &cats[S.cat].opts[S.idx]; float pb = S.pick * 72.0f + 68, pt = o->nopts * 72.0f - ROWGAP + 28, py = 0;
     if (pb > PKH - 72) { py = pb - PKH + 72; float mx = pt - PKH; if (mx < 0) mx = 0; if (py > mx) py = mx; }
     tween_to(&S.pickY, -py, 0.22f, EASE_SNAP); hl_to(&S.hp, S.pick * 72.0f, 68, 1, ACC); }
@@ -723,6 +744,7 @@ static void draw_row(const Setting *o, int i, float x, float y, float h, int f, 
   const RowC *rc = i < MAXROWS ? row_c(o, i) : NULL; if (!rc) return;
   int busy = rc->busy, sw = is_switch(o) && !busy; float rw = rc->rw[f ? 1 : 0], tw = CLW - 48 - rw;
   uint32_t lc = f ? ACC_FG : o->action ? ACC3 : WHITE_A(255), dc = f ? col_alpha(ACC_FG, 0.85f) : WHITE_A(199);
+  if (!strcmp(o->k, "__reset")) { lc = f ? WHITE_A(255) : RGB(0xff, 0x45, 0x3a); dc = f ? WHITE_A(220) : WHITE_A(199); } /* red: it can't be undone (on a red highlight) */
   if (o->off) { lc = f ? WHITE_A(235) : WHITE_A(110); dc = f ? WHITE_A(200) : WHITE_A(96); } /* greyed: dim, but plain to read when focused (on a neutral highlight) */
   /* the words: changed ones fade in where they stand */
   float tk = since(r->txAt) < 0.3f ? ease_apply(EASE_SNAP, since(r->txAt) / 0.3f) : 1; if (tk < 1) { gfx_opacity_push(tk); gfx_offset_push(0, 5 * (1 - tk)); }

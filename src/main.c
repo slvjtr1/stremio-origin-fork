@@ -1,3 +1,4 @@
+#include "core/animepic.h"
 #include <stdint.h>
 #include <math.h>
 /* Stremio Origin, native. The window, the GL context, the frame loop; everything else is in
@@ -372,6 +373,7 @@ int main(int argc, char **argv) {
   }
   fprintf(stderr, "[exit] after %d frames\n", frame);
   p2p_shutdown(); /* the engine's threads end and its buffer files go */
+  animepic_quit(); /* the TV picture as it was */
   store_flush();
   SDL_GL_DeleteContext(ctx); SDL_DestroyWindow(win); SDL_Quit();
   return 0;

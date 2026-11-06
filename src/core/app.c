@@ -1,4 +1,5 @@
 #include "core/app.h"
+#include "core/animepic.h"
 #include "core/bgtrailer.h"
 #include "core/best.h"
 #include "core/keys.h"
@@ -902,7 +903,12 @@ void app_init(void) {
   accent_apply(); accent_tick(0); sync_init(); btr_init(); castlink_start();
 }
 static void amb_bake(void);
+float anim_speed = 0.83f;
+/* Settings > Appearance > Reduce motion: quick moves, still glows, no trailers behind the pages: for a slower TV */
+int app_reduce_motion(void) { static unsigned ser = ~0u; static int on; if (store_serial() != ser) { ser = store_serial(); on = !strcmp(store_get("reduceMotion", "false"), "true"); anim_speed = on ? 0.3f : 0.83f; } return on; }
 void app_tick(float dt) {
+  app_reduce_motion(); /* (the knob follows the setting) */
+  animepic_tick();
   DT = dt; NOW = SDL_GetTicks() / 1000.0; FRAME++;
   ptr_frame(); ptr_idle();
   { static int swelled; if (app_hold_progress() > 0 && !swelled) { swelled = 1; sound_play(SND_HOLD); } else if (!okHold.down) swelled = 0; } /* holding OK: a low swell as the line starts round */
@@ -952,7 +958,7 @@ static void ambient_draw(void) {
   if (ambA.v <= 0.001f) return;
   /* coming in or going: quick and plain to see; between the two pages: a slow glide; going, they rush in towards the
      middle and spread as they fade, melting into the next page's colours */
-  orbs_step(o, (float)DT, srch, want ? 1 : 5, want ? (ambA.v < 0.98f ? 7.5f : 2.6f) : 8.0f);
+  orbs_step(o, app_reduce_motion() ? (float)DT * 0.15f : (float)DT, srch, want ? 1 : 5, want ? (ambA.v < 0.98f ? 7.5f : 2.6f) : 8.0f); /* (reduced motion: the glows all but still) */
   orbs_draw(o, ambA.v);
 }
 /* the glows, small, for the glass over the pages that have them (Settings, Search, the guide): made in the tick, they move */
@@ -962,7 +968,7 @@ static void amb_bake(void) {
   { static int no = -1; if (no < 0) no = getenv("SB_NOAMB") != NULL; if (no) { ambTFresh = 0; return; } } /* (development: measuring) */
   if (!amb_glass_on()) { ambTFresh = 0; return; }
   if (ambTOk < 0) ambTOk = gfx_target_create(&ambT, 384, 216);
-  if (ambTFresh && FRAME % 4) return; /* the glows drift slowly: made again every fourth frame (each bake is a switch of the GPU's target, costly on these chips) */
+  if (ambTFresh && (app_reduce_motion() ? FRAME % 45 : FRAME % 4)) return; /* the glows drift slowly: made again every fourth frame (each bake is a switch of the GPU's target, costly on these chips) */
   if (!ambTOk) return; gfx_target_begin(&ambT, PAGE | 0xff000000u); if (welcome_is_open()) login_backdrop_draw(); else orbs_draw(orbs_app(), ambA.v); gfx_target_end(); /* (the guide has the sign-in's glows) */ ambTFresh = 1;
 }
 unsigned int app_ambient_glass_tex(void) { return ambTOk > 0 && ambTFresh ? ambT.tex : 0; }

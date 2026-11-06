@@ -1,6 +1,7 @@
 #include "core/bgtrailer.h"
 #include "core/trailer.h"
 #include "core/store.h"
+#include "core/app.h"
 #include "platform/mem.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -53,7 +54,7 @@ static void try_start(const BgtView *v) {
   if (v->shedding) return;   /* the TV is struggling: no trailer for now */
   if (v->spotlight) return;  /* the spotlight moves on by itself */
   if (st != S_OFF || v->blocked || !v->focused || !v->focused->id[0] || !v->focused->type[0]) return;
-  if (!strcmp(store_get("bgTrailer", "true"), "false") || getenv("SB_NOBTR")) return; /* (SB_NOBTR: development, measuring without it) */
+  if (!strcmp(store_get("bgTrailer", "true"), "false") || app_reduce_motion() || getenv("SB_NOBTR")) return; /* (SB_NOBTR: development, measuring without it) */
   snprintf(tid, sizeof tid, "%s", v->focused->id); snprintf(ttype, sizeof ttype, "%s", v->focused->type);
   st = S_META; sb_meta(ttype, tid, on_meta, (void *)(uintptr_t)++gen);
 }
