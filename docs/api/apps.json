@@ -16,16 +16,16 @@
       "fullDescriptionUrl": "apps/tv.stremioorigin.app/full_description.html",
       "manifest": {
         "id": "tv.stremioorigin.app",
-        "version": "1.4.0",
+        "version": "1.4.1",
         "type": "native",
         "title": "Stremio Origin",
         "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
         "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
         "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
         "rootRequired": false,
-        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.4.0/tv.stremioorigin.app_1.4.0_arm.ipk",
+        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.4.1/tv.stremioorigin.app_1.4.1_arm.ipk",
         "ipkHash": {
-          "sha256": "b25a25ed6f17658ba0cf605d80fd98d6feffe945e142f761743f42e1c1daaa8b"
+          "sha256": "2c2a3bad7cfb4254d853b6a4c1498edd88fc46a063905b24c7afffa086b5e8cd"
         },
         "notes": [
           "Upscale, your way: Anime and films each with levels C, B and A, A the strongest, and a button in the player to change it as you watch. Settings › Picture and sound.",
