@@ -16,22 +16,22 @@
       "fullDescriptionUrl": "apps/tv.stremioorigin.app/full_description.html",
       "manifest": {
         "id": "tv.stremioorigin.app",
-        "version": "1.2.1",
+        "version": "1.2.2",
         "type": "native",
         "title": "Stremio Origin",
         "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
         "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
         "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
         "rootRequired": false,
-        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.2.1/tv.stremioorigin.app_1.2.1_arm.ipk",
+        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.2.2/tv.stremioorigin.app_1.2.2_arm.ipk",
         "ipkHash": {
-          "sha256": "ea0ef75f193c782c2bcd7147381d8a02a903bee618354647a2d1a56c4c36d8b3"
+          "sha256": "640e0effc096e24ced0e7be70a0b69e79174f3f24d9865fd77cbc4ceef6ca2c4"
         },
         "notes": [
-          "Everything in Arabic: Home, the spotlight, Discover, Similar, the Library and the screensaver: names, posters, logos and descriptions in Arabic or English, from TMDB.",
-          "Search in Arabic: Type a name in Arabic or English: suggestions and results come in your language.",
-          "Picks that fit: Watch something similar shows TMDB's recommendations for that very title.",
-          "Fixes install themselves: Small updates install quietly while the TV is left alone, so you always have the latest fixes."
+          "Clean subtitles: Quotes, brackets and music notes are gone; only the marks that matter stay. Works with every subtitle, AI-translated ones too.",
+          "Your addons' subtitles first: Chosen by themselves from your addons, OpenSubtitles when none has them, and kept in sync quietly in the background.",
+          "More skips: Skip intro, recap and credits on far more films, series and anime, from more sources.",
+          "Search you can trust: Results are titles on Netflix, Prime Video, Disney+ and the like. Settings › Playback."
         ]
       }
     }

@@ -1,25 +1,25 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.2",
   "items": [
     {
-      "icon": "set_lang",
-      "title": "Everything in Arabic",
-      "text": "Home, the spotlight, Discover, Similar, the Library and the screensaver: names, posters, logos and descriptions in Arabic or English, from TMDB."
+      "icon": "p_subs",
+      "title": "Clean subtitles",
+      "text": "Quotes, brackets and music notes are gone; only the marks that matter stay. Works with every subtitle, AI-translated ones too."
     },
     {
-      "icon": "nav_search",
-      "title": "Search in Arabic",
-      "text": "Type a name in Arabic or English: suggestions and results come in your language."
+      "icon": "set_addon",
+      "title": "Your addons' subtitles first",
+      "text": "Chosen by themselves from your addons, OpenSubtitles when none has them, and kept in sync quietly in the background."
     },
     {
       "icon": "similar",
-      "title": "Picks that fit",
-      "text": "Watch something similar shows TMDB's recommendations for that very title."
+      "title": "More skips",
+      "text": "Skip intro, recap and credits on far more films, series and anime, from more sources."
     },
     {
-      "icon": "g_sync",
-      "title": "Fixes install themselves",
-      "text": "Small updates install quietly while the TV is left alone, so you always have the latest fixes."
+      "icon": "nav_search",
+      "title": "Search you can trust",
+      "text": "Results are titles on Netflix, Prime Video, Disney+ and the like. Settings › Playback."
     }
   ],
   "support": {
