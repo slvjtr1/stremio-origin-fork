@@ -149,6 +149,9 @@ static void fb_init(void) {
 #ifdef SB_MAC
   if (!dir) { dir = "/System/Library/Fonts"; exact = 1; }
 #endif
+#ifdef SB_ANDROID
+  if (!dir) dir = "/system/fonts";
+#endif
   if (!dir) dir = "/usr/share/fonts";
   if (exact) { for (unsigned i = 0; i < sizeof MACFONTS / sizeof *MACFONTS; i++) { char p[400]; snprintf(p, sizeof p, "%s/%s", dir, MACFONTS[i].name); if (!access(p, R_OK)) fb_add(dir, MACFONTS[i].name, MACFONTS[i].cls, MACFONTS[i].sc); } return; }
   static char names[96][96]; int nn = 0; DIR *d = opendir(dir); struct dirent *e;

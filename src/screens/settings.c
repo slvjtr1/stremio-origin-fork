@@ -191,7 +191,9 @@ static void play_layout(void) {
   playS[n++] = playBase[11]; /* what Search shows */
   if (on) playS[n++] = playBase[6];
   const TvCaps *tc = best_caps(); if (tc && tc->dv) playS[n++] = playBase[7];
-  iUsb = n; playS[n++] = playBase[5]; /* (the phone: no USB drive for torrents) */
+#ifndef SB_ANDROID
+  iUsb = n; playS[n++] = playBase[5]; /* (Android TV: torrents stay in the app's own storage) */
+#endif
   for (int i = 0; i < ncat; i++) if (cats[i].opts == playS) { cats[i].n = n; if (S.cat == i && S.idx >= n) S.idx = n - 1; }
 }
 /* Subtitles' rows as shown: the outline's colour and width under its switch while it is on; the shadow's strength,
@@ -259,6 +261,9 @@ static void build(void) {
   set_s(&picS[4], "voiceClear", "Clear voice", "Speech clearer through the TV's own dialogue enhancer; stereo and Atmos stay as they are", OO, 2, "true");
   set_s(&picS[5], "evenVolume", "Even volume", "Loud scenes and quiet speech brought closer together", OO, 2, "false");
   int naud = 6; { Setting t = audS[5]; for (int i = 5; i > 2; i--) audS[i] = audS[i - 1]; audS[2] = t; } /* anime's right under the films' */
+#ifdef SB_ANDROID
+  for (int i = 0; i < naud; i++) if (!strcmp(audS[i].k, "dtsMode")) { for (int j = i; j < naud - 1; j++) audS[j] = audS[j + 1]; naud--; break; } /* (Android's own decoders, or the sound passed to the receiver) */
+#endif
   set_s(&lookS[0], "accent", "Accent colour", "Dynamic: the colours of the title you open", ACCENT_OPTS, 20, "logo"); /* first, right under its picture */
   set_s(&lookS[1], "ssDelay", "Screensaver", "After a while without a key, the titles of the moment fill the screen", SS_OPTS, 5, "5");
   set_s(&lookS[2], "clockFmt", "Clock", "The time at the top of the screens and when a film ends", CLOCKO, 2, "24");
@@ -288,7 +293,14 @@ static void build(void) {
     { "Account and system", "Keys", "set_keys", "Titles and descriptions in your language", "keys", keyS, nk, 0 },
     { "Account and system", "About", "info", "Version, updates, logs and support", "about", supS, nab, 0 },
     { "", "Log out", "set_out", "", NULL, acctS, 1, 1 } };
-  ncat = 0; for (int i = 0; i < NCAT; i++) if (c[i].opts != keyS || nk) cats[ncat++] = c[i];
+#ifdef SB_ANDROID
+  c[2].ds = "Audio language, anime, interface sounds";
+#endif
+  ncat = 0; for (int i = 0; i < NCAT; i++) if (c[i].opts != keyS || nk) {
+#ifdef SB_ANDROID
+    if (c[i].opts == picS) continue; /* (the TV's picture and sound settings: LG's own, through Homebrew Channel) */
+#endif
+    cats[ncat++] = c[i]; }
   play_layout(); subs_layout(); S.dirty = 1;
   best_caps_probe(caps_known, NULL); /* (the Dolby Vision row, once the TV has said) */
 }

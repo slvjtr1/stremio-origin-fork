@@ -80,6 +80,8 @@ static Img *done_pop(void) { /* an urgent one first (a backdrop is never kept be
   Img *im = *pp; if (im) { *pp = im->dnext; im->dnext = NULL; im->inDone = 0; dn--; } return im; }
 #ifdef SB_WEBOS
 static unsigned frameNo; static long usedBytes, budgetBytes = 40L * 1024 * 1024; /* the TVs have little memory to spare */
+#elif defined(SB_ANDROID)
+static unsigned frameNo; static long usedBytes, budgetBytes = 64L * 1024 * 1024; /* Android TVs of 1.5 to 2 GB, much of it Android's own */
 #else
 static unsigned frameNo; static long usedBytes, budgetBytes = 96L * 1024 * 1024;
 #endif

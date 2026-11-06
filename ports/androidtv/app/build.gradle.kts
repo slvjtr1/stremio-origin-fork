@@ -1,0 +1,59 @@
+import java.io.File
+import java.util.Properties
+
+plugins { id("com.android.application") }
+
+val repo = rootDir.resolve("../..").canonicalFile
+val ver = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(repo.resolve("pkg/appinfo.json").readText())!!.groupValues[1]
+val appId = "app.stremioorigin.tv"   // the in-app updater looks for <appId>_<version>.apk in the releases
+// the built-in keys: the private file outside the repository (as tools/build.sh reads it); without it, none
+val keys = System.getenv("KEYS") ?: ((System.getenv("ORIGIN_BUILD") ?: (System.getProperty("user.home") + "/origin-build")) + "/keys.env")
+
+// release signing: ORIGIN_SIGNING names a properties file (storeFile, storePassword, keyAlias, keyPassword) kept out of the repository
+val signing = System.getenv("ORIGIN_SIGNING")?.let { File(it) }?.takeIf { it.isFile }?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+
+android {
+    namespace = "app.stremioorigin"
+    compileSdk = 36
+    ndkVersion = "29.0.14206865"
+    defaultConfig {
+        applicationId = appId
+        minSdk = 28            // Android TV 9: the TVs and boxes of 2020 on (Google TV is Android 10 and later)
+        targetSdk = 36
+        versionName = ver
+        versionCode = ver.split(".").fold(0) { a, p -> a * 100 + p.toInt() }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }   // (most TVs run 32-bit Android on 64-bit chips)
+        externalNativeBuild { cmake { arguments += listOf("-DORIGIN_ROOT=${repo.invariantSeparatorsPath}", "-DANDROID_STL=c++_static", "-DORIGIN_APP_ID=$appId", "-DORIGIN_KEYS=${File(keys).invariantSeparatorsPath}") } }
+    }
+    buildFeatures { buildConfig = true }
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.31.6" } }
+    sourceSets["main"].assets.srcDirs(file("build/gen/assets"))
+    sourceSets["main"].jniLibs.srcDirs(repo.resolve("build/android"))   // libsbengine.so per ABI (tools/build-engine.sh android-arm64 / android-armv7)
+    packaging { jniLibs { useLegacyPackaging = false } }
+    if (signing != null) signingConfigs.create("release") {
+        storeFile = File(signing.getProperty("storeFile")); storePassword = signing.getProperty("storePassword")
+        keyAlias = signing.getProperty("keyAlias"); keyPassword = signing.getProperty("keyPassword")
+    }
+    buildTypes { release { isMinifyEnabled = false; if (signing != null) signingConfig = signingConfigs.getByName("release") } }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+}
+
+dependencies {
+    implementation("androidx.core:core:1.13.1")
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
+}
+
+// the repository's assets/ into the package, with assets.lst (the version, then every file) for the first start to unpack
+val genAssets by tasks.registering {
+    val src = repo.resolve("assets"); val out = layout.buildDirectory.dir("gen/assets")
+    inputs.dir(src); inputs.file(repo.resolve("pkg/appinfo.json")); outputs.dir(out)
+    doLast {
+        val o = out.get().asFile; o.deleteRecursively(); o.mkdirs()
+        src.copyRecursively(o, overwrite = true)
+        val files = o.walkTopDown().filter { it.isFile }.map { it.relativeTo(o).invariantSeparatorsPath }.sorted().toList()
+        File(o, "assets.lst").writeText(ver + "-" + files.size + "\n" + files.joinToString("\n") + "\n")
+    }
+}
+tasks.named("preBuild") { dependsOn(genAssets) }

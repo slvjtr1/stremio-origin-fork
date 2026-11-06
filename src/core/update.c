@@ -23,7 +23,12 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef SB_ANDROID
+#include "platform/android/android.h"
+#define PKG_SUF ".apk"      /* Android TV: <appid>_<x.y.z>.apk, installed by Android's own installer */
+#else
 #define PKG_SUF "_arm.ipk"
+#endif
 #ifndef SB_APP_ID
 #define SB_APP_ID "tv.stremioorigin.app"
 #endif
@@ -44,6 +49,9 @@ static double now_ms(void) { struct timespec t; clock_gettime(CLOCK_REALTIME, &t
 /* "1.0.0" from appinfo.json beside the binary (the package), or pkg/ for the Mac preview */
 static void read_current(void) {
   if (U.read) return; U.read = 1;
+#if defined(SB_ANDROID) && defined(SB_VERSION)
+  snprintf(U.cur, sizeof U.cur, "%s", SB_VERSION); return; /* (the APK carries its version: there is no appinfo.json beside it) */
+#endif
   const char *cands[2] = { "%s/../appinfo.json", "%s/../pkg/appinfo.json" };
   for (int i = 0; i < 2 && !U.cur[0]; i++) {
     char p[1200]; snprintf(p, sizeof p, cands[i], plat_asset_dir());
@@ -117,6 +125,9 @@ static void done(const Rel *best, int manual) {
     U.avail = *best; U.has = 1; U.state = UPD_AVAIL; store_set("updVer", best->ver);
     fprintf(stderr, "[update] %s available (running %s)\n", best->ver, U.cur);
     quiet = !manual && is_fix(best->ver, U.cur) && !getenv("SB_UPD_NOQUIET");
+#ifdef SB_ANDROID
+    quiet = 0; /* (Android's installer asks first: every update is the notice) */
+#endif
     if (quiet) fprintf(stderr, "[update] %s is a fix: installs itself when the TV is left alone\n", best->ver);
     else if (!manual) { if (player_open()) pillPend = 1; else pill_show(); } /* (never over a film: after it) */
   } else {
@@ -165,6 +176,9 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
     }
   }
   cJSON_Delete(list);
+#ifdef SB_ANDROID
+  if (!has) { done(NULL, manual); return; } /* (the site's manifest names the TV's package only) */
+#endif
   if (has) done(&best, manual); else { const char *mf = getenv("SB_UPD_MAN"); net_get_timeout(mf ? mf : UPD_MAN, 15000, on_manifest, ud); } /* GitHub away or out of requests: the site (SB_UPD_MAN: development) */
 }
 void update_check(int manual) {
@@ -220,6 +234,9 @@ void update_install(void) {
   if (U.state == UPD_INSTALLING) return;
   U.state = UPD_INSTALLING; snprintf(U.msg, sizeof U.msg, "%s", T("Downloading…")); changed();
   fprintf(stderr, "[update] installing %s\n", U.avail.ver);
+#ifdef SB_ANDROID
+  android_cmd("install", U.avail.url, U.avail.sha, 0); return; /* Java downloads it, checks the SHA-256, opens the installer (update_tick shows its line) */
+#endif
   relaunch_arm();
   cJSON *p = cJSON_CreateObject(); cJSON_AddStringToObject(p, "ipkUrl", U.avail.url); cJSON_AddStringToObject(p, "ipkHash", U.avail.sha); cJSON_AddStringToObject(p, "id", SB_APP_ID); cJSON_AddTrueToObject(p, "subscribe");
   char *ps = cJSON_PrintUnformatted(p); cJSON_Delete(p);
@@ -308,6 +325,13 @@ void update_pill_draw(float setX) {
 void update_tick(float dt) {
   tween_tick(&U.pa, dt); tween_tick(&U.slide, dt); tween_tick(&U.dot, dt); sglass_tick(&U.glass, dt);
   plat_luna_pump();
+#ifdef SB_ANDROID
+  if (U.state == UPD_INSTALLING) { const char *m = android_update_status(); char tm[240];
+    if (m && *m) { const char *sp = strrchr(m, ' '); size_t n = sp ? strlen(sp) : 0; /* "Downloading the update… 42%": the words translated, the number as it is */
+      if (sp && n > 1 && sp[n - 1] == '%') { char pre[160]; snprintf(pre, sizeof pre, "%.*s", (int)(sp - m), m); snprintf(tm, sizeof tm, "%s %s", T(pre), sp + 1); } else snprintf(tm, sizeof tm, "%s", T(m));
+      if (strcmp(tm, U.msg)) { snprintf(U.msg, sizeof U.msg, "%s", tm); changed(); } }
+    if (m && (!strncmp(m, "The ", 4) || !strncmp(m, "Confirm", 7) || !strncmp(m, "Allow", 5))) { U.state = UPD_AVAIL; changed(); } } /* (failed, or the installer is up: Install can be pressed again) */
+#endif
   if (U.pf && !topNav.active) { U.pf = 0; U.hideAt = app_now() + 4; } /* the highlight left the top bar */
   if (U.pill && U.hideAt && app_now() >= U.hideAt) pill_hide();
   if (U.n.pend && !U.pill && U.pa.v <= 0.001f && !player_open()) { /* the other notice, once the capsule is back in */

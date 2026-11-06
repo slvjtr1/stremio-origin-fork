@@ -634,6 +634,9 @@ static int conv_flags(int ord) { /* another audio track while converting */
   return (mkv_has_index(mkv) == 0 ? HC_NOINDEX : 0) | (P.dts.dv ? HC_DV81 : 0) | (copy ? HC_COPYAUDIO : 0);
 }
 static int dv7_convert(const char *why) {
+#ifdef SB_ANDROID
+  (void)why; return 0; /* (no converter on Android TV: Dolby Vision as the TV takes it) */
+#endif
   if (P.dts.conv || P.dts.dvTried || !dv7_wanted()) return 0;
   P.dts.dvTried = 1; int copy = 1, ord = dv7_audio(&copy);
   if (ord < 0) { fprintf(stderr, "[dv] profile 7, but no audio track can go with it: played as it is\n"); return 0; }
@@ -699,6 +702,9 @@ static void dts_conv_failed(const char *why) { /* the converted stream didn't pl
    to one that does, in the language of the default-audio setting, else the same language, else the first; with none,
    the reason is said once and the picture plays on */
 static void dts_tick(void) {
+#ifdef SB_ANDROID
+  return; /* (Android TV: its own decoders, or the sound passed to the receiver; no converter here) */
+#endif
   if (P.dts.conv) { dts_conv_tick(); return; }
   if (!P.dts.dvTried && mkv_listed(mkv) && dv7_convert("read in the file's head")) return;
   if (P.isTrailer || P.dts.gaveUp) return;
@@ -1519,6 +1525,11 @@ void player_key(int k, int down) {
   if (k == K_STOP || k == K_EXIT) { close_player(0, 0); return; }
   if (k == K_REW) { seek_by(-1); return; } if (k == K_FF) { seek_by(1); return; }
   if (k == K_BACK) { back(); return; }
+  if (k == K_SUBS || k == K_AUDIO) { /* Captions / Audio track: straight to that list (again: put away) */
+    int kind = k == K_SUBS ? 4 : 3; if (P.mode == 2 && P.tray.kind == kind) { close_tray(); return; }
+    if (btn_index(k == K_SUBS ? "subs" : "aud") < 0) { show_osd(1); return; }
+    if (P.mode == 2) close_tray(); show_osd(1); open_tray(kind); return; }
+  if (k == K_INFO) { if (P.mode == 2) close_tray(); else if (P.osd) hide_osd(); else show_osd(1); return; } /* Info: the controls and the title's lines, or away */
   if (P.mode == 2) { tray_key(k); return; }
   if (P.mode == 4) { dly_key(k); return; }
   if (P.mode == 3) {

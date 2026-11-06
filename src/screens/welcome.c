@@ -78,9 +78,15 @@ enum { PV_KEYS, PV_HOLD, PV_STREAMS, PV_SUBS, PV_TORRENTS, PV_PHONE, PV_YOURKEYS
 typedef struct { char title[160], lead[300], b[MAXB][200]; const char *ic[MAXB]; int nb, pv, ctl; int nt, nl, nbl[MAXB]; } Page;
 /* a point's chip: an icon, or "@red", "@green", "@ok", "@back": the remote's key itself */
 static const struct { const char *t, *l, *b[MAXB], *ic[MAXB]; int pv, ctl; } TOUR[] = {
+#ifdef SB_ANDROID
+  { "Your remote", "The arrows, OK and Back take you everywhere.",
+    { "Up reaches Settings and Search", "Menu and Search keys, or red and green, go straight there", "The arrows move, OK opens", "Back goes to the tabs, then Home" },
+    { "@up", "@red", "g_dpad", "@back" }, PV_KEYS, 0 },
+#else
   { "Your remote", "Four keys take you everywhere.",
     { "Red opens Settings", "Green opens Search", "The arrows move, OK opens", "Back goes to the tabs, then Home" },
     { "@red", "@green", "g_dpad", "@back" }, PV_KEYS, 0 },
+#endif
   { "Hold OK", "Hold OK on any poster or episode for all you can do with it.",
     { "Hold to open its menu", "Add it to your Library or mark it as watched", "Its trailer, start over, or something similar" },
     { "@ok", "plus", "similar" }, PV_HOLD, 0 },
@@ -852,7 +858,7 @@ static void words(int i, float a, float dx) {
       uint32_t cbg = ctl ? col_mix(acc_a(0.22f), WHITE_A(60), k) : col_mix(acc_a(0.14f), ACC | 0xff000000u, k), cfg = ctl ? col_mix(ACC2 | 0xff000000u, ACC_FG | 0xff000000u, k) : col_mix(col_alpha(ACC2, 0.8f), ACC_FG | 0xff000000u, k);
       gfx_rrect(cx, cy2, CHIP, CHIP, 18, cbg);
       const char *ic = p->ic[b];
-      if (ic[0] == '@') { int key = !strcmp(ic, "@red") ? K_RED : !strcmp(ic, "@green") ? K_GREEN : !strcmp(ic, "@ok") ? K_OK : K_BACK; float kw = key == K_RED || key == K_GREEN ? 42 : 38;
+      if (ic[0] == '@') { int key = !strcmp(ic, "@red") ? K_RED : !strcmp(ic, "@green") ? K_GREEN : !strcmp(ic, "@ok") ? K_OK : !strcmp(ic, "@up") ? K_UP : K_BACK; float kw = key == K_RED || key == K_GREEN ? 42 : 38;
         key_hint(cx + CHIP / 2 - kw / 2, cy2 + CHIP / 2, key, NULL, key == K_RED || key == K_GREEN ? WHITE_A(255) : cfg, 0); }
       else icon_draw(ic, cx + 15, cy2 + 15, 30, cfg);
       float tw = COLW - CHIP - 24 - (ctl ? 90 : 0), ty = top + (ph - p->nbl[b] * PO_LH) / 2 + (PO_LH - text_line_height(PO_PX)) / 2;

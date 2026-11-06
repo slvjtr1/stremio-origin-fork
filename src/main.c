@@ -15,6 +15,8 @@
 #include <execinfo.h>
 static void on_alarm(int sig) { (void)sig; void *fr[48]; int n = backtrace(fr, 48); backtrace_symbols_fd(fr, n, 2); _exit(3); }
 static volatile int profN; /* the profiler is the TV's */
+#elif defined(SB_ANDROID)
+static volatile int profN; /* (Android keeps its own crash reports) */
 #else
 #include <ucontext.h>
 #include <time.h>
@@ -68,6 +70,9 @@ static void on_crash(int sig, siginfo_t *si, void *uc) {
 }
 #endif
 #include "core/castlink.h"
+#ifdef SB_ANDROID
+#include "platform/android/android.h"
+#endif
 #include "core/applog.h"
 #include "platform/plat.h"
 #include "ui/gfx.h"
@@ -177,6 +182,7 @@ int main(int argc, char **argv) {
 #ifdef SB_MAC
   signal(SIGABRT, on_alarm); signal(SIGSEGV, on_alarm); signal(SIGBUS, on_alarm); /* a crash leaves a backtrace in the log */
   if (getenv("SB_ALARM")) { signal(SIGALRM, on_alarm); alarm(atoi(getenv("SB_ALARM"))); }
+#elif defined(SB_ANDROID)
 #else
   if (getenv("SB_PROF")) prof_start();
   { struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = on_crash; sa.sa_flags = SA_SIGINFO; sigaction(SIGSEGV, &sa, NULL); sigaction(SIGBUS, &sa, NULL); sigaction(SIGILL, &sa, NULL); sigaction(SIGABRT, &sa, NULL); sigaction(SIGFPE, &sa, NULL); }
@@ -239,6 +245,8 @@ int main(int argc, char **argv) {
   char p[1100]; snprintf(p, sizeof p, "%s/cacert.pem", plat_asset_dir()); net_init(p);
 #ifdef SB_WEBOS
   cache_prune_start(40); /* the app partition is small and shared with every app's install */
+#elif defined(SB_ANDROID)
+  cache_prune_start(200); /* (an Android TV's 8 GB, shared with every app) */
 #else
   cache_prune_start(400);
 #endif
@@ -349,7 +357,7 @@ int main(int argc, char **argv) {
     { int pm = profN; if (!vsyncOn) pace_wait((double)(tSwap - tCpu0) + accPreFrame); else pace_observe(); if (profSlow) profN = pm; } /* the wait is not the frame's */
 #endif
     frames++; frame++; if (frame == 1 || frame == 10 || frame % 300 == 0) { { int q, w; img_queue_stats(&q, &w); fprintf(stderr, "[frame] pictures: %d queued, %d to upload\n", q, w); } fprintf(stderr, "[frame] %d drawn, %d fps, %d MB of pictures, cpu %.1f ms (pumps %.1f tick %.1f draw %.1f flush %.1f evict %.1f), swap %.1f ms, %d calls %d quads\n", frame, fps, img_used_mb(), accN ? accCpu / accN : 0, accN ? accPre / accN : 0, accN ? accTick / accN : 0, accN ? accDraw / accN : 0, accN ? accEnd / accN : 0, accN ? accPump / accN : 0, accN ? accSwap / accN : 0, gfx_draw_calls(), gfx_quads()); { char pr[256]; pace_report(pr, sizeof pr); fprintf(stderr, "[frame] %s\n", pr); } if (getenv("SB_MIDLOG")) { extern int gfx_mid_switches(void); fprintf(stderr, "[mid] %d mid-frame target switches since the last line\n", gfx_mid_switches()); } if (getenv("SB_FILL")) { char fr[300]; gfx_fill_report(fr, sizeof fr); fprintf(stderr, "[fill] %s %s\n", stress_screen(), fr); } { double lm, wm; int r, sh, lk; text_stats(&lm, &wm, &r, &sh, &lk); fprintf(stderr, "[frame] gl flushes %.1f ms per frame; text: lines %.1f ms, widths %.1f ms, %d rasterised, %d shaped, %d lookups (per frame over %d)\n", accN ? gfx_flush_ms(1) / accN : 0, accN ? lm / accN : 0, accN ? wm / accN : 0, r, sh, lk, accN); } accCpu = accSwap = accPre = accTick = accDraw = accEnd = accPump = 0; accN = 0;
-#ifndef SB_MAC
+#if !defined(SB_MAC) && !defined(SB_ANDROID)
       if (getenv("SB_PROF")) prof_report();
 #endif
     }
@@ -375,6 +383,9 @@ int main(int argc, char **argv) {
   p2p_shutdown(); /* the engine's threads end and its buffer files go */
   tvtune_quit(); /* the TV's picture and sound as they were */
   store_flush();
+#ifdef SB_ANDROID
+  android_cmd("exit", NULL, NULL, 0); /* the activity and its process go: the next start is a clean one */
+#endif
   SDL_GL_DeleteContext(ctx); SDL_DestroyWindow(win); SDL_Quit();
   return 0;
 }
