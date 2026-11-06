@@ -1,15 +1,15 @@
 {
   "id": "tv.stremioorigin.app",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "type": "native",
   "title": "Stremio Origin",
   "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
   "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
   "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
   "rootRequired": false,
-  "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.5.0/tv.stremioorigin.app_1.5.0_arm.ipk",
+  "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.5.1/tv.stremioorigin.app_1.5.1_arm.ipk",
   "ipkHash": {
-    "sha256": "1f6dda23be84687381b87cfb4c409d9fe4ebe82b293d4717e8278cf9d5fdd2be"
+    "sha256": "e092c102b5d0e27f0d1d3e501c06f6ded496632fc524c84f4bfa1252755dde33"
   },
   "notes": [
     "Now on Google TV: Stremio Origin for Google TV and Android TV, on TVs and boxes from 2020 on: the same app, your accounts and settings, updates from inside the app.",
