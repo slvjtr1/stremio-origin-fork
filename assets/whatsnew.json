@@ -1,25 +1,35 @@
 {
-  "version": "1.2.2",
+  "version": "1.3.0",
   "items": [
     {
-      "icon": "p_subs",
-      "title": "Clean subtitles",
-      "text": "Quotes, brackets and music notes are gone; only the marks that matter stay. Works with every subtitle, AI-translated ones too."
+      "icon": "g_spark",
+      "title": "Anime upscale",
+      "text": "Anime only: the TV's Super Resolution and gradation tuned for drawn pictures on the way to 4K, then put back. Settings › Playback."
     },
     {
-      "icon": "set_addon",
-      "title": "Your addons' subtitles first",
-      "text": "Chosen by themselves from your addons, OpenSubtitles when none has them, and kept in sync quietly in the background."
-    },
-    {
-      "icon": "similar",
-      "title": "More skips",
-      "text": "Skip intro, recap and credits on far more films, series and anime, from more sources."
+      "icon": "p_aud",
+      "title": "Every title in its own language",
+      "text": "Films and series start in the language you choose whenever the file has it, anime in Japanese. Settings › Audio."
     },
     {
       "icon": "nav_search",
-      "title": "Search you can trust",
-      "text": "Results are titles on Netflix, Prime Video, Disney+ and the like. Settings › Playback."
+      "title": "Smarter search",
+      "text": "Your recent searches, an Arabic keyboard, and spelling slips forgiven."
+    },
+    {
+      "icon": "p_skip",
+      "title": "Skip, on a timer",
+      "text": "The skip button leaves by itself after five seconds, a line showing the time left."
+    },
+    {
+      "icon": "g_speed",
+      "title": "Reduce motion",
+      "text": "Quicker moves and stiller pages for a slower TV. Settings › Appearance."
+    },
+    {
+      "icon": "restart",
+      "title": "Reset all settings",
+      "text": "Every setting back as it came, your account and library untouched. Settings › About."
     }
   ],
   "support": {

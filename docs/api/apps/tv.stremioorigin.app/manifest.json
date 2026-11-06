@@ -1,20 +1,21 @@
 {
   "id": "tv.stremioorigin.app",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "type": "native",
   "title": "Stremio Origin",
   "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
   "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
   "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
   "rootRequired": false,
-  "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.2.2/tv.stremioorigin.app_1.2.2_arm.ipk",
+  "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.3.0/tv.stremioorigin.app_1.3.0_arm.ipk",
   "ipkHash": {
-    "sha256": "640e0effc096e24ced0e7be70a0b69e79174f3f24d9865fd77cbc4ceef6ca2c4"
+    "sha256": "885ed138dadd7e3456b80b2c0801c4a2b681063b10c90a61496bb4f8275ae403"
   },
   "notes": [
-    "Clean subtitles: Quotes, brackets and music notes are gone; only the marks that matter stay. Works with every subtitle, AI-translated ones too.",
-    "Your addons' subtitles first: Chosen by themselves from your addons, OpenSubtitles when none has them, and kept in sync quietly in the background.",
-    "More skips: Skip intro, recap and credits on far more films, series and anime, from more sources.",
-    "Search you can trust: Results are titles on Netflix, Prime Video, Disney+ and the like. Settings › Playback."
+    "Anime upscale: Anime only: the TV's Super Resolution and gradation tuned for drawn pictures on the way to 4K, then put back. Settings › Playback.",
+    "Every title in its own language: Films and series start in the language you choose whenever the file has it, anime in Japanese. Settings › Audio.",
+    "Smarter search: Your recent searches, an Arabic keyboard, and spelling slips forgiven.",
+    "Skip, on a timer: The skip button leaves by itself after five seconds, a line showing the time left.",
+    "Reduce motion: Quicker moves and stiller pages for a slower TV. Settings › Appearance."
   ]
 }
