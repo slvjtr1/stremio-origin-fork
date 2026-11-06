@@ -277,7 +277,8 @@ void tmdb_init(void) {
   if (inited) return; inited = 1;
   snprintf(keyPath, sizeof keyPath, "%s/tmdb.key", store_data_dir()); snprintf(locDir, sizeof locDir, "%s/cache/loc", store_data_dir());
   const char *b = getenv("SB_TMDB"); snprintf(apiBase, sizeof apiBase, "%s", b && *b ? b : "https://api.themoviedb.org/3"); /* SB_TMDB: tests only */
-  for (int i = 0; i < SBK_TMDB_API_KEY_LEN && i + 1 < (int)sizeof builtin; i++) builtin[i] = (char)(SBK_TMDB_API_KEY[i] ^ SBK_TMDB_API_KEY_PAD[i % 32]);
+  const volatile unsigned char *pad = SBK_TMDB_API_KEY_PAD; /* (read at run time: a compiler that works the loop out at build time would store the key itself) */
+  for (int i = 0; i < SBK_TMDB_API_KEY_LEN && i + 1 < (int)sizeof builtin; i++) builtin[i] = (char)(SBK_TMDB_API_KEY[i] ^ pad[i % 32]);
   if (!key_ok(builtin)) builtin[0] = 0;
   char *t = read_file(keyPath, NULL); if (t) { strip_ws(t, key, sizeof key); free(t); }
   if (!key[0]) snprintf(key, sizeof key, "%s", builtin); /* a user's own key first, else the app's */

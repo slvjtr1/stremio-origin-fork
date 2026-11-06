@@ -1,5 +1,6 @@
 import java.io.File
 import java.util.Properties
+import java.security.MessageDigest
 
 plugins { id("com.android.application") }
 
@@ -8,6 +9,21 @@ val ver = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(repo.resolve("pkg/appin
 val appId = "app.stremioorigin.tv"   // the in-app updater looks for <appId>_<version>.apk in the releases
 // the built-in keys: the private file outside the repository (as tools/build.sh reads it); without it, none
 val keys = System.getenv("KEYS") ?: ((System.getenv("ORIGIN_BUILD") ?: (System.getProperty("user.home") + "/origin-build")) + "/keys.env")
+
+// sbkeys.h, as tools/sbkeys.py makes it: each key XORed with a pad (SHA-256 of "sb:<name>"), never plain text in the library
+val keysDir = layout.buildDirectory.dir("gen/sbkeys").get().asFile
+run {
+    val kv = HashMap<String, String>(); val kf = File(keys)
+    if (kf.isFile) kf.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") && it.contains('=') }
+        .forEach { val k = it.substringBefore('=').trim(); kv[k] = it.substringAfter('=').trim().trim('"', '\'') }
+    fun arr(name: String): String {
+        val v = (kv[name] ?: "").toByteArray(); val pad = MessageDigest.getInstance("SHA-256").digest("sb:$name".toByteArray())
+        val enc = v.mapIndexed { i, c -> ((c.toInt() and 255) xor (pad[i % 32].toInt() and 255)).toString() + "," }.joinToString("")
+        return "static const unsigned char SBK_${name}[] = { ${enc}0 }, SBK_${name}_PAD[32] = { ${pad.joinToString(",") { (it.toInt() and 255).toString() }} };\n#define SBK_${name}_LEN ${v.size}\n"
+    }
+    val body = "/* made by app/build.gradle.kts from the private keys file: never commit */\n" + arr("TMDB_API_KEY")
+    keysDir.mkdirs(); val h = File(keysDir, "sbkeys.h"); if (!h.isFile || h.readText() != body) h.writeText(body)
+}
 
 // release signing: ORIGIN_SIGNING names a properties file (storeFile, storePassword, keyAlias, keyPassword) kept out of the repository
 val signing = System.getenv("ORIGIN_SIGNING")?.let { File(it) }?.takeIf { it.isFile }?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
@@ -23,7 +39,7 @@ android {
         versionName = ver
         versionCode = ver.split(".").fold(0) { a, p -> a * 100 + p.toInt() }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }   // (most TVs run 32-bit Android on 64-bit chips)
-        externalNativeBuild { cmake { arguments += listOf("-DORIGIN_ROOT=${repo.invariantSeparatorsPath}", "-DANDROID_STL=c++_static", "-DORIGIN_APP_ID=$appId", "-DORIGIN_KEYS=${File(keys).invariantSeparatorsPath}") } }
+        externalNativeBuild { cmake { arguments += listOf("-DORIGIN_ROOT=${repo.invariantSeparatorsPath}", "-DANDROID_STL=c++_static", "-DORIGIN_APP_ID=$appId", "-DORIGIN_KEYS_DIR=${keysDir.invariantSeparatorsPath}") } }
     }
     buildFeatures { buildConfig = true }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.31.6" } }

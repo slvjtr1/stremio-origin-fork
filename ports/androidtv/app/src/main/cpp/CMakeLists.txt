@@ -85,7 +85,7 @@ target_include_directories(origin PRIVATE ${R}/src ${CMAKE_CURRENT_BINARY_DIR} $
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
 file(GLOB SDL_HEADERS ${D}/SDL/include/*.h)
 file(COPY ${SDL_HEADERS} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
-# the built-in keys, as tools/build.sh makes them (from the private keys file outside the repository; none without it)
-find_program(ORIGIN_PY NAMES python3 python REQUIRED)
-execute_process(COMMAND ${ORIGIN_PY} ${R}/tools/sbkeys.py "${ORIGIN_KEYS}" ${CMAKE_CURRENT_BINARY_DIR}/sbkeys.h COMMAND_ERROR_IS_FATAL ANY)
+# the built-in keys: sbkeys.h made by app/build.gradle.kts as tools/sbkeys.py makes it (from the private keys file
+# outside the repository; none without it), in ORIGIN_KEYS_DIR
+target_include_directories(origin PRIVATE ${ORIGIN_KEYS_DIR})
 target_link_libraries(origin PRIVATE SDL2 SDL2main tp_ass tp_hb tp_fb tp_ft tp_webp tp_misc libcurl_static GLESv2 EGL android log z m)
