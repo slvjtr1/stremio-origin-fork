@@ -6,6 +6,8 @@
 #   icon.png, apps.json + api/apps.json (the list), api/apps/<id>/manifest.json (+ releases/latest.json,
 #   full_description.html). The app checks the GitHub releases first and this manifest second (src/core/update.c);
 #   the manifest's notes are the What's new card's items.
+# With ORIGIN_SIGNING set (a properties file kept outside the repository, ports/androidtv/NOTES.md), the Android TV
+# APK too: dist/app.stremioorigin.tv_<version>.apk and .sha256, the name the Android TV app's updater looks for.
 # No git, no push: review, then commit, push and make the release yourself. The version must go up every time.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -64,3 +66,15 @@ open(os.path.join(d, 'full_description.html'), 'w', encoding='utf-8', newline='\
 print('site updated:', pid, ver)
 EOF
 ls -l "$IPK"; cat "$IPK.sha256"
+# ---- Android TV ---------------------------------------------------------------------------------
+if [ -n "${ORIGIN_SIGNING:-}" ] && [ -x "$ROOT/ports/androidtv/gradlew" ]; then
+  APK="$ROOT/dist/app.stremioorigin.tv_${VER}.apk"; rm -f "$APK" "$APK.sha256"
+  for a in arm64 armv7; do abi=$([ $a = arm64 ] && echo arm64-v8a || echo armeabi-v7a); [ -f "$ROOT/build/android/$abi/libsbengine.so" ] || "$ROOT/tools/build-engine.sh" android-$a; done
+  ( cd "$ROOT/ports/androidtv" && [ -d deps/SDL ] || ./fetch-deps.sh )
+  ( cd "$ROOT/ports/androidtv" && ./gradlew -q assembleRelease --console=plain )
+  cp "$ROOT/ports/androidtv/app/build/outputs/apk/release/app-release.apk" "$APK"
+  SHA=$("$PY" -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$APK")
+  ( cd "$ROOT/dist" && printf '%s *%s
+' "$SHA" "$(basename "$APK")" > "$(basename "$APK").sha256" )
+  ls -l "$APK"; cat "$APK.sha256"
+else echo "== Android TV app skipped (ORIGIN_SIGNING not set)"; fi

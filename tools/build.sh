@@ -43,20 +43,7 @@ CFLAGS="$OPT -std=c11 -D_GNU_SOURCE -DSB_APP_ID=\"$APPID\" -Wall -Wextra -Wno-un
 # by default (TMDB_API_KEY=...). They go into build/<target>/sbkeys.h, scrambled so they are
 # not plain text in the binary. Without the file the build still works: each then needs a user's own key.
 KEYS="${KEYS:-$ORIGIN_BUILD/keys.env}"
-python3 - "$KEYS" "$B/sbkeys.h" <<'PY'
-import os, sys, hashlib
-src, out = sys.argv[1], sys.argv[2]; kv = {}
-if os.path.isfile(src):
-    for ln in open(src):
-        ln = ln.strip()
-        if ln and not ln.startswith('#') and '=' in ln: k, v = ln.split('=', 1); kv[k.strip()] = v.strip().strip('"\'')
-def arr(name):
-    v = kv.get(name, '').encode(); pad = hashlib.sha256(b'sb:' + name.encode()).digest()
-    return 'static const unsigned char SBK_%s[] = { %s0 }, SBK_%s_PAD[32] = { %s };\n#define SBK_%s_LEN %d\n' % (name, ''.join('%d,' % (c ^ pad[i % 32]) for i, c in enumerate(v)), name, ','.join(str(x) for x in pad), name, len(v))
-body = '/* made by tools/build.sh from the private keys file: never commit */\n' + arr('TMDB_API_KEY')
-if not os.path.isfile(out) or open(out).read() != body: open(out, 'w').write(body)
-print('== keys built in: %s' % (', '.join(n for n in ('TMDB_API_KEY',) if kv.get(n)) or 'none (%s)' % src))
-PY
+python3 "$ROOT/tools/sbkeys.py" "$KEYS" "$B/sbkeys.h"
 CFLAGS="$CFLAGS -I$B"
 
 # ---- third-party ---------------------------------------------------------------------------
