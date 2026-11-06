@@ -1273,5 +1273,17 @@
  "{s}s": "{s} ث",
  "{t} left": "متبقٍ {t}",
  "{weekday}, {month} {day}": "{weekday}، {day} {month}",
- "…you never even said goodbye.": "…لم تودّعني حتى."
+ "…you never even said goodbye.": "…لم تودّعني حتى.",
+ "The update failed. Try again": "تعذّر التحديث. حاول مرة أخرى",
+ "Allow installs from Stremio Origin, then press Install again": "اسمح بالتثبيت من Stremio Origin، ثم اضغط تثبيت مرة أخرى",
+ "Audio language, anime, interface sounds": "لغة الصوت، الأنمي، أصوات الواجهة",
+ "Up reaches Settings and Search": "زر الأعلى يوصلك إلى الإعدادات والبحث",
+ "The arrows, OK and Back take you everywhere.": "الأسهم وموافق والرجوع تأخذك إلى كل مكان.",
+ "Menu and Search keys, or red and green, go straight there": "زرّا القائمة والبحث، أو الأحمر والأخضر، يوصلانك مباشرة",
+ "Now on Google TV": "الآن على Google TV",
+ "Stremio Origin for Google TV and Android TV, on TVs and boxes from 2020 on: the same app, your accounts and settings, updates from inside the app.": "Stremio Origin على Google TV وAndroid TV، للتلفزيونات والأجهزة من 2020 وما بعدها: التطبيق نفسه، حساباتك وإعداداتك، والتحديثات من داخل التطبيق.",
+ "Made for its remote": "مصمم لريموته",
+ "The D-pad, OK and Back do everything. Captions, Audio and Info keys go straight to their lists; Menu opens Settings, Search opens Search.": "الأسهم وموافق والرجوع تكفي لكل شيء. أزرار الترجمة والصوت والمعلومات تفتح قوائمها مباشرة؛ القائمة تفتح الإعدادات، والبحث يفتح البحث.",
+ "Sound and picture as made": "الصوت والصورة كما صُنعا",
+ "On Google TV, Dolby Atmos, DTS and TrueHD go to your receiver as they are, and the screen follows the film's frame rate.": "على Google TV، يصل Dolby Atmos وDTS وTrueHD إلى جهاز الصوت كما هي، وتتبع الشاشة معدل إطارات الفيلم."
 }
