@@ -210,24 +210,24 @@ static void choose_profile(Prof *P) {
 /* libtorrent for the device's memory: fewer connections and peers, small socket and send buffers, a short disk queue */
 static void apply_memory_settings(void) {
   static const struct { const char *n; int v[3]; } S[] = {
-    { "connections_limit",            {   50,    80,   120 } },
-    { "connection_speed",             {   15,    25,    35 } },
-    { "max_peerlist_size",            {  400,  1000,  2000 } },
+    { "connections_limit",            {   60,   120,   200 } },
+    { "connection_speed",             {   20,    35,    50 } },
+    { "max_peerlist_size",            {  600,  1500,  3000 } },
     { "max_paused_peerlist_size",     {   50,   200,   500 } },
-    { "num_want",                     {   50,   100,   200 } },
+    { "num_want",                     {   80,   150,   200 } },
     { "send_buffer_watermark",        { 196608, 393216, 524288 } },
     { "send_buffer_low_watermark",    { 32768, 65536, 10240 * 10 } },
     { "send_buffer_watermark_factor", {   50,    50,    50 } },
     { "recv_socket_buffer_size",      { 131072, 262144, 0 } },   /* 0: the system's own */
     { "send_socket_buffer_size",      { 65536, 131072, 0 } },
     { "max_queued_disk_bytes",        { 524288, 1048576, 1048576 } },
-    { "max_allowed_in_request_queue", {   64,   250,   500 } },
-    { "unchoke_slots_limit",          {    4,     6,     8 } },
+    { "max_allowed_in_request_queue", {  128,   500,  1000 } },
+    { "unchoke_slots_limit",          {    6,     8,    12 } },
     { "dht_max_peers",                {  300,  1000,  5000 } },
     { "dht_max_torrents",             {  200,   600,  2000 } },
     { "dht_max_dht_items",            {  100,   300,   700 } },
     { "file_pool_size",               {    8,    16,    40 } },
-    { "aio_threads",                  {    1,     2,     4 } },
+    { "aio_threads",                  {    2,     4,     4 } },
     { "hashing_threads",              {    1,     1,     2 } },
     { "stop_tracker_timeout",         {    1,     2,     2 } },   /* s: stopping (idle, exit) does not wait long for trackers */
   };
@@ -237,8 +237,8 @@ static void apply_memory_settings(void) {
     if (E->setting(S[i].n, v)) nb += snprintf(bad + nb, sizeof bad - nb > 0 ? sizeof bad - nb : 0, " %s", S[i].n); }
   if (bad[0]) fprintf(stderr, "[p2p] settings not taken:%s\n", bad);
 }
-static uint64_t mem_cache_bytes(void) { return (PF.tier == 0 ? 4 : PF.tier == 1 ? 8 : 16) * MB; }
-static uint64_t upload_bps(void) { return (PF.tier == 0 ? 256 : PF.tier == 1 ? 512 : 1024) * 1024ull; }
+static uint64_t mem_cache_bytes(void) { return (PF.tier == 0 ? 8 : PF.tier == 1 ? 16 : 32) * MB; }
+static uint64_t upload_bps(void) { return (PF.tier == 0 ? 512 : PF.tier == 1 ? 1024 : 2048) * 1024ull; }
 
 static void *engine_start(void *a) { plat_thread_background(5); (void)a; /* libtorrent's threads start from here and keep the lower priority */
   choose_profile(&PF);

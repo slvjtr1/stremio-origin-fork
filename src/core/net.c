@@ -119,6 +119,7 @@ static void perform(Req *r, int slot) {
   f_easy_setopt(c, CURLOPT_URL, r->url); f_easy_setopt(c, CURLOPT_WRITEFUNCTION, on_data); f_easy_setopt(c, CURLOPT_WRITEDATA, r);
   f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 8000L); f_easy_setopt(c, CURLOPT_TIMEOUT_MS, r->timeoutMs > 0 ? r->timeoutMs : 20000L);
+  f_easy_setopt(c, CURLOPT_TCP_NODELAY, 1L); f_easy_setopt(c, CURLOPT_TCP_KEEPALIVE, 1L); f_easy_setopt(c, CURLOPT_DNS_CACHE_TIMEOUT, 600L); f_easy_setopt(c, CURLOPT_BUFFERSIZE, 256L * 1024);
   f_easy_setopt(c, CURLOPT_USERAGENT, ua()); if (!r->size) f_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
   if (caPath[0]) f_easy_setopt(c, CURLOPT_CAINFO, caPath);
   if (r->size) { f_easy_setopt(c, CURLOPT_TIMEOUT_MS, 10000L); f_easy_setopt(c, CURLOPT_HEADERFUNCTION, on_header); f_easy_setopt(c, CURLOPT_HEADERDATA, r); f_easy_setopt(c, CURLOPT_WRITEFUNCTION, on_size_data); hs = f_slist_append(hs, "Range: bytes=0-0"); }
@@ -342,6 +343,8 @@ int net_pipe_sync(const char *url, const char *headers, int head, NetHdrSink hs,
   f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 10000L); f_easy_setopt(c, CURLOPT_LOW_SPEED_LIMIT, 1L); f_easy_setopt(c, CURLOPT_LOW_SPEED_TIME, (long)(stallSec > 0 ? stallSec : 60));
   f_easy_setopt(c, CURLOPT_USERAGENT, "Mozilla/5.0 (Web0S; Linux) StremioOrigin"); /* a User-Agent among the headers replaces it */
+  f_easy_setopt(c, CURLOPT_BUFFERSIZE, 512L * 1024); /* the video arrives in big reads (curl's own 16 KB: many more wake-ups for the same bytes) */
+  f_easy_setopt(c, CURLOPT_TCP_NODELAY, 1L); f_easy_setopt(c, CURLOPT_TCP_KEEPALIVE, 1L); f_easy_setopt(c, CURLOPT_TCP_KEEPIDLE, 30L); f_easy_setopt(c, CURLOPT_TCP_KEEPINTVL, 15L);
   if (head) f_easy_setopt(c, CURLOPT_NOBODY, 1L);
   if (sl) f_easy_setopt(c, CURLOPT_HTTPHEADER, sl);
   if (caPath[0]) f_easy_setopt(c, CURLOPT_CAINFO, caPath);

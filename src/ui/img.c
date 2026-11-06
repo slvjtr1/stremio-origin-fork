@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <time.h>
 #include <math.h>
 #define STB_IMAGE_IMPLEMENTATION
@@ -83,7 +84,7 @@ static unsigned frameNo; static long usedBytes, budgetBytes = 40L * 1024 * 1024;
 static unsigned frameNo; static long usedBytes, budgetBytes = 96L * 1024 * 1024;
 #endif
 static char cacheDir[1024];
-#define WORKERS 6   /* mostly waiting on the network; the decoding itself is limited to two at a time (dec_enter) */
+#define WORKERS 8   /* mostly waiting on the network; the decoding itself is limited to the spare cores (dec_enter) */
 
 static unsigned fnv(const char *s) { unsigned h = 2166136261u; while (*s) { h ^= (unsigned char)*s++; h *= 16777619u; } return h; }
 static Img *find(const char *url, unsigned h) { for (Img *i = table[h % BUCKETS]; i; i = i->next) if (i->hash == h && !strcmp(i->url, url)) return i; return NULL; }
@@ -113,7 +114,8 @@ static int small_load(Img *im) {
   im->px = px; im->pw = w; im->ph = h; im->pch = 4; return 1;
 }
 static pthread_mutex_t decMu = PTHREAD_MUTEX_INITIALIZER; static pthread_cond_t decCv = PTHREAD_COND_INITIALIZER; static int decBusy;
-static void dec_enter(void) { pthread_mutex_lock(&decMu); while (decBusy >= 2) pthread_cond_wait(&decCv, &decMu); decBusy++; pthread_mutex_unlock(&decMu); }
+static int dec_max(void) { static int m; if (!m) { long nc = sysconf(_SC_NPROCESSORS_ONLN); m = nc >= 4 ? (int)nc - 1 : 2; if (m > 4) m = 4; } return m; } /* every core but the drawing's (2 at least, 4 at most) */
+static void dec_enter(void) { int mx = dec_max(); pthread_mutex_lock(&decMu); while (decBusy >= mx) pthread_cond_wait(&decCv, &decMu); decBusy++; pthread_mutex_unlock(&decMu); }
 static void dec_leave(void) { pthread_mutex_lock(&decMu); decBusy--; pthread_cond_signal(&decCv); pthread_mutex_unlock(&decMu); }
 static void load_(Img *im);
 static void decode_part(Img *im, unsigned char *data, size_t len, int fromNet, const char *key);
