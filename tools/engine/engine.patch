@@ -1588,7 +1588,7 @@ index bb2d232..7236eae 100644
  
  }
 diff --git a/src/torrent/libtorrent_stream_bridge.cpp b/src/torrent/libtorrent_stream_bridge.cpp
-index 3e218b9..66933b0 100644
+index 3e218b9..ddd6109 100644
 --- a/src/torrent/libtorrent_stream_bridge.cpp
 +++ b/src/torrent/libtorrent_stream_bridge.cpp
 @@ -9,6 +9,7 @@
@@ -1599,7 +1599,16 @@ index 3e218b9..66933b0 100644
  #include <atomic>
  #include <chrono>
  #include <cctype>
-@@ -59,6 +60,79 @@ std::uint64_t readahead_for_disk_budget(const std::uint64_t disk_capacity_bytes)
+@@ -43,6 +44,8 @@ namespace {
+ constexpr std::size_t maximum_http_commands = 4096;
+ constexpr std::size_t stream_worker_count = 8;
+ constexpr std::chrono::seconds piece_wait_timeout{60};
++// Stremio Origin: how long a request may be sent blocks not yet hash-checked (see DemandState)
++constexpr std::chrono::seconds unverified_window{8};
+ constexpr std::uint64_t critical_window_bytes = 8 * 1024 * 1024;
+ constexpr std::uint32_t critical_piece_limit = 16;
+ constexpr std::uint64_t playback_window_bytes = 32 * 1024 * 1024;
+@@ -59,6 +62,79 @@ std::uint64_t readahead_for_disk_budget(const std::uint64_t disk_capacity_bytes)
      );
  }
  
@@ -1679,7 +1688,7 @@ index 3e218b9..66933b0 100644
  std::string torrent_id(const lt::torrent_handle& handle) {
      const auto hashes = handle.info_hashes();
      if (hashes.has_v1()) {
-@@ -217,6 +291,8 @@ struct LibtorrentStreamBridge::Impl {
+@@ -217,6 +293,8 @@ struct LibtorrentStreamBridge::Impl {
          std::uint64_t file_size = 0;
          std::filesystem::path payload_path;
          std::shared_ptr<StreamActivity> activity;
@@ -1688,7 +1697,20 @@ index 3e218b9..66933b0 100644
          std::shared_ptr<StreamCounters> counters = std::make_shared<StreamCounters>();
      };
  
-@@ -307,15 +383,15 @@ struct LibtorrentStreamBridge::Impl {
+@@ -236,6 +314,12 @@ struct LibtorrentStreamBridge::Impl {
+ 
+     struct DemandState {
+         std::atomic_bool cancelled = false;
++        // Stremio Origin: when the request began. Blocks of a piece not yet checked
++        // against its hash go out only in its first seconds (a quick start, a quick
++        // seek); after that only checked pieces: a piece that fails its check (a bad
++        // peer) is downloaded again, but bytes already sent reached the decoder, which
++        // shows them as a burst of coloured blocks
++        std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+     };
+ 
+     enum class CommandType {
+@@ -307,15 +391,15 @@ struct LibtorrentStreamBridge::Impl {
          const std::uint16_t requested_port,
          const std::uint64_t memory_capacity_bytes,
          const std::uint64_t disk_capacity_bytes,
@@ -1712,7 +1734,7 @@ index 3e218b9..66933b0 100644
            inactivity_timeout(inactivity),
            piece_cache(memory_capacity_bytes),
            server(std::make_unique<http::LoopbackServer>(
-@@ -328,7 +404,9 @@ struct LibtorrentStreamBridge::Impl {
+@@ -328,7 +412,9 @@ struct LibtorrentStreamBridge::Impl {
                    handle_http(request, writer, token);
                },
                stream_worker_count
@@ -1723,7 +1745,7 @@ index 3e218b9..66933b0 100644
      }
  
      ~Impl() {
-@@ -366,8 +444,17 @@ struct LibtorrentStreamBridge::Impl {
+@@ -366,8 +452,17 @@ struct LibtorrentStreamBridge::Impl {
                  handle.status(lt::torrent_handle::query_save_path).save_path
              )),
              std::make_shared<StreamActivity>(std::chrono::steady_clock::now()),
@@ -1741,7 +1763,7 @@ index 3e218b9..66933b0 100644
          std::vector<std::string> previous_streams;
          {
              std::lock_guard lock(routes_mutex);
-@@ -560,7 +647,10 @@ struct LibtorrentStreamBridge::Impl {
+@@ -560,7 +655,10 @@ struct LibtorrentStreamBridge::Impl {
          };
          auto cursor = slice.begin;
          auto deadline = std::chrono::steady_clock::now() + piece_wait_timeout;
@@ -1753,7 +1775,15 @@ index 3e218b9..66933b0 100644
          std::vector<char> buffer;
          while (cursor < slice.end) {
              std::shared_ptr<std::vector<char>> verified;
-@@ -583,10 +673,9 @@ struct LibtorrentStreamBridge::Impl {
+@@ -569,6 +667,7 @@ struct LibtorrentStreamBridge::Impl {
+                 std::unique_lock lock(waiter->mutex);
+                 const auto unverified_ready = [&] {
+                     return payload_readable &&
++                        std::chrono::steady_clock::now() - demand_state->started < unverified_window &&
+                         finished_run_end(waiter->finished_blocks, cursor, slice.end) > cursor;
+                 };
+                 waiter->ready.wait_until(lock, deadline, [&] {
+@@ -583,10 +682,9 @@ struct LibtorrentStreamBridge::Impl {
                  if (waiter->done) {
                      verified = waiter->data;
                  } else if (unverified_ready()) {
@@ -1767,7 +1797,7 @@ index 3e218b9..66933b0 100644
                      );
                  } else {
                      waiter->cancelled = true;
-@@ -607,13 +696,22 @@ struct LibtorrentStreamBridge::Impl {
+@@ -607,13 +705,22 @@ struct LibtorrentStreamBridge::Impl {
                  add_delivered_bytes(route.counters, static_cast<std::uint64_t>(bytes.size()));
                  return true;
              }
@@ -1795,7 +1825,7 @@ index 3e218b9..66933b0 100644
                  payload_readable = false;
                  continue;
              }
-@@ -669,7 +767,109 @@ struct LibtorrentStreamBridge::Impl {
+@@ -669,7 +776,109 @@ struct LibtorrentStreamBridge::Impl {
          wake = std::move(callback);
      }
  
@@ -1905,7 +1935,7 @@ index 3e218b9..66933b0 100644
          std::deque<HttpCommand> available;
          {
              std::lock_guard lock(commands_mutex);
-@@ -726,8 +926,239 @@ struct LibtorrentStreamBridge::Impl {
+@@ -726,8 +935,239 @@ struct LibtorrentStreamBridge::Impl {
          for (const auto& id : changed_torrents) {
              recompute_schedule(id);
          }
@@ -2145,7 +2175,7 @@ index 3e218b9..66933b0 100644
      }
  
      void reissue_stalled_reads() {
-@@ -881,16 +1312,18 @@ struct LibtorrentStreamBridge::Impl {
+@@ -881,16 +1321,18 @@ struct LibtorrentStreamBridge::Impl {
          piece_waiters[key].push_back(command.waiter);
          demand.needs_data = !piece_available(command.route, command.piece);
          if (!demand.needs_data) {
@@ -2174,7 +2204,7 @@ index 3e218b9..66933b0 100644
              return;
          }
          auto partial = partial_blocks.find(key);
-@@ -1245,6 +1678,20 @@ struct LibtorrentStreamBridge::Impl {
+@@ -1245,6 +1687,20 @@ struct LibtorrentStreamBridge::Impl {
          };
          requested_reads.erase(key);
          partial_blocks.erase(key);
@@ -2195,7 +2225,7 @@ index 3e218b9..66933b0 100644
          if (alert.error || !alert.buffer || alert.size <= 0) {
              fail_piece(key, alert.error ? alert.error.message() : "verified piece is empty");
              return;
-@@ -1265,6 +1712,16 @@ struct LibtorrentStreamBridge::Impl {
+@@ -1265,6 +1721,16 @@ struct LibtorrentStreamBridge::Impl {
          piece_waiters.erase(found);
      }
  
@@ -2212,7 +2242,7 @@ index 3e218b9..66933b0 100644
      static void complete_waiter(
          const std::shared_ptr<PieceWaiter>& waiter,
          std::shared_ptr<std::vector<char>> data,
-@@ -1311,7 +1768,15 @@ struct LibtorrentStreamBridge::Impl {
+@@ -1311,7 +1777,15 @@ struct LibtorrentStreamBridge::Impl {
      }
  
      void remove_torrent(const std::string& id) {
@@ -2228,7 +2258,7 @@ index 3e218b9..66933b0 100644
          anchors.erase(id);
          piece_cache.erase_torrent(id);
          last_ready_pieces.erase(id);
-@@ -1537,6 +2002,13 @@ struct LibtorrentStreamBridge::Impl {
+@@ -1537,6 +2011,13 @@ struct LibtorrentStreamBridge::Impl {
          }
          result.pending_piece_reads = static_cast<std::uint32_t>(pending_reads);
          result.cache = piece_cache.stats();
@@ -2242,7 +2272,7 @@ index 3e218b9..66933b0 100644
          return result;
      }
  
-@@ -1585,9 +2057,15 @@ struct LibtorrentStreamBridge::Impl {
+@@ -1585,9 +2066,15 @@ struct LibtorrentStreamBridge::Impl {
          stream_progress_cache.clear();
      }
  
@@ -2259,7 +2289,7 @@ index 3e218b9..66933b0 100644
      std::unordered_map<std::string, StreamRoute> routes;
      std::vector<BackendStats::Stream> stream_progress_cache;
      std::chrono::steady_clock::time_point next_progress_sample{};
-@@ -1611,6 +2089,19 @@ struct LibtorrentStreamBridge::Impl {
+@@ -1611,6 +2098,19 @@ struct LibtorrentStreamBridge::Impl {
      cache::VerifiedPieceCache piece_cache;
      std::atomic_bool shutting_down = false;
      std::unique_ptr<http::LoopbackServer> server;
@@ -2279,7 +2309,7 @@ index 3e218b9..66933b0 100644
  
      static std::uint32_t saturating_count(const std::size_t count) {
          return static_cast<std::uint32_t>(std::min(
-@@ -1624,13 +2115,17 @@ LibtorrentStreamBridge::LibtorrentStreamBridge(
+@@ -1624,13 +2124,17 @@ LibtorrentStreamBridge::LibtorrentStreamBridge(
      const std::uint16_t requested_port,
      const std::uint64_t memory_capacity_bytes,
      const std::uint64_t disk_capacity_bytes,
@@ -2299,7 +2329,7 @@ index 3e218b9..66933b0 100644
        )) {
  }
  
-@@ -1653,6 +2148,14 @@ void LibtorrentStreamBridge::poll() {
+@@ -1653,6 +2157,14 @@ void LibtorrentStreamBridge::poll() {
      impl_->poll();
  }
  
