@@ -76,5 +76,6 @@ if [ -n "${ORIGIN_SIGNING:-}" ] && [ -x "$ROOT/ports/androidtv/gradlew" ]; then
   SHA=$("$PY" -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$APK")
   ( cd "$ROOT/dist" && printf '%s *%s
 ' "$SHA" "$(basename "$APK")" > "$(basename "$APK").sha256" )
+  cp "$APK" "$ROOT/dist/StremioOrigin-AndroidTV.apk"   # the same file under one name for every version: releases/latest/download/StremioOrigin-AndroidTV.apk (the Downloader code points there)
   ls -l "$APK"; cat "$APK.sha256"
 else echo "== Android TV app skipped (ORIGIN_SIGNING not set)"; fi
