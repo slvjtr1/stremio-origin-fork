@@ -143,7 +143,7 @@ static struct {
     /* the same conversion for a Dolby Vision profile 7 picture: dv the picture goes out as 8.1, copyA the audio track as
        it is, dvTried started once already, dvSeen what the TV showed was checked */
     int dv, copyA, dvTried, dvSeen; double dvAt; } dts;
-  int assPlain; /* styled subtitles were too slow here: plain for the rest of this film */ double lastSave; int marked; char aspect[8]; const char *res; char infoKey[256]; int pausedShown; double pausedAt;
+  int assPlain; /* styled subtitles were too slow here: plain for the rest of this film */ double lastSave; int marked; char aspect[8]; const char *res; char infoKey[256]; int pausedShown; double pausedAt; int clean; Mo cleanK; /* clean: paused and untouched 17 s, the frame alone (cleanK 0..1: how far it has gone) */
   /* torrents: resolved by the engine first; the file's own subtitles and chapters from the stream itself */
   int isP2p, resolving; double posTick; int mkvTracksOk, chapWant;
   Nudge nudge; double nameAt;
@@ -1508,6 +1508,7 @@ static void try_next(void);
 void player_key(int k, int down) {
   if (!down || !P.open) return; app_touch();
   P.lastAct = now_(); if (P.ssOn) { ss_exit(); return; } /* the key that wakes the screensaver does nothing else */
+  if (P.clean && k != K_PLAY && k != K_PLAYPAUSE) { P.clean = 0; show_osd(1); return; } /* the clean frame: a key brings the controls back, and does only that (Play plays) */
   if (P.failed && P.canNext && k == K_OK) { try_next(); return; }
   if (!P.started || !P.live || P.failed) { if (k == K_BACK || k == K_EXIT) close_player(0, 0); return; } /* the art is up (resolving): only Back does anything */
   P.hvOn = 0;
@@ -1901,7 +1902,7 @@ static void pg_ask(void) { if (P.pg.asked || P.isTrailer || strncmp(P.id, "tt", 
   parental_get(P.id, on_pg, (void *)(uintptr_t)P.pg.sess); rating_get(P.type, P.id, on_age, (void *)(uintptr_t)P.pg.sess); }
 /* the page's classes, as targets: each motion goes there with the duration, curve and delay the page gives that state */
 static void css(void) {
-  int tr = P.mode == 2 && P.tray.kind > 0, ss = P.ssOn, osd = P.osd && !ss, pz = P.pausedShown, skm = P.skm && !osd;
+  int tr = P.mode == 2 && P.tray.kind > 0, ss = P.ssOn, osd = P.osd && !ss, pz = P.pausedShown && !P.clean, skm = P.skm && !osd; /* (the clean frame: no shade, no Paused) */
   if (osd && !tr) { mo_to(&P.ttlA, 1, .42f, C_OUT, 0); mo_to(&P.ttlX, 0, .42f, C_OUT, 0); mo_to(&P.ttlY, 0, .42f, C_OUT, 0); }
   else if (osd) { mo_to(&P.ttlA, 0, .42f, C_OUT, 0); mo_to(&P.ttlX, 0, .42f, C_OUT, 0); mo_to(&P.ttlY, 10, .42f, C_OUT, 0); } /* a tray takes its place: it sinks a little */
   else { mo_to(&P.ttlA, 0, .2f, C_EASE, 0); mo_to(&P.ttlX, -30, .2f, C_EASE, 0); mo_to(&P.ttlY, 0, .2f, C_EASE, 0); }
@@ -2005,7 +2006,9 @@ void player_tick(float dt) {
     if (P.ssOn && !paused()) ss_exit();
     /* (the player has no screensaver of its own any more: the app's one comes over a paused film) */
     int pz = paused() && P.mode != 2; if (pz && !P.pausedShown) { if (!P.pausedAt) P.pausedAt = now_(); if (now_() - P.pausedAt > 0.35) { P.pausedShown = 1; show_osd(1); } }
-    else if (!pz) { P.pausedAt = 0; P.pausedShown = 0; }
+    else if (!pz) { P.pausedAt = 0; P.pausedShown = 0; P.clean = 0; }
+    if (pz && P.pausedShown && !P.clean && P.mode <= 1 && P.seekT < 0 && now_() - fmax(P.lastAct, P.pausedAt) >= 17) { P.clean = 1; hide_osd(); } /* paused and untouched 17 s: the frame alone, full screen */
+    mo_to(&P.cleanK, P.clean ? 1 : 0, P.clean ? .6f : .25f, C_EASE, 0); mo_tick(&P.cleanK, dt);
     if (P.seekT >= 0 && now_() >= P.seekCommitAt) commit_seek();
     if (P.seekTxtUntil && now_() >= P.seekTxtUntil) { P.seekTxtUntil = 0; P.skOn = 0; P.skm = 0; }
     if (P.mode == 1 && now_() >= P.hideAt && !paused() && P.seekT < 0) hide_osd();
@@ -2195,7 +2198,7 @@ static void draw_osd(void) {
   if (P.dim.v > 0.001f) { gfx_opacity_push(P.dim.v); gfx_rrect_v(0, H * 0.44f, W, H * 0.56f * 0.54f, 0, BLACK_A(0), BLACK_A(140)); gfx_rrect_v(0, H * 0.44f + H * 0.56f * 0.54f, W, H * 0.56f * 0.46f, 0, BLACK_A(140), BLACK_A(224)); gfx_opacity_pop(); }
   if (P.dimT.v > 0.001f) { gfx_opacity_push(P.dimT.v); gfx_rrect_v(0, 0, W, 240, 0, BLACK_A(140), BLACK_A(0)); gfx_opacity_pop(); }
   if (P.vig.v > 0.001f) gfx_alpha_tex(vigTex, 0, 0, W, H, BLACK_A((int)(255 * P.vig.v)));
-  draw_subs();
+  { float ca = 1 - P.cleanK.v; if (ca > 0.001f) { if (ca < 0.999f) gfx_opacity_push(ca); draw_subs(); if (ca < 0.999f) gfx_opacity_pop(); } } /* (the clean frame: no lines over it) */
   /* buffering: a quarter of the ring turning */
   if (P.bufA.v > 0.001f) { gfx_opacity_push(P.bufA.v); float cx = W / 2, cy = H / 2 - 62 + 40; gfx_ring(cx - 40, cy - 40, 80, 80, 40, 5, WHITE_A(36));
     float ph = clock_ph(0.9) * 6.2832f; for (int i = 0; i <= 20; i++) { float an = ph - 2.356f + 1.5708f * i / 20; gfx_circle(cx + cosf(an) * 37.5f, cy + sinf(an) * 37.5f, 2.5f, ACC2); }
@@ -2301,7 +2304,7 @@ static void draw_osd(void) {
     gfx_offset_pop(); gfx_opacity_pop(); }
   /* the prompts: the skip pill, the credits buttons, the next-up card */
   PG.prompt = 0; const PPrompt *pr = P.prompt.k ? &P.prompt : &P.shown;
-  if (P.prA.v > 0.001f && pr->k) { float a = P.prA.v; gfx_opacity_push(a); gfx_offset_push(nudge_x(&P.nudge) * (P.mode == 3), P.prY.v); float pb = P.prB.v, rm = 72 + 40 * fminf(1, fmaxf(0, (440 - pb) / 336)); /* off the edges: further in alone, in line with the buttons when they show */ PG.prompt = a > 0.5f && P.prompt.k; PG.card = 0; PG.npr = 0;
+  if (P.prA.v * (1 - P.cleanK.v) > 0.001f && pr->k) { float a = P.prA.v * (1 - P.cleanK.v); gfx_opacity_push(a); gfx_offset_push(nudge_x(&P.nudge) * (P.mode == 3), P.prY.v); float pb = P.prB.v, rm = 72 + 40 * fminf(1, fmaxf(0, (440 - pb) / 336)); /* off the edges: further in alone, in line with the buttons when they show */ PG.prompt = a > 0.5f && P.prompt.k; PG.card = 0; PG.npr = 0;
     if (pr->k == 3 && P.next.has) { float cw = 540, cx = W - rm - cw; float artH = 286, lh2 = text_line_height(21); int nsp = spoiler_on() && P.next.thumb[0] && !spoiler_failed(P.next.thumb); const char *nov = nsp && P.next.ov[0] ? T("The story shows once you watch it") : P.next.ov; /* the next one is not seen yet: blurred, no story */
       static TMemo ovW; float ovn = nov[0] ? tm_wrap(&ovW, nov, cw - 44, 2, 24, 400, 0) : 0; float ch = 16 + artH + 18 + lh2 + 6 + text_line_height(30) + (ovn ? 6 + ovn * 33 : 0) + 18 + 36 + 18; float cy = H - pb - ch;
       PG.card = 1; PG.prX[0] = cx; PG.prY[0] = cy; PG.prW[0] = cw; PG.prH[0] = ch;
