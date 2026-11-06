@@ -16,23 +16,23 @@
       "fullDescriptionUrl": "api/apps/tv.stremioorigin.app/full_description.html",
       "manifest": {
         "id": "tv.stremioorigin.app",
-        "version": "1.3.0",
+        "version": "1.4.0",
         "type": "native",
         "title": "Stremio Origin",
         "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
         "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
         "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
         "rootRequired": false,
-        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.3.0/tv.stremioorigin.app_1.3.0_arm.ipk",
+        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.4.0/tv.stremioorigin.app_1.4.0_arm.ipk",
         "ipkHash": {
-          "sha256": "885ed138dadd7e3456b80b2c0801c4a2b681063b10c90a61496bb4f8275ae403"
+          "sha256": "b25a25ed6f17658ba0cf605d80fd98d6feffe945e142f761743f42e1c1daaa8b"
         },
         "notes": [
-          "Anime upscale: Anime only: the TV's Super Resolution and gradation tuned for drawn pictures on the way to 4K, then put back. Settings › Playback.",
-          "Every title in its own language: Films and series start in the language you choose whenever the file has it, anime in Japanese. Settings › Audio.",
-          "Smarter search: Your recent searches, an Arabic keyboard, and spelling slips forgiven.",
-          "Skip, on a timer: The skip button leaves by itself after five seconds, a line showing the time left.",
-          "Reduce motion: Quicker moves and stiller pages for a slower TV. Settings › Appearance."
+          "Upscale, your way: Anime and films each with levels C, B and A, A the strongest, and a button in the player to change it as you watch. Settings › Picture and sound.",
+          "See in the dark: Dark scenes clearer in a bright room, and Brightness for a brighter screen while you watch. Settings › Picture and sound.",
+          "Clear voice: Speech clearer through the TV's own dialogue enhancer, stereo and Atmos as they are. Even volume too.",
+          "Accounts: Keep several Stremio accounts on this TV and switch in one press. Settings › Accounts.",
+          "Only the words: Sound descriptions like [coughs] and (gunshots) hidden, and subtitles lined up sooner and more smoothly."
         ]
       }
     }

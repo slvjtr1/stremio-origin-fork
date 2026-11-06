@@ -1,35 +1,35 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "items": [
     {
       "icon": "g_spark",
-      "title": "Anime upscale",
-      "text": "Anime only: the TV's Super Resolution and gradation tuned for drawn pictures on the way to 4K, then put back. Settings › Playback."
+      "title": "Upscale, your way",
+      "text": "Anime and films each with levels C, B and A, A the strongest, and a button in the player to change it as you watch. Settings › Picture and sound."
+    },
+    {
+      "icon": "eye",
+      "title": "See in the dark",
+      "text": "Dark scenes clearer in a bright room, and Brightness for a brighter screen while you watch. Settings › Picture and sound."
     },
     {
       "icon": "p_aud",
-      "title": "Every title in its own language",
-      "text": "Films and series start in the language you choose whenever the file has it, anime in Japanese. Settings › Audio."
+      "title": "Clear voice",
+      "text": "Speech clearer through the TV's own dialogue enhancer, stereo and Atmos as they are. Even volume too."
+    },
+    {
+      "icon": "set_acct",
+      "title": "Accounts",
+      "text": "Keep several Stremio accounts on this TV and switch in one press. Settings › Accounts."
+    },
+    {
+      "icon": "p_subs",
+      "title": "Only the words",
+      "text": "Sound descriptions like [coughs] and (gunshots) hidden, and subtitles lined up sooner and more smoothly."
     },
     {
       "icon": "nav_search",
-      "title": "Smarter search",
-      "text": "Your recent searches, an Arabic keyboard, and spelling slips forgiven."
-    },
-    {
-      "icon": "p_skip",
-      "title": "Skip, on a timer",
-      "text": "The skip button leaves by itself after five seconds, a line showing the time left."
-    },
-    {
-      "icon": "g_speed",
-      "title": "Reduce motion",
-      "text": "Quicker moves and stiller pages for a slower TV. Settings › Appearance."
-    },
-    {
-      "icon": "restart",
-      "title": "Reset all settings",
-      "text": "Every setting back as it came, your account and library untouched. Settings › About."
+      "title": "Recent searches",
+      "text": "Kept on this TV only, saved as you search, with Clear history."
     }
   ],
   "support": {
