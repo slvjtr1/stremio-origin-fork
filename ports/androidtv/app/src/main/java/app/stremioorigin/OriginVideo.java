@@ -67,8 +67,8 @@ public final class OriginVideo {
         }
         view = v; v.setVisibility(View.INVISIBLE);
     }
-    static void release() { ui.post(() -> { if (p != null) { p.release(); p = null; } st = 0; }); }
-    static void backgrounded() { if (p != null && p.getPlayWhenReady()) p.setPlayWhenReady(false); } /* Home: the film waits (the app saves where it was) */
+    static void release() { ui.post(() -> { vlcOff(); if (p != null) { p.release(); p = null; } st = 0; }); }
+    static void backgrounded() { if (vlc) OriginVlc.pause(); if (p != null && p.getPlayWhenReady()) p.setPlayWhenReady(false); } /* Home: the film waits (the app saves where it was) */
 
     private static void ensure() {
         if (p != null || act == null) return;
@@ -99,6 +99,8 @@ public final class OriginVideo {
             @Override public void onPlayerError(PlaybackException e) {
                 int c = e.errorCode; /* the sound refused as it is: again at once, decoded by the TV */
                 if (builtPass && (c == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED || c == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED)) { decodeHere(); return; }
+                /* a file or a picture or sound ExoPlayer can't read or decode here: VLC plays it, from the same point */
+                if ((c >= 3001 && c <= 3004) || (c >= 4001 && c <= 4005) || (c >= 5001 && c <= 5003) || c == PlaybackException.ERROR_CODE_UNSPECIFIED) { toVlc(e.getErrorCodeName()); return; }
                 err = e.getErrorCodeName(); st = 6; }
         });
         if (!ticking) { ticking = true; ui.post(OriginVideo::tick); } /* (one clock, also for a player made again) */
@@ -116,6 +118,7 @@ public final class OriginVideo {
     /* the position and the buffer, 4 times a second, as long as a player exists */
     private static void tick() {
         if (p == null) { ticking = false; return; }
+        if (vlc) { OriginVlc.tick(); ui.postDelayed(OriginVideo::tick, 250); return; }
         pos = p.getCurrentPosition(); long d = p.getDuration(); dur = d > 0 ? d : 0; buf = p.getBufferedPosition(); sync();
         watch();
         ui.postDelayed(OriginVideo::tick, 250);
@@ -132,8 +135,9 @@ public final class OriginVideo {
         if (vw == 0) {
             Format f = p.getVideoFormat();
             if (f != null && f.width > 0 && f.height > 0) { vw = f.width; vh = f.height; video(); }
-            else if (now - readyAt > 8000 && !playableVideo()) { err = "VIDEO_FORMAT_UNSUPPORTED"; st = 6; }
+            else if (now - readyAt > 4000 && !playableVideo()) { toVlc("VIDEO_FORMAT_UNSUPPORTED"); return; }
         }
+        if (unsup == 1 && now - readyAt > 1500) toVlc("AUDIO_FORMAT_UNSUPPORTED"); /* no sound this TV decodes: VLC's own decoders */
     }
     private static boolean playableVideo() {
         boolean any = false;
@@ -153,7 +157,18 @@ public final class OriginVideo {
         if (u.contains(".m3u8")) mi.setMimeType(MimeTypes.APPLICATION_M3U8); else if (u.contains(".mpd")) mi.setMimeType(MimeTypes.APPLICATION_MPD);
         return mi.build();
     }
-    private static volatile boolean wantPass; private static boolean builtPass, ticking; private static String lastUrl;
+    private static volatile boolean wantPass, vlc; private static boolean builtPass, ticking, vlcTried; private static String lastUrl;
+    /* the film handed to VLC where it was (once per film; if VLC can't either, the error is said) */
+    private static void toVlc(String why) {
+        if (lastUrl == null || vlcTried || act == null || view == null) { err = why; st = 6; return; }
+        vlcTried = true; long at = p != null ? Math.max(0, p.getCurrentPosition()) : 0; boolean play = p == null || p.getPlayWhenReady();
+        String lang = ""; int ci = audCur; if (ci >= 0) for (String l : tracks.split("\n")) { String[] f = l.split("\t", -1); if (f.length > 1 && f[0].equals(String.valueOf(ci))) { lang = f[1]; break; } }
+        if (p != null) { p.stop(); p.clearVideoSurfaceView(view); }
+        android.util.Log.i("Origin", "ExoPlayer: " + why + ", the film goes on in VLC");
+        vlc = OriginVlc.start(act, view, lastUrl, at, play, lang);
+        if (!vlc) { err = why; st = 6; if (p != null) p.setVideoSurfaceView(view); }
+    }
+    private static void vlcOff() { if (vlc) { vlc = false; OriginVlc.stop(); if (p != null) p.setVideoSurfaceView(view); } }
     public static void passthrough(boolean on) { wantPass = on; }
     private static String codec(String m) {
         if (m == null) return "";
@@ -205,17 +220,18 @@ public final class OriginVideo {
     }
 
     public static void load(String url) { final boolean wp = wantPass; ui.post(() -> {
+        vlcOff(); vlcTried = false;
         if (p != null && builtPass != wp) { p.release(); p = null; } /* (the setting changed: a player made for it) */
         wantPass = wp; ensure(); if (p == null) return; err = ""; st = 1; vw = vh = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; view.setVisibility(View.VISIBLE);
         lastUrl = url; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0; lastPos = -1;
         p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().clearOverridesOfType(C.TRACK_TYPE_AUDIO).build());
-        p.setMediaItem(item(url)); p.prepare(); p.setPlayWhenReady(true); }); }
-    public static void unload() { ui.post(() -> { if (p != null) { p.stop(); p.clearMediaItems(); } st = 0; vw = vh = 0; pos = dur = buf = 0; tracks = ""; audCur = -1; unsup = 0; if (view != null) view.setVisibility(View.INVISIBLE); }); }
-    public static void play() { ui.post(() -> { if (p != null) p.setPlayWhenReady(true); }); }
-    public static void pause() { ui.post(() -> { if (p != null) p.setPlayWhenReady(false); }); }
-    public static void seek(long ms) { pos = ms; ui.post(() -> { if (p != null) p.seekTo(ms); }); }
-    public static void volume(float v) { ui.post(() -> { if (p != null) p.setVolume(v); }); }
-    public static void selectAudio(int idx) { audCur = idx; ui.post(() -> { if (p == null || idx < 0 || idx >= audGroups.size()) return; Tracks.Group g = audGroups.get(idx);
+        p.setVideoSurfaceView(view); p.setMediaItem(item(url)); p.prepare(); p.setPlayWhenReady(true); }); }
+    public static void unload() { ui.post(() -> { vlcOff(); if (p != null) { p.stop(); p.clearMediaItems(); } st = 0; vw = vh = 0; pos = dur = buf = 0; tracks = ""; audCur = -1; unsup = 0; if (view != null) view.setVisibility(View.INVISIBLE); }); }
+    public static void play() { ui.post(() -> { if (vlc) OriginVlc.play(); else if (p != null) p.setPlayWhenReady(true); }); }
+    public static void pause() { ui.post(() -> { if (vlc) OriginVlc.pause(); else if (p != null) p.setPlayWhenReady(false); }); }
+    public static void seek(long ms) { if (vlc) OriginVlc.pos = ms; else pos = ms; ui.post(() -> { if (vlc) OriginVlc.seek(ms); else if (p != null) p.seekTo(ms); }); }
+    public static void volume(float v) { ui.post(() -> { if (vlc) OriginVlc.volume(v); else if (p != null) p.setVolume(v); }); }
+    public static void selectAudio(int idx) { if (vlc) { ui.post(() -> OriginVlc.selectAudio(idx)); return; } audCur = idx; ui.post(() -> { if (p == null || idx < 0 || idx >= audGroups.size()) return; Tracks.Group g = audGroups.get(idx);
         p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().setOverrideForType(new TrackSelectionOverride(g.getMediaTrackGroup(), audIdx.get(idx))).build()); }); }
     /* fractions of the screen: the picture's rectangle (larger than the screen for Fill and Zoom) */
     public static void window(float x, float y, float w, float h) {
@@ -223,17 +239,18 @@ public final class OriginVideo {
             int W = par.getWidth(), H = par.getHeight(); if (W <= 0 || H <= 0) return;
             box.x = Math.round(x * W); box.y = Math.round(y * H); box.w = Math.max(1, Math.round(w * W)); box.h = Math.max(1, Math.round(h * H)); box.requestLayout(); });
     }
-    public static long position() { return pos; }
-    public static long duration() { return dur; }
-    public static long buffered() { return buf; }
-    public static int state() { return st; }
-    public static int width() { return vw; }
-    public static int height() { return vh; }
-    public static String error() { return err; }
-    public static String audioTracks() { return tracks; }
-    public static int audioCurrent() { return audCur; }
-    public static int audioUnsupported() { return unsup; }
-    public static float fps() { return fps; }
-    public static String hdr() { return hdr; }
+    /* what the native side reads: the player playing the film (ExoPlayer, or VLC once it took over) */
+    public static long position() { return vlc ? OriginVlc.pos : pos; }
+    public static long duration() { return vlc ? OriginVlc.dur : dur; }
+    public static long buffered() { return vlc ? OriginVlc.pos : buf; }
+    public static int state() { return vlc ? OriginVlc.st : st; }
+    public static int width() { return vlc ? OriginVlc.vw : vw; }
+    public static int height() { return vlc ? OriginVlc.vh : vh; }
+    public static String error() { return vlc ? OriginVlc.err : err; }
+    public static String audioTracks() { return vlc ? OriginVlc.tracks : tracks; }
+    public static int audioCurrent() { return vlc ? OriginVlc.audCur : audCur; }
+    public static int audioUnsupported() { return vlc ? 0 : unsup; }
+    public static float fps() { return vlc ? 0 : fps; }
+    public static String hdr() { return vlc ? "" : hdr; }
     private OriginVideo() {}
 }

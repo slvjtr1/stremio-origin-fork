@@ -45,7 +45,7 @@ android {
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.31.6" } }
     sourceSets["main"].assets.srcDirs(file("build/gen/assets"))
     sourceSets["main"].jniLibs.srcDirs(repo.resolve("build/android"))   // libsbengine.so per ABI (tools/build-engine.sh android-arm64 / android-armv7)
-    packaging { jniLibs { useLegacyPackaging = false } }
+    packaging { jniLibs { useLegacyPackaging = true } }   // compressed in the APK (VLC's libraries are large), unpacked once at install
     if (signing != null) signingConfigs.create("release") {
         storeFile = File(signing.getProperty("storeFile")); storePassword = signing.getProperty("storePassword")
         keyAlias = signing.getProperty("keyAlias"); keyPassword = signing.getProperty("keyPassword")
@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
+    implementation("org.videolan.android:libvlc-all:3.6.2")   // the second player (OriginVlc): what ExoPlayer can't play here
 }
 
 // the repository's assets/ into the package, with assets.lst (the version, then every file) for the first start to unpack
