@@ -10,14 +10,14 @@ static int lvl(const char *k, const char *d, int lo, int hi) { int v = atoi(stor
 void subfx_read(SubFx *fx, int px) {
   static const float OW[] = { 1.2f, 2.0f, 3.2f }, SA[] = { .4f, .6f, .8f, .95f }, SB[] = { 0, .06f, .11f }, SD[] = { .04f, .07f, .11f };
   memset(fx, 0, sizeof *fx); fx->ser = store_serial();
-  fx->outline = strcmp(store_get("subsOutline", "true"), "false") != 0;
+  fx->outline = strcmp(store_get("subsOutline", "false"), "false") != 0;
   fx->ow = OW[lvl("subsOutlineWidth", "2", 1, 3) - 1];
   const char *h = store_get("subsOutlineColor", "#000000"); fx->ol = 0xff000000u | (unsigned)strtoul(h[0] == '#' ? h + 1 : h, NULL, 16);
-  fx->shadow = !strcmp(store_get("subsShadow", "false"), "true");
+  fx->shadow = !strcmp(store_get("subsShadow", "true"), "true");
   fx->sa = SA[lvl("subsShadowStrength", "2", 1, 4) - 1];
   fx->srings = lvl("subsShadowSoft", "1", 0, 2); fx->sblur = SB[fx->srings] * px;
-  int face = lvl("subsFont", "0", 0, TEXT_NFACES); fx->wt = (!strcmp(store_get("subsBold", "false"), "true") ? 800 : 600) | TEXT_FACE(face);
-  float lf = (float)atoi(store_get("subsPos", "0")) / 100; fx->lift = lf < SUBFX_LIFT_MIN ? SUBFX_LIFT_MIN : lf > SUBFX_LIFT_MAX ? SUBFX_LIFT_MAX : lf;
+  int face = lvl("subsFont", "0", 0, TEXT_NFACES); fx->wt = (!strcmp(store_get("subsBold", "true"), "true") ? 800 : 600) | TEXT_FACE(face);
+  float lf = (float)atoi(store_get("subsPos", "6")) / 100; fx->lift = lf < SUBFX_LIFT_MIN ? SUBFX_LIFT_MIN : lf > SUBFX_LIFT_MAX ? SUBFX_LIFT_MAX : lf;
   fx->sdist = SD[lvl("subsShadowDist", "2", 1, 3) - 1] * px;
 }
 /* the outline's copies: along the axes at its width, the diagonals nearer in (as the player always drew it); a thick

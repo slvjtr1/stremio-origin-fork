@@ -283,7 +283,7 @@ void exit_ask(void) { if (NOW - exitAt < 2.5) { app_quit(); return; } exitAt = N
 /* ---- the clock ---- */
 static char clockTxt[16], clockOld[16]; static Timer1 clockAnim; static double clockAt;
 void app_time_fmt(const struct tm *tm, char *out, size_t cap, int ampm) {
-  if (strcmp(store_get("clockFmt", "24"), "12")) { snprintf(out, cap, "%02d:%02d", tm->tm_hour, tm->tm_min); return; }
+  if (strcmp(store_get("clockFmt", "12"), "12")) { snprintf(out, cap, "%02d:%02d", tm->tm_hour, tm->tm_min); return; }
   int h = tm->tm_hour % 12; if (!h) h = 12;
   if (ampm) snprintf(out, cap, "%d:%02d %s", h, tm->tm_min, T(tm->tm_hour < 12 ? "AM" : "PM")); else snprintf(out, cap, "%d:%02d", h, tm->tm_min); }
 static void clock_tick(void) {

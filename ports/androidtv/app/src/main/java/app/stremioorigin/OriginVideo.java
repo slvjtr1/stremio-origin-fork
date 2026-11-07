@@ -23,6 +23,9 @@ import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.audio.AudioCapabilities;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 
 import java.util.ArrayList;
@@ -30,8 +33,8 @@ import java.util.Locale;
 
 /* The native side's video (src/platform/android/video_android.c). Every call comes from SDL's thread and runs on the
    main looper; what the native side reads back is kept in volatile fields, updated from the player.
-   - Sound: Dolby Digital, Dolby Digital Plus (with Atmos), DTS and TrueHD go to the TV or the receiver as they are
-     when they take them (ExoPlayer reads the HDMI's capabilities); otherwise the TV's own decoders.
+   - Sound: the TV's own decoders by default; with Settings › Audio › Dolby and DTS to a sound bar, Dolby Digital (Plus,
+     Atmos), DTS and TrueHD go on as they are when the HDMI takes them (back to the decoders if the sound stalls).
    - The picture's frame rate: the display follows the film's when Android TV's "Match content frame rate" is on.
    - Subtitles are the app's own: ExoPlayer's text tracks are switched off. */
 public final class OriginVideo {
@@ -71,7 +74,17 @@ public final class OriginVideo {
         if (p != null || act == null) return;
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(20000).setReadTimeoutMs(30000).setUserAgent("StremioOrigin/" + BuildConfig.VERSION_NAME + " (Android TV)");
-        DefaultRenderersFactory rf = new DefaultRenderersFactory(act).setEnableDecoderFallback(true);
+        builtPass = wantPass; final boolean pass = builtPass;
+        /* Dolby and DTS: by default the TV's own decoders make them sound (many Google TV sets say they take them as they
+           are and then play nothing from their speakers, the film's clock held with them); passed on as they are only
+           when Settings › Audio says a sound bar or receiver is there */
+        DefaultRenderersFactory rf = new DefaultRenderersFactory(act) {
+            @Override protected AudioSink buildAudioSink(Context c, boolean flt, boolean params) {
+                DefaultAudioSink.Builder b = new DefaultAudioSink.Builder(c).setEnableFloatOutput(flt).setEnableAudioTrackPlaybackParams(params);
+                if (!pass) b.setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES);
+                return b.build();
+            }
+        }.setEnableDecoderFallback(true);
         p = new ExoPlayer.Builder(act, rf).setMediaSourceFactory(new DefaultMediaSourceFactory(new DefaultDataSource.Factory(act, http)))
             .setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true).build();
@@ -83,9 +96,12 @@ public final class OriginVideo {
             @Override public void onIsPlayingChanged(boolean b) { sync(); }
             @Override public void onVideoSizeChanged(VideoSize s) { vw = s.width; vh = s.height; video(); }
             @Override public void onTracksChanged(Tracks t) { listTracks(t); video(); }
-            @Override public void onPlayerError(PlaybackException e) { err = e.getErrorCodeName(); st = 6; }
+            @Override public void onPlayerError(PlaybackException e) {
+                int c = e.errorCode; /* the sound refused as it is: again at once, decoded by the TV */
+                if (builtPass && (c == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED || c == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED)) { decodeHere(); return; }
+                err = e.getErrorCodeName(); st = 6; }
         });
-        ui.post(OriginVideo::tick);
+        if (!ticking) { ticking = true; ui.post(OriginVideo::tick); } /* (one clock, also for a player made again) */
     }
     private static void sync() {
         if (p == null) { st = 0; return; }
@@ -99,10 +115,46 @@ public final class OriginVideo {
     }
     /* the position and the buffer, 4 times a second, as long as a player exists */
     private static void tick() {
-        if (p == null) return;
+        if (p == null) { ticking = false; return; }
         pos = p.getCurrentPosition(); long d = p.getDuration(); dur = d > 0 ? d : 0; buf = p.getBufferedPosition(); sync();
+        watch();
         ui.postDelayed(OriginVideo::tick, 250);
     }
+    /* a film that plays but never shows: its clock still (the sound sent on as it is, and nothing taking it: decoded by
+       the TV instead), or a picture this TV can't decode (said, so the app offers another stream, not a wait for ever) */
+    private static long movedAt, lastPos = -1, readyAt;
+    private static void watch() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (st != 2 || !p.getPlayWhenReady()) { movedAt = now; readyAt = 0; lastPos = pos; return; }
+        if (readyAt == 0) readyAt = now;
+        if (pos != lastPos) { lastPos = pos; movedAt = now; }
+        else if (now - movedAt > 6000 && builtPass) { decodeHere(); return; }
+        if (vw == 0) {
+            Format f = p.getVideoFormat();
+            if (f != null && f.width > 0 && f.height > 0) { vw = f.width; vh = f.height; video(); }
+            else if (now - readyAt > 8000 && !playableVideo()) { err = "VIDEO_FORMAT_UNSUPPORTED"; st = 6; }
+        }
+    }
+    private static boolean playableVideo() {
+        boolean any = false;
+        for (Tracks.Group g : p.getCurrentTracks().getGroups()) if (g.getType() == C.TRACK_TYPE_VIDEO) { any = true; for (int i = 0; i < g.length; i++) if (g.isTrackSupported(i)) return true; }
+        return !any; /* (no picture at all: a sound-only stream plays as it is) */
+    }
+    /* the same film again where it was, its sound decoded by the TV */
+    private static void decodeHere() {
+        if (p == null || lastUrl == null) return;
+        long at = p.getCurrentPosition(); boolean play = p.getPlayWhenReady(); wantPass = false;
+        p.release(); p = null; ensure(); if (p == null) return;
+        p.setMediaItem(item(lastUrl)); p.prepare(); if (at > 0) p.seekTo(at); p.setPlayWhenReady(play);
+        st = 1; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0;
+    }
+    private static MediaItem item(String url) {
+        MediaItem.Builder mi = new MediaItem.Builder().setUri(url); String u = url.toLowerCase(Locale.ROOT);
+        if (u.contains(".m3u8")) mi.setMimeType(MimeTypes.APPLICATION_M3U8); else if (u.contains(".mpd")) mi.setMimeType(MimeTypes.APPLICATION_MPD);
+        return mi.build();
+    }
+    private static volatile boolean wantPass; private static boolean builtPass, ticking; private static String lastUrl;
+    public static void passthrough(boolean on) { wantPass = on; }
     private static String codec(String m) {
         if (m == null) return "";
         switch (m) {
@@ -152,11 +204,12 @@ public final class OriginVideo {
         hdr = h;
     }
 
-    public static void load(String url) { ui.post(() -> { ensure(); if (p == null) return; err = ""; st = 1; vw = vh = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; view.setVisibility(View.VISIBLE);
+    public static void load(String url) { final boolean wp = wantPass; ui.post(() -> {
+        if (p != null && builtPass != wp) { p.release(); p = null; } /* (the setting changed: a player made for it) */
+        wantPass = wp; ensure(); if (p == null) return; err = ""; st = 1; vw = vh = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; view.setVisibility(View.VISIBLE);
+        lastUrl = url; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0; lastPos = -1;
         p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().clearOverridesOfType(C.TRACK_TYPE_AUDIO).build());
-        MediaItem.Builder mi = new MediaItem.Builder().setUri(url); String u = url.toLowerCase(Locale.ROOT);
-        if (u.contains(".m3u8")) mi.setMimeType(MimeTypes.APPLICATION_M3U8); else if (u.contains(".mpd")) mi.setMimeType(MimeTypes.APPLICATION_MPD);
-        p.setMediaItem(mi.build()); p.prepare(); p.setPlayWhenReady(true); }); }
+        p.setMediaItem(item(url)); p.prepare(); p.setPlayWhenReady(true); }); }
     public static void unload() { ui.post(() -> { if (p != null) { p.stop(); p.clearMediaItems(); } st = 0; vw = vh = 0; pos = dur = buf = 0; tracks = ""; audCur = -1; unsup = 0; if (view != null) view.setVisibility(View.INVISIBLE); }); }
     public static void play() { ui.post(() -> { if (p != null) p.setPlayWhenReady(true); }); }
     public static void pause() { ui.post(() -> { if (p != null) p.setPlayWhenReady(false); }); }

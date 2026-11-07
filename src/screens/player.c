@@ -222,7 +222,7 @@ static const char *fail_reason(void) {
   if (http && P.httpSt >= 500) return T("The stream’s server has a problem");
   if (http && P.httpSt >= 400) return T("The stream’s server didn’t send the video");
   if (P.isP2p && (!P.p2pLine[0] || atoi(P.p2pLine) < 2)) return T("Not enough peers yet");
-  if (strstr(tv, "Network") || tv_code(tv, 300, 399)) return T("The connection to the stream dropped");
+  if (strstr(tv, "Network") || strstr(tv, "ERROR_CODE_IO_") || tv_code(tv, 300, 399)) return T("The connection to the stream dropped");
   int hevc = has_word(lab, "x265") || has_word(lab, "h265") || strstr(lab, "h.265") || strstr(lab, "h 265") || has_word(lab, "hevc"), ten = strstr(lab, "10bit") || strstr(lab, "10 bit") || strstr(lab, "10-bit") || has_word(lab, "hdr") || has_word(lab, "hdr10");
   char hdr[64]; best_hdr_of(P.sname, hdr, sizeof hdr); const char *res = best_res_of(P.sname);
   if (c && has_word(lab, "av1") && !c->av1) return T("This TV can’t play AV1 video");
@@ -233,7 +233,7 @@ static const char *fail_reason(void) {
   if (c && hdrS && !c->hdr) return T("This TV can’t show HDR video");
   if (video_audio_unsupported() || (c && ((strstr(lab, "truehd") && !c->truehd) || ((has_word(lab, "dts") || strstr(lab, "dts-hd") || strstr(lab, "dts-x")) && !c->dts))))
     if (tv_code(tv, 200, 200) || tv_code(tv, 203, 203) || video_audio_unsupported()) return T("This TV can’t play this video’s sound (DTS or TrueHD)");
-  if (tv_code(tv, 201, 201) || tv_code(tv, 203, 203) || strstr(tv, "Codec")) return T("The video format isn’t supported by this TV");
+  if (tv_code(tv, 201, 201) || tv_code(tv, 203, 203) || strstr(tv, "Codec") || strstr(tv, "FORMAT_UNSUPPORTED") || strstr(tv, "DECOD")) return T("The video format isn’t supported by this TV"); /* (Android: ExoPlayer's error names) */
   if (tv_code(tv, 202, 202)) return T("The TV couldn’t open the video");
   return T("Playback error");
 }
@@ -265,15 +265,15 @@ static void try_resume(void) {
 /* ---- subtitles ---- */
 static const char *want_sub(void) { return store_get("subsLang", "eng"); }
 typedef struct SubStyle SubStyle; static const SubStyle *sub_style(void); static float sub_rest(void), sub_lift(void);
-static int size_idx(void) { int i = atoi(store_get("subtitleSize", "2")); return i < 0 || i > 6 ? 2 : i; }
+static int size_idx(void) { int i = atoi(store_get("subtitleSize", "3")); return i < 0 || i > 6 ? 2 : i; }
 static const int SUB_SIZES[] = { 72, 80, 100, 120, 140, 160, 180 };
 static const char *SUB_COLORS[] = { "#ffffff", "#ffe600", "#00e5ff" }, *SUB_BGS[] = { "0", "1", ".6" };
 static const char *SUB_FONTS[] = { "Inter", "Roboto", "Atkinson", "Lora", "Cairo", "Readex" }; /* (TEXT_FACE 0..5: text.c; short, for the tray's column) */
 static int font_idx(void) { int i = atoi(store_get("subsFont", "0")); return i < 0 || i > TEXT_NFACES ? 0 : i; }
-static int bold_on(void) { return !strcmp(store_get("subsBold", "false"), "true"); }
-static int outline_on(void) { return strcmp(store_get("subsOutline", "true"), "false") != 0; }
+static int bold_on(void) { return !strcmp(store_get("subsBold", "true"), "true"); }
+static int outline_on(void) { return strcmp(store_get("subsOutline", "false"), "false") != 0; }
 static const char *SHADOW_LB[] = { "Off", "Light", "Medium", "Strong", "Heavy" };
-static int shadow_lvl(void) { if (strcmp(store_get("subsShadow", "false"), "true")) return 0; int l = atoi(store_get("subsShadowStrength", "2")); return l < 1 || l > 4 ? 2 : l; } /* 0 off, 1..4 its strength */
+static int shadow_lvl(void) { if (strcmp(store_get("subsShadow", "true"), "true")) return 0; int l = atoi(store_get("subsShadowStrength", "2")); return l < 1 || l > 4 ? 2 : l; } /* 0 off, 1..4 its strength */
 static int bg_idx(void) { const char *v = store_get("subsBgStyle", "0"); for (int i = 0; i < 3; i++) if (!strcmp(SUB_BGS[i], v)) return i; return 0; }
 static int color_idx(void) { const char *v = store_get("subsColor", "#ffffff"); for (int i = 0; i < 3; i++) if (!strcasecmp(SUB_COLORS[i], v)) return i; return -1; }
 static uint32_t hexcol(const char *h) { return 0xff000000u | (unsigned)strtoul(h + 1, NULL, 16); }
@@ -1306,7 +1306,7 @@ static void tray_data(void) {
     x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Outline")); snprintf(x->u, 1024, "outline"); /* the edge round the words: on or off */
     x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Shadow")); snprintf(x->vl, 48, "%s", T(SHADOW_LB[shadow_lvl()])); snprintf(x->u, 1024, "shadow"); /* a drop shadow behind them: off, then stronger with each OK */
     x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Background")); snprintf(x->u, 1024, "bg"); (void)ci;
-    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Height")); { int h = atoi(store_get("subsPos", "0")); if (h) snprintf(x->vl, 48, "%s%d%%", h > 0 ? "+" : "\xe2\x88\x92", abs(h)); else snprintf(x->vl, 48, "0%%"); } snprintf(x->u, 1024, "hgtopen"); /* the small card at the top: the line moves while you watch */
+    x = col_add(c3, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Height")); { int h = atoi(store_get("subsPos", "6")); if (h) snprintf(x->vl, 48, "%s%d%%", h > 0 ? "+" : "\xe2\x88\x92", abs(h)); else snprintf(x->vl, 48, "0%%"); } snprintf(x->u, 1024, "hgtopen"); /* the small card at the top: the line moves while you watch */
     if (!P.isTrailer && !strncmp(P.curSub, "ext:", 4)) { x = col_add(c4, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Auto-sync")); snprintf(x->sub, 120, "%s", SY.st); snprintf(x->u, 1024, "sync"); } /* a downloaded subtitle: lined up with the file's own */
     x = col_add(c4, 4); x->tool = 1; snprintf(x->lb, 200, "%s", T("Adjust")); snprintf(x->sub, 120, "%s", T("While you watch")); snprintf(x->u, 1024, "dlyopen"); /* the small card at the top: the film stays in view */
     x = col_add(c4, 4); x->tool = 1; x->d = 0; snprintf(x->lb, 200, "%s", T("Reset")); snprintf(x->u, 1024, "dly");
@@ -1482,7 +1482,7 @@ static void dly_open(void) { close_tray(); P.osd = 0; P.mode = 4; P.dlyKind = 0;
 /* the same card for the subtitles' height: - lowers, + raises (Up and Down too), a step at a time within the limits; the
    lines move as it changes, so where they sit over this film is seen at once (kept for every film) */
 static void hgt_open(void) { dly_open(); P.dlyKind = 1; P.dlyF = 1; mo_set(&P.dlyR, 1); }
-static void hgt_change(int d) { int v = atoi(store_get("subsPos", "0")) + d * (int)(SUBFX_LIFT_STEP * 100 + .5f), lo = (int)(SUBFX_LIFT_MIN * 100 - .5f), hi = (int)(SUBFX_LIFT_MAX * 100 + .5f);
+static void hgt_change(int d) { int v = atoi(store_get("subsPos", "6")) + d * (int)(SUBFX_LIFT_STEP * 100 + .5f), lo = (int)(SUBFX_LIFT_MIN * 100 - .5f), hi = (int)(SUBFX_LIFT_MAX * 100 + .5f);
   if (v < lo) v = lo; if (v > hi) v = hi; char b[8]; snprintf(b, sizeof b, "%d", v); store_set("subsPos", b); P.dlyAt = now_(); }
 static void dly_close(void) { P.mode = 0; mo_to(&P.dlyA, 0, .2f, C_EASE, 0); }
 static void dly_change(double d) { double v = P.subDelay + d; v = floor(v / DLY_STEP + 0.5) * DLY_STEP; if (v > 120) v = 120; if (v < -120) v = -120; P.subDelay = fabs(v) < 1e-6 ? 0 : v; P.dlyAt = now_(); }
@@ -2642,7 +2642,7 @@ static void dly_draw(void) {
     else if (i == 2) icon_draw(paused() ? "p_play" : "p_pause", bx[i] + B / 2 - 17, cy - 17, 34, c);
     else text_draw(dn, bx[i] + bw[i] / 2, cy - text_line_height(26) / 2.0f, 26, 700, c, 0, 0, ALIGN_CENTER); }
   /* the delay: large, a small lift when it changes; under it what it means */
-  if (P.dlyKind) { int hv = atoi(store_get("subsPos", "0")); char v[32]; if (!hv) snprintf(v, sizeof v, "0%%"); else snprintf(v, sizeof v, "%s%d%%", hv > 0 ? "+" : "\xe2\x88\x92", abs(hv));
+  if (P.dlyKind) { int hv = atoi(store_get("subsPos", "6")); char v[32]; if (!hv) snprintf(v, sizeof v, "0%%"); else snprintf(v, sizeof v, "%s%d%%", hv > 0 ? "+" : "\xe2\x88\x92", abs(hv));
     float e = (float)((now_() - P.dlyAt) / 0.22); e = e < 0 ? 0 : e > 1 ? 1 : e; float lift = 6 * (1 - ease_apply(EASE_OUT, e));
     text_draw(v, vx + VW / 2, cy - 30 - lift, 40, 800, WHITE_A(255), -0.4f, 0, ALIGN_CENTER);
     const char *m = hv > 0 ? T("Subtitles higher") : hv < 0 ? T("Subtitles lower") : T("Subtitle height");

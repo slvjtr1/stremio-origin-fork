@@ -514,3 +514,14 @@ void best_tick(void) {
     if (F.on && !F.t30 && el >= 30.1) { F.t30 = 1; decide(1); } }
 }
 #endif
+
+#ifndef SB_BEST_PURE
+/* Play the best stream: on by default. Its speed test runs by itself once, a while after the first start (Home has its
+   pictures first); the switch comes on when it has measured. A choice made in Settings is never changed */
+static void default_landed(int ok, double mbps, void *ud) { (void)mbps; (void)ud; if (ok && !store_get("autoBest", NULL)) store_set("autoBest", "true"); }
+void best_default_tick(void) {
+  static int tries; static double nextAt = 12;
+  if (store_get("autoBest", NULL) || tries >= 3 || speedBusy || app_now() < nextAt) return;
+  tries++; nextAt = app_now() + 90; best_caps_probe(NULL, NULL); best_speed_run(default_landed, NULL);
+}
+#endif

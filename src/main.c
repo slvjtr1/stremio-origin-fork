@@ -102,6 +102,7 @@ static int vsyncOn __attribute__((unused));   /* SB_VSYNC=1: let the driver wait
 #include "screens/settings.h"
 #include "screens/splash.h"
 #include "screens/player.h"
+#include "core/best.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -320,6 +321,7 @@ int main(int argc, char **argv) {
     Uint32 tCpu0 = SDL_GetTicks();
     text_frame_begin();
     app_tick(dt); splash_tick(dt);
+    if (!player_open() && app_splash_done && sb_signed_in()) best_default_tick(); /* (never while a film plays or starts) */
     Uint32 tA = SDL_GetTicks();
     gfx_begin(player_live() ? RGBA(0, 0, 0, 0) : PAGE); /* the video plane shows through the transparent window */
     { static int bench = -2, benchCalls = 0; if (bench == -2) { bench = getenv("SB_BENCH") ? atoi(getenv("SB_BENCH")) : -1; benchCalls = getenv("SB_BENCHCALLS") ? atoi(getenv("SB_BENCHCALLS")) : 0; }

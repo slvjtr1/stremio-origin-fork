@@ -30,13 +30,29 @@ static void (*f_slist_free_all)(struct curl_slist *);
 static CURLcode (*f_global_init)(long);
 static void (*f_easy_reset)(CURL *); /* (optional: without it every request opens its own connection, as before) */
 static char caPath[1024];
+/* one cache for every worker: names looked up, TLS sessions and (Android) open connections, so a request to an
+   addon another worker has just reached reuses its connection, or at least its TLS session, not a new handshake */
+static CURLSH *(*f_share_init)(void); static CURLSHcode (*f_share_setopt)(CURLSH *, CURLSHoption, ...);
+static CURLSH *share; static pthread_mutex_t shMu[CURL_LOCK_DATA_LAST + 1];
+static void sh_lock(CURL *h, curl_lock_data d, curl_lock_access a, void *u) { (void)h; (void)a; (void)u; if ((int)d >= 0 && d <= CURL_LOCK_DATA_LAST) pthread_mutex_lock(&shMu[d]); }
+static void sh_unlock(CURL *h, curl_lock_data d, void *u) { (void)h; (void)u; if ((int)d >= 0 && d <= CURL_LOCK_DATA_LAST) pthread_mutex_unlock(&shMu[d]); }
+static void share_setup(void) {
+  if (!f_share_init || !f_share_setopt || !(share = f_share_init())) return;
+  for (int i = 0; i <= CURL_LOCK_DATA_LAST; i++) pthread_mutex_init(&shMu[i], NULL);
+  f_share_setopt(share, CURLSHOPT_LOCKFUNC, sh_lock); f_share_setopt(share, CURLSHOPT_UNLOCKFUNC, sh_unlock);
+  f_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS); f_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+#if defined(SB_ANDROID) || defined(SB_MAC)
+  f_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT); /* (the curl built in: its shared pool is sound; the TV's own older one keeps its pools per worker) */
+#endif
+}
 /* "StremioOrigin/1.0.0 (webOS; native)": the running version, the platform it runs on */
-static const char *ua(void) { static char u[96]; if (!u[0]) { const char *d = plat_device_name(); snprintf(u, sizeof u, "StremioOrigin/%s (%s; native)", update_current(), strstr(d, "webOS") ? "webOS" : "Mac"); } return u; }
+static const char *ua(void) { static char u[96]; if (!u[0]) { const char *d = plat_device_name(); snprintf(u, sizeof u, "StremioOrigin/%s (%s; native)", update_current(), strstr(d, "webOS") ? "webOS" : strstr(d, "Android") ? "Android TV" : "Mac"); } return u; }
 
 static int resolve(void) {
 #if defined(SB_MAC) || defined(SB_ANDROID) /* linked in, not looked up at run time */
   f_easy_init = curl_easy_init; f_easy_setopt = curl_easy_setopt; f_easy_perform = curl_easy_perform; f_easy_getinfo = curl_easy_getinfo;
   f_easy_cleanup = curl_easy_cleanup; f_slist_append = curl_slist_append; f_slist_free_all = curl_slist_free_all; f_global_init = curl_global_init; f_easy_reset = curl_easy_reset;
+  f_share_init = curl_share_init; f_share_setopt = curl_share_setopt;
   return 1;
 #else
   static const char *names[] = { "libcurl.so.5", "libcurl.so.4", "libcurl.so", NULL };
@@ -47,6 +63,7 @@ static int resolve(void) {
   L(f_easy_cleanup, "curl_easy_cleanup"); L(f_slist_append, "curl_slist_append"); L(f_slist_free_all, "curl_slist_free_all"); L(f_global_init, "curl_global_init");
 #undef L
   *(void **)(&f_easy_reset) = dlsym(h, "curl_easy_reset");
+  *(void **)(&f_share_init) = dlsym(h, "curl_share_init"); *(void **)(&f_share_setopt) = dlsym(h, "curl_share_setopt"); /* (optional) */
   return 1;
 #endif
 }
@@ -121,6 +138,7 @@ static void perform(Req *r, int slot) {
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 8000L); f_easy_setopt(c, CURLOPT_TIMEOUT_MS, r->timeoutMs > 0 ? r->timeoutMs : 20000L);
   f_easy_setopt(c, CURLOPT_TCP_NODELAY, 1L); f_easy_setopt(c, CURLOPT_TCP_KEEPALIVE, 1L); f_easy_setopt(c, CURLOPT_DNS_CACHE_TIMEOUT, 600L); f_easy_setopt(c, CURLOPT_BUFFERSIZE, 256L * 1024);
   f_easy_setopt(c, CURLOPT_USERAGENT, ua()); if (!r->size) f_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
+  if (share) f_easy_setopt(c, CURLOPT_SHARE, share);
   if (caPath[0]) f_easy_setopt(c, CURLOPT_CAINFO, caPath);
   if (r->size) { f_easy_setopt(c, CURLOPT_TIMEOUT_MS, 10000L); f_easy_setopt(c, CURLOPT_HEADERFUNCTION, on_header); f_easy_setopt(c, CURLOPT_HEADERDATA, r); f_easy_setopt(c, CURLOPT_WRITEFUNCTION, on_size_data); hs = f_slist_append(hs, "Range: bytes=0-0"); }
   /* one header per line; one the caller names (User-Agent...) replaces curl's own */
@@ -214,6 +232,7 @@ int net_init(const char *ca) {
   ssl_locks(); /* before the first request and the worker threads */
 #endif
   f_global_init(CURL_GLOBAL_ALL);
+  share_setup();
   if (ca) snprintf(caPath, sizeof caPath, "%s", ca);
   for (int i = 0; i < WORKERS; i++) { pthread_t t; pthread_create(&t, NULL, worker, (void *)(size_t)i); pthread_detach(t); }
   { pthread_t t; pthread_create(&t, NULL, file_worker, NULL); pthread_detach(t); }

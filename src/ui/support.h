@@ -1,4 +1,4 @@
-/* The project's two codes in one place: a coffee (Ko-fi) and the star on GitHub, one at a time (some phones read only
+/* The project's two codes in one place: its website and the star on GitHub, one at a time (some phones read only
    one code in view), with a two-part pill above that says which; switching turns the code over (it narrows to its
    edge and opens as the other) while the pill's light glides across. Settings > About and the guide's last page. */
 #ifndef SB_SUPPORT_H

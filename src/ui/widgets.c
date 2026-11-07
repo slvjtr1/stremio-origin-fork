@@ -326,6 +326,18 @@ void lift_end(unsigned long long key, float x, float y, float w, float h, float 
 /* a remote key drawn as on the remote, then what it does: OK, Back and Down round, the colour keys a small rounded block
    with two dots; y is the line's middle. Returns the width taken. */
 float key_hint(float x, float y, int key, const char *label, uint32_t col, int alignRight) {
+#ifdef SB_ANDROID
+  /* Google TV remotes: Settings is their gear key (red too, where there is one); Captions, Audio and Info are the
+     keys printed SUBT, AUDIO and INFO: drawn as they are on the remote */
+  if (key == K_RED || key == K_SUBS || key == K_AUDIO || key == K_INFO) {
+    const char *w = key == K_SUBS ? "SUBT" : key == K_AUDIO ? "AUDIO" : key == K_INFO ? "INFO" : NULL; float a = ((col >> 24) & 255) / 255.0f;
+    float kh = 38, kw = w ? text_width(w, 17, 800, 0) + 26 : 38, lw = label && *label ? 10 + text_width(label, 22, 600, 0) : 0, tot = kw + lw, kx = alignRight ? x - tot : x, ky = y - kh / 2;
+    gfx_rrect(kx, ky, kw, kh, kh / 2, WHITE_A((int)(30 * a))); gfx_ring(kx, ky, kw, kh, kh / 2, 1.5f, WHITE_A((int)(90 * a)));
+    if (w) text_draw(w, kx + kw / 2, y - text_line_height(17) / 2.0f, 17, 800, col, 0.6f, 0, ALIGN_CENTER);
+    else icon_draw("nav_set", kx + kw / 2 - 11, y - 11, 22, col);
+    if (lw > 0) text_draw(label, kx + kw + 10, y - text_line_height(22) / 2.0f, 22, 600, col, 0, 0, ALIGN_LEFT);
+    return tot; }
+#endif
   float kw = key == K_RED || key == K_GREEN ? 42 : 38, kh = key == K_RED || key == K_GREEN ? 24 : 38, lw = label && *label ? 10 + text_width(label, 22, 600, 0) : 0, tot = kw + lw;
   float kx = alignRight ? x - tot : x, ky = y - kh / 2, a = ((col >> 24) & 255) / 255.0f;
   if (key == K_RED || key == K_GREEN) { uint32_t c = key == K_RED ? RGB(0xef, 0x3b, 0x3b) : RGB(0x2f, 0xd6, 0x6b);

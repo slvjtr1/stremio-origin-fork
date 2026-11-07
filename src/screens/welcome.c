@@ -80,7 +80,7 @@ typedef struct { char title[160], lead[300], b[MAXB][200]; const char *ic[MAXB];
 static const struct { const char *t, *l, *b[MAXB], *ic[MAXB]; int pv, ctl; } TOUR[] = {
 #ifdef SB_ANDROID
   { "Your remote", "The arrows, OK and Back take you everywhere.",
-    { "Up reaches Settings and Search", "Menu and Search keys, or red and green, go straight there", "The arrows move, OK opens", "Back goes to the tabs, then Home" },
+    { "Up reaches Settings and Search", "The Settings key opens Settings, green opens Search; SUBT, AUDIO, INFO in the player", "The arrows move, OK opens", "Back goes to the tabs, then Home" },
     { "@up", "@red", "g_dpad", "@back" }, PV_KEYS, 0 },
 #else
   { "Your remote", "Four keys take you everywhere.",
@@ -899,7 +899,7 @@ static int at_keys(void);
 static int at_ctl(void) { const Page *p = &W.p[W.cur]; return p->ctl && W.step == p->nb - 1; }
 static void hints(float a) {
   int lastPage = W.cur == W.n - 1, last = lastPage && W.step >= W.p[W.cur].nb - 1, rtl = app_rtl(), ctl = at_ctl(), codes = at_codes(); uint32_t c = WHITE_A((int)(215 * a));
-  const char *ok = codes ? (W.tipWant ? T("Buy me a coffee") : T("Star on GitHub")) : at_keys() ? T("Show the code") : ctl && !best_on() ? (best_speed_busy() ? T("Measuring\xe2\x80\xa6") : T("Turn on")) : last ? T("Close") : T("Next");
+  const char *ok = codes ? (W.tipWant ? T("Website") : T("Star on GitHub")) : at_keys() ? T("Show the code") : ctl && !best_on() ? (best_speed_busy() ? T("Measuring\xe2\x80\xa6") : T("Turn on")) : last ? T("Close") : T("Next");
   const char *nx = T("Next page"), *bk = lastPage ? T("Close") : T("Skip"); int showNx = !lastPage, showBk = !last || codes;
   float g = 44, wo = 38 + 10 + text_width(ok, 22, 600, 0), wn = showNx ? 38 + 10 + text_width(nx, 22, 600, 0) + g : 0, wb = showBk ? 38 + 10 + text_width(bk, 22, 600, 0) + g : 0;
   gfx_scale_push(1.25f, 1.25f, rtl ? MX : SB_W - MX, BOTY);

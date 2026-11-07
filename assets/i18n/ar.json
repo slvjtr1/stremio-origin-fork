@@ -1287,5 +1287,16 @@
  "Sound and picture as made": "الصوت والصورة كما صُنعا",
  "On Google TV, Dolby Atmos, DTS and TrueHD go to your receiver as they are, and the screen follows the film's frame rate.": "على Google TV، يصل Dolby Atmos وDTS وTrueHD إلى جهاز الصوت كما هي، وتتبع الشاشة معدل إطارات الفيلم.",
  "Skip button time": "مدة زر التخطي",
- "How long the Skip button stays before it goes by itself": "كم يبقى زر التخطي قبل أن يختفي وحده"
+ "How long the Skip button stays before it goes by itself": "كم يبقى زر التخطي قبل أن يختفي وحده",
+ "Dolby and DTS to a sound bar": "Dolby وDTS إلى مكبّر الصوت",
+ "On: sent as they are to a sound bar or receiver (HDMI eARC). Off: the TV decodes them, sound from any speakers": "تشغيل: تُرسل كما هي إلى مكبّر الصوت أو جهاز الاستقبال (HDMI eARC). إيقاف: يفكّها التلفاز، والصوت من أي سمّاعات",
+ "Audio language, anime, Dolby and DTS, interface sounds": "لغة الصوت، الأنمي، Dolby وDTS، أصوات الواجهة",
+ "Off on this TV": "متوقفة على هذا التلفاز",
+ "Remove addon": "حذف الإضافة",
+ "Could not remove the addon. Try again in a moment": "تعذّر حذف الإضافة. حاول بعد لحظة",
+ "{n} removed": "تم حذف {n}",
+ "Removing…": "جارٍ الحذف…",
+ "Remove {n}?": "حذف {n}؟",
+ "It goes from your Stremio account, on every device: its catalogs and streams with it. You can install it again from its website.": "ستُحذف من حسابك في Stremio على كل الأجهزة، ومعها قوائمها ومصادرها. يمكنك تثبيتها مرة أخرى من موقعها.",
+ "The Settings key opens Settings, green opens Search; SUBT, AUDIO, INFO in the player": "زر الإعدادات يفتح الإعدادات، والأخضر يفتح البحث؛ وSUBT وAUDIO وINFO داخل المشغّل"
 }

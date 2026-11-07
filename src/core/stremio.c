@@ -103,6 +103,26 @@ void sb_sync_addons(void (*cb)(int, void *), void *ud) {
   cJSON *o = cJSON_CreateObject(); cJSON_AddStringToObject(o, "authKey", ak); cJSON_AddBoolToObject(o, "update", 1); char *body = cJSON_PrintUnformatted(o); cJSON_Delete(o);
   ChBox *x = malloc(sizeof *x); x->cb = cb; x->ud = ud; net_post_json(STREMIO_API "/api/addonCollectionGet", body, on_addons, x); free(body);
 }
+/* an addon removed from the account (Settings › Addons, after a warning): the list without it sent as the account's
+   own, as the official apps do; kept here only once the account has it. Stremio's own (protected) never go */
+typedef struct { void (*cb)(int, void *); void *ud; cJSON *next; } RmBox;
+static void on_rm(int st, const unsigned char *b, size_t n, void *ud) {
+  (void)n; RmBox *x = ud; cJSON *j = st == 200 ? net_json(b) : NULL; const cJSON *r = js_obj(j, "result");
+  int ok = st == 200 && r && !js_obj(j, "error");
+  if (ok) { store_set_node("addons", x->next); x->next = NULL; store_flush(); }
+  net_json_free(j); if (x->next) cJSON_Delete(x->next); if (x->cb) x->cb(ok, x->ud); free(x);
+}
+int sb_addon_protected(const cJSON *a) { return js_bool(js_obj(a, "flags"), "protected", 0); }
+void sb_addon_remove(const char *key, void (*cb)(int ok, void *ud), void *ud) {
+  const char *ak = sb_auth_key(); cJSON *cur = sb_addons(); if (!ak || !cur) { if (cb) cb(0, ud); return; }
+  cJSON *next = cJSON_CreateArray(); const cJSON *a; int gone = 0;
+  cJSON_ArrayForEach(a, cur) { char k[300]; sb_addon_key(a, k, sizeof k); if (!gone && !strcmp(k, key) && !sb_addon_protected(a)) { gone = 1; continue; } cJSON_AddItemToArray(next, cJSON_Duplicate(a, 1)); }
+  if (!gone) { cJSON_Delete(next); if (cb) cb(0, ud); return; }
+  cJSON *o = cJSON_CreateObject(); cJSON_AddStringToObject(o, "authKey", ak); cJSON_AddItemToObject(o, "addons", cJSON_Duplicate(next, 1));
+  char *body = cJSON_PrintUnformatted(o); cJSON_Delete(o);
+  RmBox *x = malloc(sizeof *x); x->cb = cb; x->ud = ud; x->next = next;
+  net_post_json(STREMIO_API "/api/addonCollectionSet", body, on_rm, x); free(body);
+}
 /* ---- catalogs ------------------------------------------------------------------------------ */
 static const char *type_label(const char *t) { return !strcmp(t, "movie") ? T("Movies") : !strcmp(t, "series") ? T("Series") : t; }
 static void def_url(CatalogDef *d) { snprintf(d->url, sizeof d->url, "%s%s%s.json", d->path, d->extra[0] ? "/" : "", d->extra); }

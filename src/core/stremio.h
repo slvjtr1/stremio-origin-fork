@@ -38,6 +38,8 @@ unsigned sb_lib_sync_age(void);        /* ms since the last library pull began (
 cJSON *sb_addons(void);                /* the installed addon list (array), including those off on this TV */
 int  sb_addon_on(const cJSON *addon);  /* not switched off on this TV ("adOn_<key>") */
 void sb_addon_key(const cJSON *addon, char *out, size_t cap);  /* its manifest id, or its URL */
+int  sb_addon_protected(const cJSON *addon);  /* one of Stremio's own: never removed */
+void sb_addon_remove(const char *key, void (*cb)(int ok, void *ud), void *ud);  /* off the account (every device), by its key */
 
 /* ---- catalogs ---- */
 int  sb_home_defs(CatalogDef *out, int max);   /* the chosen number of rows and a few spares */

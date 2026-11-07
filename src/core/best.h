@@ -26,6 +26,7 @@ double best_speed_since(void);         /* seconds since the running test began (
 /* three parallel downloads for about 7 s on workers; cb(ok, mbps) on the main thread. Does nothing (and never
    calls cb) while a test runs, as the helper's endpoint did */
 void best_speed_run(void (*cb)(int ok, double mbps, void *ud), void *ud);
+void best_default_tick(void);   /* each frame: on by default, its speed test run once by itself */
 void best_speed_cancel(void);          /* stops the downloads; cb is not called */
 
 int  best_on(void);                    /* the setting */
