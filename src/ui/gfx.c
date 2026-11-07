@@ -182,8 +182,8 @@ void gfx_flush(void) {
   static int logFrame0 = -1; if (logFrame0 < 0) logFrame0 = getenv("SB_FLUSHLOG") ? atoi(getenv("SB_FLUSHLOG")) : 0; if (logFrame0 && (int)frameCounter == logFrame0) glFinish();
   Uint32 t0 = SDL_GetTicks(); GLsizeiptr bytes = nvtx * (GLsizeiptr)sizeof(Vtx);
   static int clientVtx = -1; if (clientVtx < 0) {
-#ifdef SB_WEBOS
-    clientVtx = getenv("SB_VBO") == NULL; /* the driver maps new memory for every buffer update: client arrays are three times cheaper per draw */
+#if defined(SB_WEBOS) || defined(SB_ANDROID)
+    clientVtx = getenv("SB_VBO") == NULL; /* (Android TVs' Mali and PowerVR copy a whole buffer still in use on each update too) */ /* the driver maps new memory for every buffer update: client arrays are three times cheaper per draw */
 #else
     clientVtx = getenv("SB_CLIENTVTX") != NULL;
 #endif

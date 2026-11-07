@@ -225,6 +225,12 @@ int main(int argc, char **argv) {
   if (!ctx) { fprintf(stderr, "context: %s\n", SDL_GetError()); return 1; }
 #ifdef SB_MAC
   SDL_GL_SetSwapInterval(0); /* the Mac swap blocks for ever on an occluded window with vsync; the loop paces itself */
+#elif defined(SB_ANDROID)
+  /* Android's compositor takes a frame at each refresh: a frame swapped on the screen's own beat is shown on time, where
+     the loop's own clock (not locked to it) showed some frames twice and dropped others, all motion uneven */
+  vsyncOn = getenv("SB_VSYNC") ? atoi(getenv("SB_VSYNC")) : 1;
+  if (SDL_GL_SetSwapInterval(vsyncOn) != 0) vsyncOn = 0;
+  pace_init();
 #else
   vsyncOn = getenv("SB_VSYNC") ? atoi(getenv("SB_VSYNC")) : 0;
   SDL_GL_SetSwapInterval(vsyncOn); /* measured on the TV: with vsync the driver blocks a whole extra frame at the first GL call; the loop paces itself instead */
@@ -285,6 +291,16 @@ int main(int argc, char **argv) {
       else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) { SDL_GL_GetDrawableSize(win, &dw, &dh); gfx_resize(dw, dh); }
     }
     Uint32 now = SDL_GetTicks(); float dt = (now - last) / 1000.0f; last = now;
+#ifdef SB_ANDROID
+    if (vsyncOn) { /* motion on the screen's own beat, whatever it runs at (60, 50, or a film's 24 after Match frame rate): the
+         period learnt from the frames themselves; an on-time frame moves one period, a slow one 3 at most */
+      static float per = 1 / 60.0f; static int off;
+      double d = (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency(); static double dl; float real = dl > 0 ? (float)(d - dl) : per; dl = d;
+      if (real > per * 0.6f && real < per * 1.4f) { per += (real - per) * 0.05f; off = 0; dt = per; }
+      else { if (real > 0.004f && real < 0.1f && ++off >= 30) { per = real; off = 0; } /* (the screen changed its rate) */
+        dt = real > per * 3 ? per * 3 : real < 0 ? per : real; } }
+    else
+#endif
     { float pp = (float)pace_period() / 1000.0f; if (pp <= 0) pp = 1 / 60.0f; /* motion on the 60 Hz clock: an on-time frame is one period (no millisecond jitter); a slow one moves it 3 periods at most (no jump) */
       if (dt > pp * 0.5f && dt < pp * 1.5f) dt = pp; else if (dt > pp * 3) dt = pp * 3; }
     static int profSlow = -1; if (profSlow < 0) profSlow = getenv("SB_PROF") && !strcmp(getenv("SB_PROF"), "slow"); int profMark = profN; /* SB_PROF=slow: only frames over 30 ms keep their samples */

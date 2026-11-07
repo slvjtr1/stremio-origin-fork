@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
 
@@ -71,7 +72,9 @@ void plat_pre_init(const char *appId) {
   SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
   SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 }
-void plat_post_window(SDL_Window *w) { (void)w; }
+/* the drawing thread at Android's display priority (its own UI and render threads run there): a frame never waits
+   behind the pictures, the torrent engine or the network */
+void plat_post_window(SDL_Window *w) { (void)w; if (setpriority(PRIO_PROCESS, (id_t)gettid(), -4) != 0) setpriority(PRIO_PROCESS, (id_t)gettid(), -2); }
 const char *plat_asset_dir(void) { return assetDir; }
 const char *plat_data_dir(void) { return dataDir; }
 void plat_window_size(int *w, int *h, Uint32 *flags) {
@@ -116,7 +119,9 @@ int plat_mem_total_mb(void) {
   char line[128]; long kb = 0; while (fgets(line, sizeof line, f)) if (sscanf(line, "MemTotal: %ld kB", &kb) == 1) break;
   fclose(f); return (int)(kb / 1024);
 }
-void plat_thread_background(int nice) { (void)nice; SDL_SetThreadPriority(SDL_THREAD_PRIORITY_LOW); }
+/* per thread, as on webOS: the helpers a few steps under the drawing thread (SDL's "low" was nice 19, where pictures
+   waited behind every other app's work) */
+void plat_thread_background(int nice) { setpriority(PRIO_PROCESS, (id_t)gettid(), nice); }
 /* SDL pauses the activity's drawing in the background: the app hears it as a TV's "sent to the back" */
 int plat_lifecycle(const SDL_Event *e) {
   if (e->type == SDL_APP_DIDENTERFOREGROUND) return 1;

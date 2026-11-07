@@ -1,6 +1,7 @@
 package app.stremioorigin;
 
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.SurfaceView;
@@ -29,12 +30,20 @@ public class OriginActivity extends SDLActivity {
         if (mSurface != null) {
             mSurface.getHolder().setFormat(PixelFormat.TRANSLUCENT);
             mSurface.setZOrderMediaOverlay(true);
+            /* the app is drawn for 1920x1080: on a TV whose screen Android gives as 4K, it is drawn at 1080p and the TV's
+               scaler makes it full size (four times fewer pixels for the GPU each frame; the film itself stays 4K) */
+            try {
+                Point pt = new Point(); getDisplaySize(pt);
+                if (pt.x > 1920 && pt.y > 0) mSurface.getHolder().setFixedSize(1920, Math.round(1920f * pt.y / pt.x));
+            } catch (Throwable t) { }
         }
         SurfaceView v = new SurfaceView(this);
         if (mLayout != null) mLayout.addView(v, 0, new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
         OriginVideo.attach(this, v);
         OriginBridge.attach(this);
     }
+    @SuppressWarnings("deprecation")
+    private void getDisplaySize(Point pt) { getWindowManager().getDefaultDisplay().getRealSize(pt); }
     @SuppressWarnings("deprecation")
     private void immersive() {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
