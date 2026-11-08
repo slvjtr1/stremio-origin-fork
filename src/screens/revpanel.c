@@ -252,7 +252,7 @@ static void tab_act(int i, int b) { (void)b; R.zone = 3; tab_go(i); }
 /* a small glass chip with words (the tag on the still) */
 static float chip(float x, float y, const char *s, float f, int cur, int rtl) { /* f: how focused, 0..1 (it fades) */
   float w = text_width(s, 22, 700, 0.3f) + 36, h = 14 + text_line_height(22), cx = rtl ? x - w : x;
-  if (f < 0.999f) { gfx_shadow(cx, y + 4, w, h, h / 2, 18, BLACK_A(110)); gfx_rrect(cx, y, w, h, h / 2, cur ? acc_a(0.55f) : RGBA(14, 12, 20, 178)); gfx_rrect_v(cx, y, w, h, h / 2, WHITE_A(26), WHITE_A(6)); gfx_ring(cx, y, w, h, h / 2, 1, WHITE_A(46)); }
+  if (f < 0.999f) { gfx_shadow(cx, y + 4, w, h, h / 2, 18, BLACK_A(110)); gfx_rrect(cx, y, w, h, h / 2, cur ? acc_a(0.55f) : TINT(14, 12, 20, 178)); gfx_rrect_v(cx, y, w, h, h / 2, WHITE_A(26), WHITE_A(6)); gfx_ring(cx, y, w, h, h / 2, 1, WHITE_A(46)); }
   if (f > 0.001f) { gfx_opacity_push(f); gfx_rrect(cx, y, w, h, h / 2, ACC); gfx_rrect_h(cx, y, w, h, h / 2, WHITE_A(0), WHITE_A(56)); gfx_ring_out(cx, y, w, h, h / 2, 4, acc_a(0.34f)); gfx_opacity_pop(); }
   text_draw(s, cx + w / 2, y + 7, 22, 700, col_mix(WHITE_A(245), ACC_FG, f), 0.3f, 0, ALIGN_CENTER);
   return w;
@@ -374,7 +374,7 @@ static void draw_left(float x, float top, int rtl) {
       gfx_clip_push(x + 8, cy - 12, LW - 16, 14 + text_line_height(22) + 30);
       float chh = 14 + text_line_height(22); fpill_to(&R.spill, xs[R.sel], 0, ws[R.sel], chh, GLIDE_DUR); fpill_tick(&R.spill, app_dt()); /* the chosen one's highlight glides along */
       for (int i = 0; i <= R.ns; i++) { float ox = xs[i] - R.swX.v; if (ox + ws[i] < -20 || ox > vw + 20) continue; float bx = rtl ? cx - ox : cx + ox, bl = rtl ? bx - ws[i] : bx;
-        hit_add(bl, cy, ws[i], chh, NULL, sw_act, i, 0); gfx_shadow(bl, cy + 4, ws[i], chh, chh / 2, 18, BLACK_A(110)); gfx_rrect(bl, cy, ws[i], chh, chh / 2, RGBA(14, 12, 20, 178)); gfx_ring(bl, cy, ws[i], chh, chh / 2, 1, WHITE_A(46)); }
+        hit_add(bl, cy, ws[i], chh, NULL, sw_act, i, 0); gfx_shadow(bl, cy + 4, ws[i], chh, chh / 2, 18, BLACK_A(110)); gfx_rrect(bl, cy, ws[i], chh, chh / 2, TINT(14, 12, 20, 178)); gfx_ring(bl, cy, ws[i], chh, chh / 2, 1, WHITE_A(46)); }
       { float f = R.zone == 2 ? 1 : 0.55f, ox = R.spill.x.v - R.swX.v, pw = R.spill.w.v, bl = rtl ? cx - ox - pw : cx + ox, nx = R.zone == 2 ? nudge_x(&R.nudge) : 0; /* bright with the focus, softer without */
         gfx_opacity_push(f * R.spill.a.v); gfx_rrect(bl + nx, cy, pw, chh, chh / 2, ACC | 0xff000000u); if (R.zone == 2) gfx_ring_out(bl + nx, cy, pw, chh, chh / 2, 4, acc_a(0.34f)); gfx_opacity_pop(); }
       for (int i = 0; i <= R.ns; i++) { float ox = xs[i] - R.swX.v; if (ox + ws[i] < -20 || ox > vw + 20) continue; float bx = rtl ? cx - ox : cx + ox, bl = rtl ? bx - ws[i] : bx;

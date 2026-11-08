@@ -928,7 +928,7 @@ static void build_btns(void) {
   if (P.isTrailer) { if (trSubsN) B("cc", "p_subs", T("Subtitles"), 0); } /* a trailer's captions: one press on, one off */
   else B("subs", "p_subs", T("Subtitles"), 0);
   if (!P.isTrailer) B("aud", "p_aud", T("Audio"), 0);
-  if (!P.isTrailer && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
+  if (!P.isTrailer && is_anime() && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
   const char *am = !strcmp(P.aspect, "fill") ? "Fill the screen" : !strcmp(P.aspect, "zoom") ? "Zoom" : "Original"; B("asp", "p_asp", T(am), 0);
   #undef B
   P.nbtn = i; if (P.bIdx >= i) P.bIdx = 0; if (fid) for (int k = 0; k < i; k++) if (!strcmp(P.btns[k].id, fid)) P.bIdx = k;
@@ -2221,7 +2221,7 @@ static void draw_osd(void) {
     static float nw[PG_CATS]; static unsigned lg; if (lg != i18n_gen() || !nw[0]) { lg = i18n_gen(); for (int c = 0; c < PG_CATS; c++) nw[c] = text_width(parental_cat_name(c), 22, 600, 0); }
     float bw = text_width(ag, 25, 800, 0) + 22, /* (the age a step above the rest) */ w = 9 + bw + 16; for (int i = 0; i < P.pg.g.n; i++) w += nw[P.pg.g.cat[i]] + 9 + 2 * 10 + 7 + (i + 1 < P.pg.g.n ? 20 : 18); if (!P.pg.g.n) w = 9 + bw + 9; /* (the age alone) */
     gfx_opacity_push(P.pgA.v);
-    lglass_shell(x, y, w, h, h / 2, RGBA(10, 12, 22, 150), 1);
+    lglass_shell(x, y, w, h, h / 2, TINT(10, 12, 22, 150), 1);
     float bx = x + 7, by = y + 7; gfx_rrect(bx, by, bw, h - 14, (h - 14) / 2, acc_a(0.35f)); text_draw(ag, bx + bw / 2, by + (h - 14 - text_line_height(25)) / 2, 25, 800, WHITE_A(255), 0, 0, ALIGN_CENTER);
     float rx = bx + bw + 16, ry = y + (h - text_line_height(22)) / 2, cy = y + h / 2;
     for (int i = 0; i < P.pg.g.n; i++) { float k = (t - 0.25f - i * 0.12f) / 0.35f; k = k < 0 ? 0 : k > 1 ? 1 : k; k = 1 - (1 - k) * (1 - k); int c = P.pg.g.cat[i], lv = P.pg.g.lvl[i];
@@ -2232,7 +2232,7 @@ static void draw_osd(void) {
     gfx_opacity_pop(); }
   /* top left, with the controls: a torrent's peers and speed */
   if (P.p2pA.v > 0.001f) { gfx_opacity_push(P.p2pA.v); static TMemo p2W; float tw = tm_width(&p2W, P.p2pLine, 24, 600, 0), w = 16 + 10 + 12 + tw + 20 + 4;
-    lglass_shell(72, 52, w, 46, 23, RGBA(10, 12, 22, 150), 1); gfx_circle(72 + 2 + 16 + 5, 52 + 23, 5, RGB(0x4a, 0xde, 0x80));
+    lglass_shell(72, 52, w, 46, 23, TINT(10, 12, 22, 150), 1); gfx_circle(72 + 2 + 16 + 5, 52 + 23, 5, RGB(0x4a, 0xde, 0x80));
     xline_draw(&stX[2], P.p2pLine, 72 + 2 + 16 + 10 + 12, 52 + (46 - text_line_height(24)) / 2, 24, WHITE_A(255), 0, ALIGN_LEFT); gfx_opacity_pop(); }
   /* top right: the clock, the pages' own (a new minute: only its changed digits crossfade), and when it ends */
   if (P.topR.v > 0.001f) { gfx_opacity_push(P.topR.v); gfx_offset_push(0, P.topY.v);
@@ -2268,7 +2268,7 @@ static void draw_osd(void) {
         float xk = P.chip[i].xAt ? clampf((float)((now_() - P.chip[i].xAt) / 0.26), 0, 1) : 1; xk = 1 - (1 - xk) * (1 - xk) * (1 - xk); if (xk >= 1) P.chip[i].xAt = 0; /* its words changing */
         if (xk < 1) tw = P.chip[i].oldW + (tw - P.chip[i].oldW) * xk;
         float w = 40 + tw + (P.chip[i].icon ? 36 : 0);
-        if (k > 0.001f) { gfx_opacity_push(k); gfx_rrect(cx, cy, w, 46, 23, RGBA(10, 12, 22, 140)); gfx_ring(cx, cy, w, 46, 23, 2, WHITE_A(56)); float tx = cx + 20, ty = cy + (46 - L24) / 2;
+        if (k > 0.001f) { gfx_opacity_push(k); gfx_rrect(cx, cy, w, 46, 23, TINT(10, 12, 22, 140)); gfx_ring(cx, cy, w, 46, 23, 2, WHITE_A(56)); float tx = cx + 20, ty = cy + (46 - L24) / 2;
           if (P.chip[i].icon) { icon_draw(P.chip[i].icon, tx, cy + 10, 26, WHITE_A(230)); tx += 36; }
           if (xk < 1) { gfx_clip_push(cx, cy, w, 46); text_draw(P.chip[i].old, tx, ty - 6 * xk, 24, b ? 800 : 600, WHITE_A((int)(255 * (1 - xk))), b ? 0.5f : 0, 0, ALIGN_LEFT); text_draw(P.chip[i].t, tx, ty + 6 * (1 - xk), 24, b ? 800 : 600, WHITE_A((int)(255 * xk)), b ? 0.5f : 0, 0, ALIGN_LEFT); gfx_clip_pop(); }
           else text_draw(P.chip[i].t, tx, ty, 24, b ? 800 : 600, WHITE_A(255), b ? 0.5f : 0, 0, ALIGN_LEFT); gfx_opacity_pop(); }
@@ -2287,11 +2287,11 @@ static void draw_osd(void) {
     float kx = tx + roundf(tw * p);
     if (P.knA.v > 0.001f) { gfx_opacity_push(P.knA.v); if (f || sk) { gfx_circle(kx, trkC, 22, acc_a(0.5f)); gfx_circle(kx, trkC, 15, WHITE_A(255)); } else gfx_circle(kx, trkC, 9, WHITE_A(255)); gfx_opacity_pop(); }
     if (P.hvA.v > 0.001f && d > 0) { char ht[16]; fmt_time(P.hvP * d, ht, sizeof ht); float bw = text_width(ht, 24, 700, 0) + 28, bh = 14 + text_line_height(24), bx2 = tx + roundf(tw * P.hvP) - bw / 2, by2 = ty + th - 26 - bh;
-      gfx_opacity_push(P.hvA.v); gfx_rrect(bx2, by2, bw, bh, 12, RGBA(14, 12, 22, 219)); gfx_ring(bx2, by2, bw, bh, 12, 1, WHITE_A(36)); text_draw(ht, bx2 + 14, by2 + 7, 24, 700, WHITE_A(255), 0, 0, ALIGN_LEFT); gfx_opacity_pop(); }
+      gfx_opacity_push(P.hvA.v); gfx_rrect(bx2, by2, bw, bh, 12, TINT(14, 12, 22, 219)); gfx_ring(bx2, by2, bw, bh, 12, 1, WHITE_A(36)); text_draw(ht, bx2 + 14, by2 + 7, 24, 700, WHITE_A(255), 0, 0, ALIGN_LEFT); gfx_opacity_pop(); }
     if (P.skA.v > 0.001f && P.seekTxt[0]) { /* the pill rises and grows from the knob; the number rolls the way it moved */
       float pw = roll_layout(P.seekTxt, P.seekDir) + 32, ph = 12 + L25, pb = ty + th - 34, s = .88f + .12f * P.skS.v;
       gfx_opacity_push(P.skA.v); gfx_scale_push(s, s, kx, pb); gfx_offset_push(0, 10 * (1 - P.skS.v));
-      gfx_rrect(kx - pw / 2, pb - ph, pw, ph, 20, RGBA(18, 15, 26, 199)); gfx_ring(kx - pw / 2, pb - ph, pw, ph, 20, 1, WHITE_A(31));
+      gfx_rrect(kx - pw / 2, pb - ph, pw, ph, 20, TINT(18, 15, 26, 199)); gfx_ring(kx - pw / 2, pb - ph, pw, ph, 20, 1, WHITE_A(31));
       gfx_clip_push(kx - pw / 2, pb - ph, pw, ph); roll_draw(kx, pb - ph + 6, L25, WHITE_A(240)); gfx_clip_pop();
       gfx_offset_pop(); gfx_scale_pop(); gfx_opacity_pop(); }
     gfx_offset_pop(); gfx_opacity_pop(); }
@@ -2309,7 +2309,7 @@ static void draw_osd(void) {
         cycle_dots(up ? 4 : 0, up ? 4 : 3, ai, cx, P.focY.v + 38 + text_line_height(24) / 2.0f + 2, 11, 2.5f, col_alpha(ACC_FG, .3f * ta), col_alpha(ACC_FG, ta), 0); }
       else text_draw(P.tip, P.focX.v + 70, P.focY.v + 38 - text_line_height(24) / 2.0f, 24, 700, col_alpha(ACC_FG, ta), 0, 0, ALIGN_LEFT); }
     for (int i = 0; i < P.nbtn; i++) { float sz = P.btns[i].w, x = P.btns[i].x, y = P.btns[i].y; int f = i == fi;
-      if (!f) lglass_shell(x, y, sz, sz, sz / 2, RGBA(16, 16, 24, 90), 0.85f); /* glass at rest */
+      if (!f) lglass_shell(x, y, sz, sz, sz / 2, TINT(16, 16, 24, 90), 0.85f); /* glass at rest */
       float isz = P.btns[i].big ? 48 : 34, ix = x + sz / 2 - isz / 2, iy = y + sz / 2 - isz / 2; uint32_t ic = f ? ACC_FG : WHITE_A(255);
       if (!strcmp(P.btns[i].id, "cc")) { cc_icon(ix, iy, isz, ic, f ? ACC : RGBA(30, 30, 34, 235)); continue; }
       icon_draw(!strcmp(P.btns[i].id, "pp") ? (paused() ? "p_play" : "p_pause") : P.btns[i].icon, ix, iy, isz, ic); }
@@ -2320,7 +2320,7 @@ static void draw_osd(void) {
     if (pr->k == 3 && P.next.has) { float cw = 540, cx = W - rm - cw; float artH = 286, lh2 = text_line_height(21); int nsp = spoiler_on() && P.next.thumb[0] && !spoiler_failed(P.next.thumb); const char *nov = nsp && P.next.ov[0] ? T("The story shows once you watch it") : P.next.ov; /* the next one is not seen yet: blurred, no story */
       static TMemo ovW; float ovn = nov[0] ? tm_wrap(&ovW, nov, cw - 44, 2, 24, 400, 0) : 0; float ch = 16 + artH + 18 + lh2 + 6 + text_line_height(30) + (ovn ? 6 + ovn * 33 : 0) + 18 + 36 + 18; float cy = H - pb - ch;
       PG.card = 1; PG.prX[0] = cx; PG.prY[0] = cy; PG.prW[0] = cw; PG.prH[0] = ch;
-      lglass_shell(cx, cy, cw, ch, 28, RGBA(14, 12, 22, 220), 1);
+      lglass_shell(cx, cy, cw, ch, 28, TINT(14, 12, 22, 220), 1);
       float ax = cx + 16, ay = cy + 16; const char *th = P.next.thumb[0] ? P.next.thumb : P.bg;
       if (nsp) { if (!spoiler_draw(P.next.thumb, ax, ay, cw - 32, artH, 18)) ph_box(ax, ay, cw - 32, artH, 18); }
       else { GLuint t = th[0] ? img_get_shaped(th, (int)(cw - 32), (int)artH, 18, 1) : 0; ph_picture(t, ax, ay, cw - 32, artH, 18, WHITE_A(255)); }
@@ -2333,7 +2333,7 @@ static void draw_osd(void) {
 
     else { float x = W - rm; int focus = P.mode == 3 || (P.mode == 0 && !pr->big); for (int i = pr->nbtn - 1; i >= 0; i--) { const char *ic = !strcmp(pr->b[i].id, "next") ? "p_next" : !strcmp(pr->b[i].id, "skip") ? "p_skip" : NULL; static TMemo prW[2]; float tw2 = tm_width(&prW[i & 1], pr->b[i].lb, 26, 700, 0), w = 2 + 64 + tw2 + (ic ? 42 : 0), h = 74; x -= w; float y = H - pb - h; int f = focus && i == pr->idx;
         int cnt = (pr->k == 1 || pr->k == 2 || pr->k == 4) && pr->autoN; /* skip intro / recap counting down: the accent fills it from the left behind the words, then it skips */
-        if (f && !cnt) lglass_accent(x, y, w, h, 37, 1); else lglass_shell(x, y, w, h, 37, RGBA(18, 16, 28, 200), 1); /* glass: lit in the accent when focused */
+        if (f && !cnt) lglass_accent(x, y, w, h, 37, 1); else lglass_shell(x, y, w, h, 37, TINT(18, 16, 28, 200), 1); /* glass: lit in the accent when focused */
         if (cnt) { float k = fill_ease((now_() - pr->t0) / pr->adur); if (k > 0) { float fw = h + (w - h) * k; gfx_opacity_push(fminf(1, k * 6)); gfx_clip_push(x, y, fw, h); lglass_accent(x, y, w, h, 37, 1); gfx_clip_pop(); gfx_opacity_pop(); } } /* a pill growing out of its left end, eased */
         if (f) gfx_ring_out(x, y, w, h, 37, 4, acc_a(0.38f));
         if (!cnt && pr->hideT0 && !strcmp(pr->b[i].id, "skip")) { float k = clampf((float)((now_() - pr->hideT0) / SKIP_SHOW_S), 0, 1), lw = w - 2 * 37, ly = y + h + 12; /* the time left: a line as wide as the button's straight part, emptying to its end */
@@ -2427,8 +2427,8 @@ static void draw_srcs(float ix, float top, float W) {
   #undef SRC_NEXT
   gfx_offset_pop(); gfx_clip_pop();
   /* more above or below: the list's edges fade */
-  if (SR.y.v > 2) gfx_rrect_v(ix, vy, RW + 60, 36, 0, RGBA(18, 16, 28, 200), RGBA(18, 16, 28, 0));
-  if (ly - 10 - SR.y.v > vh + 2) gfx_rrect_v(ix, vy + vh - 36, RW + 60, 36, 0, RGBA(18, 16, 28, 0), RGBA(18, 16, 28, 200));
+  if (SR.y.v > 2) gfx_rrect_v(ix, vy, RW + 60, 36, 0, TINT(18, 16, 28, 200), TINT(18, 16, 28, 0));
+  if (ly - 10 - SR.y.v > vh + 2) gfx_rrect_v(ix, vy + vh - 36, RW + 60, 36, 0, TINT(18, 16, 28, 0), TINT(18, 16, 28, 200));
   for (int j = 0; j < na; j++) src_ask(ask[j]); /* (after the drawing: an answer can come at once and lay the list out again) */
 }
 static float col_item_h(TItem *it) { if (it->tool && it->sub[0]) { if (it->hh <= 0) it->hh = 24 + 23 * 1.25f + 2 + 26 * text_wrap_count(it->sub, 6 + 232 - 18 - 24, 2, 21, 600, 0); return it->hh; }
@@ -2451,7 +2451,7 @@ static void draw_tray(void) {
   x = SB_W - 72 - W; y = SB_H - 178 - H;
   PG.tray = P.tray.kind > 0 && P.tray.openA.v > 0.5f; PG.x = x; PG.y = y; PG.w = W; PG.h = H;
   float sc = P.tray.open.v; gfx_opacity_push(P.tray.openA.v); gfx_scale_push(sc, sc, P.tray.ox, P.tray.oy);
-  gfx_rrect(x, y, W, H, 28, RGBA(18, 16, 28, 204)); gfx_rrect_v(x, y, W, H, 28, WHITE_A(20), WHITE_A(5)); gfx_ring(x, y, W, H, 28, 1, WHITE_A(31));
+  gfx_rrect(x, y, W, H, 28, TINT(18, 16, 28, 204)); gfx_rrect_v(x, y, W, H, 28, WHITE_A(20), WHITE_A(5)); gfx_ring(x, y, W, H, 28, 1, WHITE_A(31));
   gfx_offset_push(nudge_x(&P.nudge) * (P.mode == 2), nudge_y(&P.nudge) * (P.mode == 2));
   float ix = x + 1, cy = y + 1 + 22;
   if (P.tray.ntabs) { if (ak == 5) { text_draw(P.tray.title, ix + 30, cy, 24, 800, WHITE_A(209), 0, W - 62, ALIGN_LEFT); cy += L24 + 14; }
@@ -2627,7 +2627,7 @@ static void dly_draw(void) {
   const float B = 76, G = 18, VW = 230, h = 120; static TMemo dW; const char *dn = T("Done"); float dw = tm_width(&dW, dn, 26, 700, 0) + 64;
   float w = 28 + B + G + VW + G + B + 28 + 2 + 28 + B + G + dw + 28, x = SB_W / 2 - w / 2, y = 44 - 24 * (1 - a);
   gfx_opacity_push(a); gfx_offset_push(nudge_x(&P.nudge), 0);
-  gfx_shadow(x, y + 14, w, h, 30, 40, BLACK_A(110)); gfx_rrect(x, y, w, h, 30, RGBA(18, 16, 28, 222)); gfx_rrect_v(x, y, w, h, 30, WHITE_A(18), WHITE_A(4)); gfx_ring(x, y, w, h, 30, 1, WHITE_A(36));
+  gfx_shadow(x, y + 14, w, h, 30, 40, BLACK_A(110)); gfx_rrect(x, y, w, h, 30, TINT(18, 16, 28, 222)); gfx_rrect_v(x, y, w, h, 30, WHITE_A(18), WHITE_A(4)); gfx_ring(x, y, w, h, 30, 1, WHITE_A(36));
   float cy = y + h / 2, bx[4], bw[4]; bx[0] = x + 28; bw[0] = B; float vx = bx[0] + B + G; bx[1] = vx + VW + G; bw[1] = B;
   float sep = bx[1] + B + 28; bx[2] = sep + 2 + 28; bw[2] = B; bx[3] = bx[2] + B + G; bw[3] = dw;
   gfx_rect(sep, cy - 30, 1.5f, 60, WHITE_A(40)); /* the timing apart from the playing */

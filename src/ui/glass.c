@@ -3,7 +3,10 @@
 #include <math.h>
 #include <string.h>
 
-#define SHEET RGB(0x16, 0x14, 0x1d)
+#define SHEET (UI_NOIR ? RGB(0x15, 0x15, 0x16) : RGB(0x16, 0x14, 0x1d))
+/* the black and gold theme: every surface flat (a solid near-black, a hairline edge; the accent solid gold), nothing
+   baked, blurred or read back: lighter on the TV's GPU */
+#define NOIR_EDGE WHITE_A(26)
 /* a texture drawn over the whole of a target (layout units cover its width; its height follows its aspect) */
 static void into(GfxTarget *dst, uint32_t clear, GLuint tex, float u0, float v0, float u1, float v1, uint32_t tint) {
   gfx_target_begin(dst, clear);
@@ -21,6 +24,7 @@ void sglass_free(SGlass *g) { if (g->t.fbo) gfx_target_free(&g->t); memset(g, 0,
 #include <stdlib.h>
 #include <SDL2/SDL.h>
 void sglass_bake(SGlass *g, float x, float y, float w, float h) {
+  if (UI_NOIR) { g->ok = 0; tween_set(&g->a, 0); (void)x; (void)y; (void)w; (void)h; return; } /* (flat: nothing to bake) */
   Uint32 tb0 = SDL_GetTicks();
   int W = (int)ceilf(w / 4), H = (int)ceilf(h / 4); /* the blur works from a quarter of the sheet in each direction */
   int FW = (int)ceilf(w / 2), FH = (int)ceilf(h / 2); if (FW > 1024) { FH = FH * 1024 / FW; FW = 1024; } /* the glass kept at half: smooth when stretched, the grain fine */
@@ -52,7 +56,7 @@ void sglass_bake(SGlass *g, float x, float y, float w, float h) {
   gfx_target_begin(&g->t, SHEET);
   if (ns == 3) gfx_image(s[1].tex, 0, 0, SB_W, LH, 0, WHITE_A((int)(255 * alpha)), 0, 1, 1, 0);
   /* a dark neutral tint, the accent faint at the edges, a light sheen at the top */
-  gfx_rect(0, 0, SB_W, LH, RGBA(18, 16, 24, 112)); /* (a little lighter than before: more of the page's colour comes through the finer glass) */
+  gfx_rect(0, 0, SB_W, LH, TINT(18, 16, 24, 112)); /* (a little lighter than before: more of the page's colour comes through the finer glass) */
   /* the page's radial accent (0 in the middle, .03 at 60%, .11 at its rim beyond the corners) as four edge bands */
   float ex = SB_W * 0.3f, ey = LH * 0.3f;
   gfx_rrect_h(0, 0, ex, LH, 0, acc_a(0.05f), acc_a(0)); gfx_rrect_h(SB_W - ex, 0, ex, LH, 0, acc_a(0), acc_a(0.05f));
@@ -67,6 +71,7 @@ void sglass_bake(SGlass *g, float x, float y, float w, float h) {
 }
 void sglass_tick(SGlass *g, float dt) { tween_tick(&g->a, dt); }
 void sglass_draw(const SGlass *g, float x, float y, float w, float h, float r) {
+  if (UI_NOIR) { gfx_rrect(x, y, w, h, r, SHEET); gfx_ring(x, y, w, h, r, 1, NOIR_EDGE); return; }
   if (!(g->ok && g->a.v >= 0.999f && gfx_opacity_now() >= 0.999f)) gfx_rrect(x, y, w, h, r, SHEET); /* (under the glass once it is fully in: hidden) */
   if (g->ok && g->a.v > 0.001f) gfx_image(g->t.tex, x, y, w, h, r, WHITE_A((int)(255 * g->a.v + 0.5f)), 0, 1, 1, 0);
   if (r > 0) { gfx_clip_push(x, y, w, r + 6); gfx_ring(x, y, w, h, r, 1.2f, WHITE_A(38)); gfx_clip_pop(); } /* light catching its top edge */
@@ -78,11 +83,13 @@ extern float lightAt;
 void lglass_rim(float x, float y, float w, float h, float r, float a0, float a1, int topLeft) { /* the rim lit by a light at 135 degrees:
      the glare program's rim (stronger at the top) and its glint at the top-left, in one quad (no clipping: clipped
      pieces cost a draw call each); the far corner's softer light is the shell's own fine edge */
-  (void)a0; if (!topLeft || a1 <= 0.004f) return; gfx_glare_at(x, y, w, h, r, -2.0f, WHITE_A((int)(fminf(a1, 1) * 255)), lightAt); }
+  (void)a0; if (UI_NOIR || !topLeft || a1 <= 0.004f) return; gfx_glare_at(x, y, w, h, r, -2.0f, WHITE_A((int)(fminf(a1, 1) * 255)), lightAt); }
 float lightAt; /* where the light on the next pieces of glass is, along their top (0 the top-left corner) */
 void lglass_light(float at) { lightAt = at; }
 void lglass_shell(float x, float y, float w, float h, float r, uint32_t body, float k) {
   if (k <= 0.004f) return;
+  if (UI_NOIR) { float a = fminf(k, 1); int ba = (int)(body >> 24); /* a solid dark plate, a little more opaque than the glass was; its edge a hairline */
+    gfx_rrect(x, y, w, h, r, RGBA(22, 22, 23, (int)(a * (ba ? fminf(255, 90 + ba) : 150)))); gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(26 * a))); return; }
   gfx_shadow(x, y + h * 0.18f, w, h, r, fminf(h * 0.6f, 40), BLACK_A((int)(70 * fminf(k, 1))));
   if (body >> 24) gfx_rrect(x, y, w, h, r, col_alpha(body, fminf(k, 1)));
   gfx_rrect(x, y, w, h, r, acc_a(0.07f * fminf(k, 1.4f))); /* the accent's tint */
@@ -93,6 +100,7 @@ void lglass_shell(float x, float y, float w, float h, float r, uint32_t body, fl
 }
 void lglass_accent(float x, float y, float w, float h, float r, float a) { /* the lit one: accent glass, a glow from the top, a fine bright edge */
   if (a <= 0.004f) return;
+  if (UI_NOIR) { gfx_rrect(x, y, w, h, r, col_alpha(ACC | 0xff000000u, a)); return; } /* solid gold */
   gfx_shadow(x, y + h * 0.18f, w, h, r, fminf(h * 0.6f, 40), col_alpha(ACC | 0xff000000u, 0.35f * a));
   gfx_rrect_v(x, y, w, h, r, col_alpha(ACC2 | 0xff000000u, 0.92f * a), col_alpha(ACC | 0xff000000u, 0.92f * a));
   gfx_rrect_v(x, y, w, h, r, WHITE_A((int)(48 * a)), WHITE_A(0));
@@ -106,7 +114,12 @@ float lglass_stretch(float *s, float *last, float x, float dt) { float v = dt > 
    how far its colours have turned, lit a focused (accent) row */
 void lglass_switch(float x, float y, float w, float h, float k, float c, int lit) {
   float r = h / 2;
-  lglass_shell(x, y, w, h, r, lit ? WHITE_A(40) : RGBA(20, 20, 28, 120), 0.9f);
+  if (UI_NOIR) { /* a flat switch: grey track turning gold (on a gold row: dark), a round knob that slides */
+    uint32_t off = lit ? BLACK_A(60) : RGB(64, 64, 66), on = lit ? RGB(16, 16, 17) : ACC | 0xff000000u;
+    gfx_rrect(x, y, w, h, r, col_mix(off, on, c));
+    float kd = h - 8, kx = x + 4 + (w - 8 - kd) * k; uint32_t kc = lit ? col_mix(WHITE_A(255), ACC | 0xff000000u, c) : col_mix(WHITE_A(235), RGB(16, 16, 17), c);
+    gfx_circle(kx + kd / 2, y + h / 2, kd / 2, kc); return; }
+  lglass_shell(x, y, w, h, r, lit ? WHITE_A(40) : TINT(20, 20, 28, 120), 0.9f);
   if (c > 0.004f) { if (lit) { gfx_rrect(x, y, w, h, r, WHITE_A((int)(235 * c))); gfx_rrect_v(x, y, w, h, r, WHITE_A(0), BLACK_A((int)(24 * c))); } else lglass_accent(x, y, w, h, r, c); }
   float kd = h - 8, st = sinf(3.14159f * fminf(fmaxf(k, 0), 1)), kw = kd * (1 + 0.45f * st), kx = x + 4 + (w - 8 - kd) * k - (kw - kd) / 2, ky = y + 4; /* the bead, stretched mid-way */
   uint32_t kc = lit ? col_mix(WHITE_A(255), ACC | 0xff000000u, c) : WHITE_A(255);
@@ -123,11 +136,12 @@ void lglass_liquid(GLuint t, float x, float y, float w, float h, float r, float 
   float n = (float)seed, tm = (float)app_now() * (1 + 0.13f * n) + 17.0f * n, p = 2.39f * n; /* (as the bar's pieces: each its own pace and phase) */
   float su = 0.5f + 0.4f * (0.55f * sinf(tm * 0.27f + p) + 0.3f * sinf(tm * 0.43f + 2.0f + 1.7f * p) + 0.15f * sinf(tm * 0.71f + 4.4f + 2.3f * p)), sv = 0.32f + 0.1f * sinf(tm * 0.33f + 1.0f + p);
   lglass_light(su - 0.12f);
-  if (!t) { lglass_shell(x, y, w, h, r, RGBA(14, 14, 22, 120), k); return; }
+  if (UI_NOIR) { gfx_rrect(x, y, w, h, r, RGBA(14, 14, 15, (int)(225 * fminf(k, 1)))); gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(26 * fminf(k, 1)))); (void)dark; return; }
+  if (!t) { lglass_shell(x, y, w, h, r, TINT(14, 14, 22, 120), k); return; }
   gfx_shadow(x, y + 12, w, h, r, 40, BLACK_A((int)(64 * fminf(k, 1))));
   gfx_liquid_spot(su, sv, (small ? 0.6f : 1.0f) * fminf(1, 80 / h) * lgSoft); gfx_liquid(t, x, y, w, h, r, fminf(h * 0.5f, 30) * lgSoft, fminf(k, 1), u0, v0, u1, v1); lgSoft = 1; /* (the spot's bend grows with the glass: a big sheet takes a pill's) */
   if (dark > 0.004f) gfx_rrect(x, y, w, h, r, col_alpha(PAGE | 0xff000000u, fminf(dark, 1)));
-  gfx_rrect(x, y, w, h, r, RGBA(10, 10, 16, (int)(fminf(18 * k, 50))));
+  gfx_rrect(x, y, w, h, r, TINT(10, 10, 16, (int)(fminf(18 * k, 50))));
   gfx_rrect(x, y, w, h, r, acc_a(0.08f * k));
   gfx_rrect_v(x, y, w, h, r, WHITE_A((int)(fminf(28 * k, 70))), WHITE_A(0));
   gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(fminf(34 * k, 90))));

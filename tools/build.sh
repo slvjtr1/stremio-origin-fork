@@ -49,26 +49,28 @@ CFLAGS="$CFLAGS -I$B"
 
 # ---- third-party ---------------------------------------------------------------------------
 if [ $CLEAN_TP = 1 ]; then rm -rf "$B/tp"; mkdir -p "$B/tp"; fi
+TPS="-w ${OPT/-O2/-Os}"   # fonts, shaping, bidi, JSON, QR: their results are cached (glyphs, shaped lines), so built for size; WebP keeps -O2
+if [ "$(cat "$B/tp/.flags" 2>/dev/null)" != "$TPS" ]; then rm -f "$B/tp/libtp.a"; fi
 if [ ! -f "$B/tp/libtp.a" ]; then
   echo "== third-party ($TARGET)"
   TPQ="-w $OPT"
   FT="-DFT2_BUILD_LIBRARY -DFT_CONFIG_MODULES_H=<ftmodule-sb.h> -I$TP/config -I$TP/freetype/include"
   for f in base/ftbase base/ftinit base/ftsystem base/ftdebug base/ftbitmap base/ftglyph base/ftmm base/ftbbox base/ftsynth base/ftstroke \
            gzip/ftgzip truetype/truetype sfnt/sfnt smooth/smooth autofit/autofit psnames/psnames pshinter/pshinter cff/cff psaux/psaux; do
-    $CC $TPQ $FT -c "$TP/freetype/src/$f.c" -o "$B/tp/ft_$(basename $f).o"
+    $CC $TPS $FT -c "$TP/freetype/src/$f.c" -o "$B/tp/ft_$(basename $f).o"
   done
-  $CXX -w $OPT -std=c++11 -fno-exceptions -fno-rtti -DHAVE_FREETYPE=1 -DHAVE_PTHREAD=1 -I$TP/freetype/include -I$TP/harfbuzz/src \
+  $CXX $TPS -std=c++11 -fno-exceptions -fno-rtti -DHAVE_FREETYPE=1 -DHAVE_PTHREAD=1 -I$TP/freetype/include -I$TP/harfbuzz/src \
     -c "$TP/harfbuzz/src/harfbuzz.cc" -o "$B/tp/harfbuzz.o"
   for f in "$TP"/fribidi/lib/fribidi*.c; do
-    $CC $TPQ -DHAVE_CONFIG_H -I$TP/config/fribidi -I$TP/fribidi/lib -c "$f" -o "$B/tp/fb_$(basename "${f%.c}").o"
+    $CC $TPS -DHAVE_CONFIG_H -I$TP/config/fribidi -I$TP/fribidi/lib -c "$f" -o "$B/tp/fb_$(basename "${f%.c}").o"
   done
-  $CC $TPQ -c "$TP/cjson/cJSON.c" -o "$B/tp/cJSON.o"
-  $CC $TPQ -c "$TP/qrcodegen/qrcodegen.c" -o "$B/tp/qrcodegen.o"
+  $CC $TPS -c "$TP/cjson/cJSON.c" -o "$B/tp/cJSON.o"
+  $CC $TPS -c "$TP/qrcodegen/qrcodegen.c" -o "$B/tp/qrcodegen.o"
   for f in "$TP"/webp/src/dec/*.c "$TP"/webp/src/dsp/*.c "$TP"/webp/src/utils/*.c; do   # libwebp, decoder only
     case "$(basename "$f")" in *enc*|*writer*|*quant_levels_utils*|*_sse*|*_msa*|*_mips*) continue;; esac
     $WEBPCC $TPQ -DWEBP_REDUCE_CSP -I$TP/webp -c "$f" -o "$B/tp/webp_$(basename "${f%.c}").o"
   done
-  $AR rcs "$B/tp/libtp.a" "$B"/tp/*.o
+  rm -f "$B/tp/libtp.a"; $AR rcs "$B/tp/libtp.a" "$B"/tp/*.o; echo "$TPS" > "$B/tp/.flags"
 fi
 
 if [ ! -f "$B/tp/libass.a" ]; then   # libass (styled ASS / SSA subtitles) on the FreeType, HarfBuzz and FriBidi above, no system font provider

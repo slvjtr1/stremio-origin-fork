@@ -592,7 +592,7 @@ static void draw_ep(int i, float x, float y) {
   if (unrel) { const char *tag = r->tag;
     /* the same dark glass as the episode hint: a small accent dot, then the words, readable on any still */
     float tw = r->tagW, th = 14 + text_line_height(22), tx = app_rtl() ? x + TW - 14 - tw : x + 14, ty0 = y + 14;
-    gfx_shadow(tx, ty0 + 4, tw, th, th / 2, 18, BLACK_A(110)); gfx_rrect(tx, ty0, tw, th, th / 2, RGBA(14, 12, 20, 178)); gfx_rrect_v(tx, ty0, tw, th, th / 2, WHITE_A(26), WHITE_A(6)); gfx_ring(tx, ty0, tw, th, th / 2, 1, WHITE_A(46));
+    gfx_shadow(tx, ty0 + 4, tw, th, th / 2, 18, BLACK_A(110)); gfx_rrect(tx, ty0, tw, th, th / 2, TINT(14, 12, 20, 178)); gfx_rrect_v(tx, ty0, tw, th, th / 2, WHITE_A(26), WHITE_A(6)); gfx_ring(tx, ty0, tw, th, th / 2, 1, WHITE_A(46));
     gfx_circle(tx + 22, ty0 + th / 2, 5, ACC2); text_draw(tag, tx + 36, ty0 + 7, 22, 600, WHITE_A(245), 0.2f, 0, ALIGN_LEFT); }
   if (w) { float bx = app_rtl() ? x + 12 : x + TW - 12 - 42; gfx_shadow(bx, y + 14, 42, 42, 21, 10, BLACK_A(140)); gfx_circle(bx + 21, y + 12 + 21, 21, acc_a(0.96f)); icon_draw("check", bx + 8, y + 12 + 8, 26, WHITE_A(255)); }
   else if (r->res && D.resPct > 0.01f && D.resPct < 0.97f) { float bw = TW - 28, pw = bw * D.resPct; gfx_rrect(x + 14, y + TH - 13 - 6, bw, 6, 3, WHITE_A(61)); gfx_rrect(app_rtl() ? x + 14 + bw - pw : x + 14, y + TH - 13 - 6, pw, 6, 3, ACC3); } /* inset and rounded */
@@ -616,7 +616,7 @@ static void ep_hint(float x, float y, int rtl) {
   float h = 14 + text_line_height(22), w = tw[0] + (tw[1] - tw[0]) * m + 30, bx = rtl ? x + 16 : x + 589 - 16 - w, by = y + 331 - 30 - h + 6 * (1 - a);
   float br = 0.5f - 0.5f * cosf((float)(t * 6.2832 / 3.6)); /* the breath: 3.6 s, slow */
   gfx_opacity_push(a * (0.9f + 0.1f * br));
-  gfx_shadow(bx, by + 4, w, h, h / 2, 18, BLACK_A(110)); gfx_rrect(bx, by, w, h, h / 2, RGBA(14, 12, 20, 178)); gfx_rrect_v(bx, by, w, h, h / 2, WHITE_A(26), WHITE_A(6)); gfx_ring(bx, by, w, h, h / 2, 1, WHITE_A(46)); /* dark enough to read on any still */
+  gfx_shadow(bx, by + 4, w, h, h / 2, 18, BLACK_A(110)); gfx_rrect(bx, by, w, h, h / 2, TINT(14, 12, 20, 178)); gfx_rrect_v(bx, by, w, h, h / 2, WHITE_A(26), WHITE_A(6)); gfx_ring(bx, by, w, h, h / 2, 1, WHITE_A(46)); /* dark enough to read on any still */
   { float sp = (float)fmod(t, 5.0) / 1.4f; if (sp < 1) { float sx = bx - 40 + (w + 80) * sp; gfx_clip_push(bx, by, w, h); gfx_rrect_h(sx - 30, by, 30, h, 0, WHITE_A(0), WHITE_A(22)); gfx_rrect_h(sx, by, 30, h, 0, WHITE_A(22), WHITE_A(0)); gfx_clip_pop(); } } /* the sheen: every 5 s */
   gfx_clip_push(bx, by, w, h);
   if (m < 0.999f) { gfx_opacity_push(1 - m); float bob = 3.5f * sinf((float)(t * 6.2832 / 1.4)); icon_draw("k_down", bx + 14, by + h / 2 - 11 + bob, 22, WHITE_A(255)); /* the arrow: a soft bob downwards, 1.4 s */

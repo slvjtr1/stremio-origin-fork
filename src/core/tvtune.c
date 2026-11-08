@@ -27,6 +27,7 @@ static cJSON *toSave, *saved;
 
 static int is_on(const char *k, const char *d) { return !strcmp(store_get(k, d), "true"); }
 const char *tvtune_level(int anime) {
+  if (!anime) return "off"; /* (anime only: films and series keep the TV's own picture) */
   const char *v = store_get(anime ? "animeEnhance" : "filmEnhance", anime ? "A" : "off");
   if (!strcmp(v, "true")) return "A"; if (!strcmp(v, "false")) return "off"; /* (a switch before it had levels) */
   return !strcmp(v, "A") || !strcmp(v, "B") || !strcmp(v, "C") ? v : "off";
@@ -144,6 +145,7 @@ void tvtune_stop(void) {
   if (s) spawn(stop_job, s);
 }
 void tvtune_cycle(int anime) {
+  if (!anime) return;
   static const char *const NEXT[4][2] = { { "off", "C" }, { "C", "B" }, { "B", "A" }, { "A", "off" } };
   const char *cur = tvtune_level(anime); for (int i = 0; i < 4; i++) if (!strcmp(cur, NEXT[i][0])) { store_set(anime ? "animeEnhance" : "filmEnhance", NEXT[i][1]); break; }
   tvtune_stop();

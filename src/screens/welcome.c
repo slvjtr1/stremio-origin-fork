@@ -230,7 +230,7 @@ static void press(int key, const char *label, float k, float pr, float x, float 
   if (pr > 0 && pr < 1) { float b = sinf(3.14159f * pr); if (b > pressNow) { pressNow = b; keyNow = key; } } /* (what it presses feels it, the next frame) */
   if (k <= 0.004f) return; float w = 2 * (42 + 10 + text_width(label, 22, 600, 0)) + 64, h = 108, s = 1 - 0.07f * sinf(3.14159f * cl01(pr));
   gfx_opacity_push(k); gfx_offset_push(0, 16 * (1 - k)); gfx_scale_push(s, s, x, y);
-  gfx_shadow(x - w / 2, y - h / 2 + 12, w, h, h / 2, 40, BLACK_A(120)); gfx_rrect(x - w / 2, y - h / 2, w, h, h / 2, RGBA(22, 20, 30, 230)); gfx_rrect_v(x - w / 2, y - h / 2, w, h, h / 2, WHITE_A(22), WHITE_A(0)); gfx_ring(x - w / 2, y - h / 2, w, h, h / 2, 1, WHITE_A(40));
+  gfx_shadow(x - w / 2, y - h / 2 + 12, w, h, h / 2, 40, BLACK_A(120)); gfx_rrect(x - w / 2, y - h / 2, w, h, h / 2, TINT(22, 20, 30, 230)); gfx_rrect_v(x - w / 2, y - h / 2, w, h, h / 2, WHITE_A(22), WHITE_A(0)); gfx_ring(x - w / 2, y - h / 2, w, h, h / 2, 1, WHITE_A(40));
   if (pr > 0 && pr < 1) gfx_ring_out(x - w / 2, y - h / 2, w, h, h / 2, 3 + 10 * pr, col_alpha(key == K_RED ? RGB(0xef, 0x3b, 0x3b) : key == K_GREEN ? RGB(0x2f, 0xd6, 0x6b) : ACC2 | 0xff000000u, 0.6f * (1 - pr)));
   if (gfx_mirrored()) key = key == K_LEFT ? K_RIGHT : key == K_RIGHT ? K_LEFT : key; /* (mirrored: the arrow the viewer really presses) */
   gfx_scale_push(2, 2, x - w / 2 + 32, y); key_hint(x - w / 2 + 32, y, key, label, WHITE_A(250), 0); gfx_scale_pop();
@@ -250,7 +250,7 @@ static void settings_page(float a, int focus, float usbOn, int about) {
     int f = i == (about ? 6 : 0) && focus < 0, cur = i == (about ? 6 : 0); if (f) gfx_rrect(cx, y, 500, 64, 18, ACC | 0xff000000u);
     icon_draw(IC[i], cx + 20, y + 17, 30, f ? ACC_FG : cur ? ACC3 : WHITE_A(140)); text_draw(T(LB[i]), cx + 70, y + 32 - text_line_height(27) / 2.0f, 27, 600, f ? ACC_FG : cur ? WHITE_A(255) : WHITE_A(204), -0.2f, 410, ALIGN_LEFT); y += 64; }
   float px = 720, py = 150, pw = 1040, ph = 810;
-  gfx_rrect(px, py, pw, ph, 24, RGBA(21, 19, 28, 150)); gfx_rrect_v(px, py, pw, ph, 24, WHITE_A(10), WHITE_A(0)); gfx_ring(px, py, pw, ph, 24, 1, WHITE_A(22));
+  gfx_rrect(px, py, pw, ph, 24, TINT(21, 19, 28, 150)); gfx_rrect_v(px, py, pw, ph, 24, WHITE_A(10), WHITE_A(0)); gfx_ring(px, py, pw, ph, 24, 1, WHITE_A(22));
   text_draw(T(about ? "About" : "Playback"), px + 54, py + 40, 38, 700, WHITE_A(255), -0.5f, 900, ALIGN_LEFT);
   if (about) { static const char *AL[3] = { "Check for updates", "Share logs", "Support the project" }, *AD[3] = { "You have the latest version", "Share the code and describe the issue", "A star on GitHub" };
     float ry = py + 120; for (int i = 0; i < 3; i++) { int f = i == focus;
@@ -351,7 +351,7 @@ static void menu(float m, float sel, float ck) { /* the card menu's own layout, 
   float tl = it ? (float)text_wrap_count(it->name, W0 - 2 * P, 2, 38, 700, -0.5f) : 1; if (tl < 1) tl = 1;
   float h = 40 + 36 + tl * 46 + 26 + 6 * (IH + 4) + 30, x = SB_W - 96 - W0, y = SB_H / 2 - h / 2, sc = 0.96f + 0.04f * m;
   gfx_opacity_push(m); gfx_offset_push(40 * (1 - m), 0); gfx_scale_push(sc, sc, x + W0 / 2, SB_H / 2);
-  gfx_shadow(x, y + 30, W0, h, 28, 80, BLACK_A(140)); gfx_rrect(x, y, W0, h, 28, RGBA(30, 27, 40, 238)); gfx_rrect_v(x, y, W0, h, 28, WHITE_A(18), WHITE_A(0)); gfx_ring(x, y, W0, h, 28, 1, WHITE_A(18));
+  gfx_shadow(x, y + 30, W0, h, 28, 80, BLACK_A(140)); gfx_rrect(x, y, W0, h, 28, TINT(30, 27, 40, 238)); gfx_rrect_v(x, y, W0, h, 28, WHITE_A(18), WHITE_A(0)); gfx_ring(x, y, W0, h, 28, 1, WHITE_A(18));
   float yy = y + 40; text_draw(T(it && !strcmp(it->type, "series") ? "Series" : "Movie"), x + P, yy + (30 - text_line_height(24)) / 2, 24, 600, WHITE_A(184), 0, W0 - 2 * P, ALIGN_LEFT); yy += 36;
   text_draw_wrapped(it ? it->name : "", x + P, yy + (46 - text_line_height(38)) / 2, W0 - 2 * P, 2, 38, 700, WHITE_A(255), -0.5f, ALIGN_LEFT, 46); yy += tl * 46 + 26;
   float py = yy + sel * (IH + 4); glow(x + W0 / 2, py + IH / 2, W0 + 40, IH + 70, ACC, 0.34f); lit_box(x + P, py, W0 - 2 * P, IH, 16, ACC | 0xff000000u, ok_press());
@@ -375,7 +375,7 @@ static void sc_hold(int st, float t) {
     if (c > 0 && c < 1) { float e = ease_apply(EASE_IN_OUT, c), sx = cx + 150, sy = cy + 225, ex = tabX[2] + tabW[2] / 2, ey = 50, px = bez(sx, (sx + ex) / 2, ex, e), py = bez(sy, fminf(sy, ey) - 120, ey, e), s = 1 - 0.55f * e;
       const char *l = T("Added to Library"); float w = text_width(l, 26, 600, 0) + 96;
       gfx_opacity_push(1 - sstep(0.85f, 1, c)); gfx_scale_push(s, s, px, py); gfx_shadow(px - w / 2, py - 30 + 8, w, 60, 30, 24, BLACK_A(120));
-      gfx_rrect(px - w / 2, py - 30, w, 60, 30, RGBA(30, 27, 40, 240)); gfx_ring(px - w / 2, py - 30, w, 60, 30, 1, WHITE_A(40)); gfx_circle(px - w / 2 + 34, py, 17, ACC2); icon_draw("check", px - w / 2 + 23, py - 11, 22, WHITE_A(255));
+      gfx_rrect(px - w / 2, py - 30, w, 60, 30, TINT(30, 27, 40, 240)); gfx_ring(px - w / 2, py - 30, w, 60, 30, 1, WHITE_A(40)); gfx_circle(px - w / 2 + 34, py, 17, ACC2); icon_draw("check", px - w / 2 + 23, py - 11, 22, WHITE_A(255));
       text_draw(l, px - w / 2 + 64, py - text_line_height(26) / 2.0f, 26, 600, WHITE_A(240), 0, 0, ALIGN_LEFT); gfx_scale_pop(); gfx_opacity_pop(); }
     for (int k = 0; k < 5; k++) push(0.6f + 0.25f * k, L, ORB_DOWN, 0.3f);
     push(2.5f, L, ORB_OK, 0.6f); push(3.85f, L, ORB_DONE, 0.9f);
@@ -392,7 +392,7 @@ static void title_page(void); static int sheetOnly;
 static void sheet(float sel, float hp, int upTo, float cur, float bestK) {
   const Item *it = si(5); float SWS = 960, x0 = SB_W - SWS + 52, LWS = SWS - 104;
   if (!sheetOnly) title_page();
-  gfx_shadow(SB_W - SWS - 24, 0, SWS + 40, SB_H, 32, 70, BLACK_A(128)); gfx_rrect(SB_W - SWS, 0, SWS + 40, SB_H, 32, RGBA(22, 20, 30, 236)); gfx_rrect_v(SB_W - SWS, 0, SWS + 40, SB_H, 32, WHITE_A(14), WHITE_A(0));
+  gfx_shadow(SB_W - SWS - 24, 0, SWS + 40, SB_H, 32, 70, BLACK_A(128)); gfx_rrect(SB_W - SWS, 0, SWS + 40, SB_H, 32, TINT(22, 20, 30, 236)); gfx_rrect_v(SB_W - SWS, 0, SWS + 40, SB_H, 32, WHITE_A(14), WHITE_A(0));
   float y = 52; text_draw(T("Streams"), x0, y + (30 - text_line_height(24)) / 2, 24, 600, WHITE_A(184), 0, 0, ALIGN_LEFT); y += 36;
   text_draw(it ? it->name : "", x0, y + (44 - text_line_height(36)) / 2, 36, 700, WHITE_A(255), -0.4f, LWS, ALIGN_LEFT);
   /* the addon tabs, All underlined */
@@ -429,7 +429,7 @@ static void sheet(float sel, float hp, int upTo, float cur, float bestK) {
   char tv[96]; snprintf(tv, sizeof tv, "%s  \xc2\xb7  HEVC  \xc2\xb7  %s", tvl, c && !c->hdr ? "SDR" : "HDR10");
   const char *FT[3] = { T("Your internet"), T("Your TV"), T("Peers") }, *FV[3] = { sp, tv, T("More seeds, faster start") }, *FI[3] = { "g_speed", "p_asp", "g_stack" };
   for (int i = 0; i <= upTo && i < 3; i++) { float a = i < upTo ? 1 : eo(0, 0.35f, cur - i + 0.35f), fy = 560 + i * 128, on = 1 - cl01(fabsf(cur - i));
-    gfx_opacity_push(a); gfx_offset_push(-20 * (1 - a), 0); gfx_rrect(64, fy, 760, 108, 26, col_mix(RGBA(26, 23, 36, 230), RGBA(40, 34, 60, 245), on)); gfx_ring(64, fy, 760, 108, 26, on > 0.5f ? 2 : 1, on > 0.5f ? col_alpha(ACC2, 0.8f) : WHITE_A(36));
+    gfx_opacity_push(a); gfx_offset_push(-20 * (1 - a), 0); gfx_rrect(64, fy, 760, 108, 26, col_mix(TINT(26, 23, 36, 230), TINT(40, 34, 60, 245), on)); gfx_ring(64, fy, 760, 108, 26, on > 0.5f ? 2 : 1, on > 0.5f ? col_alpha(ACC2, 0.8f) : WHITE_A(36));
     icon_draw(FI[i], 96, fy + 36, 36, ACC2); text_draw(FT[i], 152, fy + 22, 24, 700, WHITE_A(170), 0.6f, 0, ALIGN_LEFT); text_draw(FV[i], 152, fy + 56, 30, 700, WHITE_A(250), -0.2f, 640, ALIGN_LEFT);
     gfx_offset_pop(); gfx_opacity_pop(); }
 }
@@ -442,7 +442,7 @@ static void speed_card(void) {
   static Tween ca; int want = busy || (on && since < 2.6f); tween_to(&ca, want ? 1 : 0, want ? 0.3f : 0.4f, EASE_IN_OUT); tween_tick(&ca, app_dt()); float a = ca.v; if (a <= 0.002f) return;
   gfx_opacity_push(a); gfx_rect(0, 0, SB_W, SB_H, BLACK_A(150)); gfx_scale_push(1.3f, 1.3f, SB_W / 2, SB_H / 2); /* (big in the picture: it reads at its size) */
   float w = 820, h = 430, x = (SB_W - w) / 2, y = (SB_H - h) / 2 + 16 * (1 - a);
-  gfx_shadow(x, y + 24, w, h, 36, 70, BLACK_A(170)); gfx_rrect(x, y, w, h, 36, RGBA(24, 21, 34, 250)); gfx_rrect_v(x, y, w, h * 0.5f, 36, WHITE_A(16), WHITE_A(0)); gfx_ring(x, y, w, h, 36, 1, busy ? WHITE_A(40) : col_alpha(ACC2, 0.7f));
+  gfx_shadow(x, y + 24, w, h, 36, 70, BLACK_A(170)); gfx_rrect(x, y, w, h, 36, TINT(24, 21, 34, 250)); gfx_rrect_v(x, y, w, h * 0.5f, 36, WHITE_A(16), WHITE_A(0)); gfx_ring(x, y, w, h, 36, 1, busy ? WHITE_A(40) : col_alpha(ACC2, 0.7f));
   glow(x + w / 2, y + 190, 560, 300, ACC, busy ? 0.18f + 0.08f * sinf((float)app_now() * 2.4f) : 0.3f);
   text_draw(busy ? T("Testing your internet speed") : T("Your internet speed"), x + w / 2, y + 44, 30, 700, WHITE_A(240), -0.2f, 0, ALIGN_CENTER);
   double mb = busy ? best_speed_live() : best_net_mbps(); char n[24]; if (mb > 0) snprintf(n, sizeof n, "%.0f", mb); else snprintf(n, sizeof n, "\xe2\x80\x94");
@@ -463,7 +463,7 @@ static void speed_pill(void) {
   float w = text_width(l, 30, 700, 0) + (on || busy ? 120 : 72), h = 84, x = 64 + 380 - w / 2, y = SB_H - 150, k = on ? eo(0, 0.35f, since) : 1;
   gfx_scale_push(1.25f, 1.25f, x + w / 2, y + h / 2); /* (bigger in the picture) */
   if (x < 40) x = 40;
-  gfx_shadow(x, y + 16, w, h, h / 2, 40, BLACK_A(150)); gfx_rrect(x, y, w, h, h / 2, RGBA(26, 23, 36, 245)); gfx_rrect_v(x, y, w, h, h / 2, WHITE_A(18), WHITE_A(0)); gfx_ring(x, y, w, h, h / 2, 1, on ? col_alpha(ACC2, 0.6f) : WHITE_A(36));
+  gfx_shadow(x, y + 16, w, h, h / 2, 40, BLACK_A(150)); gfx_rrect(x, y, w, h, h / 2, TINT(26, 23, 36, 245)); gfx_rrect_v(x, y, w, h, h / 2, WHITE_A(18), WHITE_A(0)); gfx_ring(x, y, w, h, h / 2, 1, on ? col_alpha(ACC2, 0.6f) : WHITE_A(36));
   float tx = x + (on || busy ? 96 : 36);
   if (busy) { float lx = x + 30, ly = y + h / 2 - 1.5f, ph = fmodf((float)app_now() / 1.1f, 1), p = ease_apply(EASE_IN_OUT, ph), sx = lx + 46 * 0.4f * (-1 + 3.5f * p); /* the app's loading line, small */
     gfx_rrect(lx, ly, 46, 3, 1.5f, WHITE_A(40)); gfx_clip_push(lx, ly, 46, 3); gfx_rrect_h(sx, ly, 20, 3, 1.5f, col_alpha(ACC2, 0), ACC2); gfx_rrect_h(sx + 20, ly, 20, 3, 1.5f, ACC2, col_alpha(ACC2, 0)); gfx_clip_pop(); }
@@ -509,13 +509,13 @@ static void osd(float a, const char *fb, const char *peers, float usbLit) {
   gfx_rrect_v(0, H * 0.44f, W0, H * 0.3f, 0, BLACK_A(0), BLACK_A(140)); gfx_rrect_v(0, H * 0.74f, W0, H * 0.26f, 0, BLACK_A(140), BLACK_A(224)); gfx_rrect_v(0, 0, W0, 240, 0, BLACK_A(140), BLACK_A(0));
   app_clock_draw(W0 - 64, 46, 1);
   if (peers) { float tw = text_width(peers, 24, 600, 0), w = 16 + 10 + 12 + tw + 24;
-    lglass_shell(72, 52, w, 46, 23, RGBA(10, 12, 22, 150), 1); gfx_circle(72 + 2 + 16 + 5, 52 + 23, 5, RGB(0x4a, 0xde, 0x80));
+    lglass_shell(72, 52, w, 46, 23, TINT(10, 12, 22, 150), 1); gfx_circle(72 + 2 + 16 + 5, 52 + 23, 5, RGB(0x4a, 0xde, 0x80));
     text_draw(peers, 72 + 40, 52 + (46 - text_line_height(24)) / 2, 24, 600, WHITE_A(255), 0, 0, ALIGN_LEFT);
     if (usbLit > 0) { float uw = text_width("USB", 24, 600, 0), ux = 72 + 40 + tw - uw; gfx_rrect(ux - 8, 58, uw + 16, 34, 10, col_alpha(ACC2, 0.3f * usbLit)); gfx_ring_out(ux - 8, 58, uw + 16, 34, 10, 2, col_alpha(ACC2, usbLit)); } }
   /* the title, its chips and its line, from the bar up */
   float mtTop = ttlBot - L25, infTop = mtTop - 14 - 46; logo(4, bx, infTop - 18, 560, 170);
   static const char *CH[3] = { "4K", "HDR10", "EAC3 5.1" }; float cx = bx;
-  for (int i = 0; i < 3; i++) { float w = 40 + text_width(CH[i], 24, i ? 600 : 800, i ? 0 : 0.5f); gfx_rrect(cx, infTop, w, 46, 23, RGBA(10, 12, 22, 140)); gfx_ring(cx, infTop, w, 46, 23, 2, WHITE_A(56));
+  for (int i = 0; i < 3; i++) { float w = 40 + text_width(CH[i], 24, i ? 600 : 800, i ? 0 : 0.5f); gfx_rrect(cx, infTop, w, 46, 23, TINT(10, 12, 22, 140)); gfx_ring(cx, infTop, w, 46, 23, 2, WHITE_A(56));
     text_draw(CH[i], cx + 20, infTop + (46 - text_line_height(24)) / 2, 24, i ? 600 : 800, WHITE_A(255), i ? 0 : 0.5f, 0, ALIGN_LEFT); cx += w + 12; }
   const Item *it = si(4); if (it) text_draw(it->metaLine, bx, mtTop, 25, 500, WHITE_A(191), 0, 1200, ALIGN_LEFT);
   /* the bar */
@@ -541,7 +541,7 @@ static void subs_tray(float open, float tab, int col, float row) {
   if (open <= 0.004f) return; float L24 = text_line_height(24), L18 = text_line_height(21), colH = 6 + (6 + L18 + 14) + 294 + 4;
   float W0 = 56 + 4 * 282 - 10, hdH = 20 + L24 + 18, H = 2 + 22 + hdH + 8 + colH + 8 + 20, x = SB_W - 72 - W0, y = SB_H - 178 - H, sc = 0.94f + 0.06f * open;
   gfx_opacity_push(open); gfx_scale_push(sc, sc, x + W0 - 200, SB_H - 100);
-  gfx_rrect(x, y, W0, H, 28, RGBA(18, 16, 28, 214)); gfx_rrect_v(x, y, W0, H, 28, WHITE_A(20), WHITE_A(5)); gfx_ring(x, y, W0, H, 28, 1, WHITE_A(31));
+  gfx_rrect(x, y, W0, H, 28, TINT(18, 16, 28, 214)); gfx_rrect_v(x, y, W0, H, 28, WHITE_A(20), WHITE_A(5)); gfx_ring(x, y, W0, H, 28, 1, WHITE_A(31));
   const char *TB[2] = { T("Subtitles"), T("Addons") }; float tbw[2], tbx[2], tx = x + 31; for (int i = 0; i < 2; i++) { tbw[i] = 48 + text_width(TB[i], 24, 700, 0); tbx[i] = tx; tx += tbw[i] + 10; }
   float cy = y + 23, bh = 20 + L24, px = tbx[0] + (tbx[1] - tbx[0]) * tab, pw = tbw[0] + (tbw[1] - tbw[0]) * tab, tf = col < 0 ? 1 : 0;
   lit_box(px, cy, pw, bh, 24, col_mix(WHITE_A(26), ACC | 0xff000000u, tf), tf > 0.5f ? ok_press() : 0); if (tf) gfx_ring_out(px, cy, pw, bh, 24, 4, acc_a(0.38f));
@@ -572,7 +572,7 @@ static void sub_line(const char *s, float y, float a) { /* the app's own subtitl
 static void film(int i) { backdrop(i, 0); }
 static void chip_tr(const char *s, const char *icon, float a, float spin) { /* a notice chip at the player's top right */
   if (a <= 0.004f) return; float w = text_width(s, 26, 700, 0) + 92, h = 60, x = SB_W - 64 - w, y = 120; gfx_opacity_push(a); gfx_offset_push(0, -12 * (1 - a));
-  lglass_shell(x, y, w, h, h / 2, RGBA(10, 12, 22, 170), 1);
+  lglass_shell(x, y, w, h, h / 2, TINT(10, 12, 22, 170), 1);
   if (spin >= 0) { for (int k = 0; k < 10; k++) { float an = spin * 6.2832f + k * 0.55f; gfx_circle(x + 36 + cosf(an) * 11, y + h / 2 + sinf(an) * 11, 1.5f + 0.15f * k, col_alpha(ACC2, 0.2f + 0.08f * k)); } }
   else icon_draw(icon, x + 22, y + h / 2 - 14, 28, ACC2);
   text_draw(s, x + 64, y + h / 2 - text_line_height(26) / 2.0f, 26, 700, WHITE_A(245), 0, 0, ALIGN_LEFT); gfx_offset_pop(); gfx_opacity_pop();
@@ -595,7 +595,7 @@ static void sc_subs(int st, float t) {
   if (st == 2) { float L = 7.0f; t = fmodf(t, L); film(4);
     /* the speech and the subtitle's lines as two tracks: the lines run early, then slide onto the speech */
     float fix = eo(2.6f, 3.6f, t), off = 120 * (1 - fix);
-    float bx = 260, by = 640, bw = SB_W - 520; gfx_rrect(bx - 30, by - 50, bw + 60, 270, 28, RGBA(14, 12, 22, 210)); gfx_ring(bx - 30, by - 50, bw + 60, 270, 28, 1, WHITE_A(36));
+    float bx = 260, by = 640, bw = SB_W - 520; gfx_rrect(bx - 30, by - 50, bw + 60, 270, 28, TINT(14, 12, 22, 210)); gfx_ring(bx - 30, by - 50, bw + 60, 270, 28, 1, WHITE_A(36));
     text_draw(T("Speech"), bx, by - 28, 24, 700, WHITE_A(180), 1.2f, 0, ALIGN_LEFT); text_draw(T("Subtitles"), bx, by + 84, 24, 700, WHITE_A(180), 1.2f, 0, ALIGN_LEFT);
     static const float SEG[5][2] = { { 0.05f, 0.16f }, { 0.22f, 0.37f }, { 0.44f, 0.52f }, { 0.6f, 0.78f }, { 0.84f, 0.95f } };
     for (int i = 0; i < 5; i++) { float a = bx + SEG[i][0] * bw, w = (SEG[i][1] - SEG[i][0]) * bw;
@@ -626,7 +626,7 @@ static void sc_subs(int st, float t) {
 /* -- 5. torrents -- */
 static void notice(float a, const char *s) { /* the app's notice capsule out of the Settings icon, with the red key */
   if (a <= 0.004f) return; float w = text_width(s, 26, 700, 0) + 46 + 30 + 40, x = 40, y = 12; gfx_opacity_push(a);
-  lglass_shell(x, y, 76 + w * a, 76, 38, RGBA(14, 12, 22, 200), 1);
+  lglass_shell(x, y, 76 + w * a, 76, 38, TINT(14, 12, 22, 200), 1);
   icon_draw("nav_set", x + 18, y + 18, 40, WHITE_A(255)); text_draw(s, x + 96, y + 38 - text_line_height(26) / 2.0f, 26, 700, WHITE_A(250), 0, 0, ALIGN_LEFT);
   key_hint(x + 96 + text_width(s, 26, 700, 0) + 20, y + 38, K_RED, NULL, WHITE_A(250), 0); gfx_opacity_pop();
 }
@@ -634,7 +634,7 @@ static void sc_torrents(int st, float t) {
   if (st == 0) { /* the film is big, the part in memory small and moving along it */
     float L = 7.0f; t = fmodf(t, L); film(4); osd(1, NULL, T1("{n} peers", "n", "48"), 0);
     float cx = SB_W / 2, y = 330, w = 1300, x = cx - w / 2, a = eo(0.2f, 0.8f, t);
-    gfx_opacity_push(a); gfx_rrect(x - 40, y - 80, w + 80, 230, 30, RGBA(16, 14, 24, 228)); gfx_ring(x - 40, y - 80, w + 80, 230, 30, 1, WHITE_A(36));
+    gfx_opacity_push(a); gfx_rrect(x - 40, y - 80, w + 80, 230, 30, TINT(16, 14, 24, 228)); gfx_ring(x - 40, y - 80, w + 80, 230, 30, 1, WHITE_A(36));
     text_draw("22.7 GB", x, y - 54, 30, 700, WHITE_A(200), 0, 0, ALIGN_LEFT);
     for (int i = 0; i < 60; i++) gfx_rrect(x + i * (w / 60), y, w / 60 - 4, 50, 5, WHITE_A(28));
     float p = 0.12f + 0.7f * cl01((t - 1.0f) / 5.5f), ww = w * 0.06f; glow(x + w * p + ww / 2, y + 25, 300, 200, ACC, 0.5f); gfx_rrect(x + w * p, y - 6, ww, 62, 10, ACC | 0xff000000u);
@@ -654,7 +654,7 @@ static void sc_torrents(int st, float t) {
       code, the page opens, and the word typed there lands in the search box -- */
 static void phone_card(float x, float y, int st, float t) {
   float pw = 400, ph = 720, sx = x + 18, sy = y + 18, sw = pw - 36, sh = ph - 36;
-  gfx_shadow(x, y + 30, pw, ph, 56, 70, BLACK_A(170)); gfx_rrect(x, y, pw, ph, 56, RGBA(30, 27, 40, 250)); gfx_rrect_v(x, y, pw, ph, 56, WHITE_A(22), WHITE_A(0)); gfx_ring(x, y, pw, ph, 56, 1.5f, WHITE_A(46));
+  gfx_shadow(x, y + 30, pw, ph, 56, 70, BLACK_A(170)); gfx_rrect(x, y, pw, ph, 56, TINT(30, 27, 40, 250)); gfx_rrect_v(x, y, pw, ph, 56, WHITE_A(22), WHITE_A(0)); gfx_ring(x, y, pw, ph, 56, 1.5f, WHITE_A(46));
   gfx_rrect(sx, sy, sw, sh, 40, RGB(0x10, 0x0e, 0x16)); gfx_rrect(x + pw / 2 - 40, y + 30, 80, 10, 5, WHITE_A(40));
   if (st < 2) { /* the camera: the code in its frame, found, then the page to open */
     float cs = 230, cx = sx + sw / 2 - cs / 2, cy = sy + 150, found = eo(1.0f, 1.4f, t), fr = 1.15f - 0.15f * found;
@@ -707,10 +707,10 @@ static void key_still(void) {
   gfx_rect(0, 0, SB_W, SB_H, col_alpha(PAGE, 0.8f)); porbs(0, 1);
 }
 static void key_added(int on) { if (!on) return; const char *s = T("Added"); float w = text_width(s, 26, 700, 0) + 84, x = SB_W - 96 - w, y = 72;
-  gfx_rrect(x, y, w, 60, 30, RGBA(16, 14, 22, 212)); gfx_ring(x, y, w, 60, 30, 1, WHITE_A(46)); gfx_circle(x + 30, y + 30, 19, ACC); icon_draw("check", x + 17, y + 17, 26, WHITE_A(255)); text_draw(s, x + 60, y + 30 - text_line_height(26) / 2.0f, 26, 600, WHITE_A(245), 0, 0, ALIGN_LEFT); }
+  gfx_rrect(x, y, w, 60, 30, TINT(16, 14, 22, 212)); gfx_ring(x, y, w, 60, 30, 1, WHITE_A(46)); gfx_circle(x + 30, y + 30, 19, ACC); icon_draw("check", x + 17, y + 17, 26, WHITE_A(255)); text_draw(s, x + 60, y + 30 - text_line_height(26) / 2.0f, 26, 600, WHITE_A(245), 0, 0, ALIGN_LEFT); }
 static void key_card(float x, float y, float w, float h, const char *tag, const char *ti, const char *ds, int lit) { /* the title's card as Settings shows it */
   float pw = 200, ph = 300, px = x + 32, tx = px + pw + 36, tw = w - pw - 100;
-  gfx_shadow(x, y + 20, w, h, 28, 50, BLACK_A(120)); gfx_rrect(x, y, w, h, 28, lit ? RGBA(16, 14, 24, 220) : RGBA(16, 14, 24, 180)); gfx_ring(x, y, w, h, 28, lit ? 3 : 1.5f, lit ? col_alpha(ACC, 0.85f) : WHITE_A(36));
+  gfx_shadow(x, y + 20, w, h, 28, 50, BLACK_A(120)); gfx_rrect(x, y, w, h, 28, lit ? TINT(16, 14, 24, 220) : TINT(16, 14, 24, 180)); gfx_ring(x, y, w, h, 28, lit ? 3 : 1.5f, lit ? col_alpha(ACC, 0.85f) : WHITE_A(36));
   GLuint pt = img_get_shaped(demo_art("demo3.poster.webp"), (int)pw, (int)ph, 16, 0); if (!ph_picture(pt, px, y + (h - ph) / 2, pw, ph, 16, WHITE_A(lit ? 255 : 150))) ph_box(px, y + (h - ph) / 2, pw, ph, 16);
   float ty = y + 40; text_draw(tag, tx, ty, 24, 700, lit ? ACC3 : WHITE_A(150), 1.0f, tw, ALIGN_LEFT); ty += text_line_height(24) + 14;
   int tn = text_draw_wrapped(ti, tx, ty, tw, 2, 44, 800, WHITE_A(lit ? 255 : 190), -0.6f, ALIGN_LEFT, 52); ty += tn * 52 + 6;
@@ -764,7 +764,7 @@ static void tip_card(float t, const char *head, const char *msg) {
 static void logs_card(float t, float a) {
   if (a <= 0.004f) return; float CW = 1360, CH = 620, x = SB_W / 2 - CW / 2, y = SB_H / 2 - CH / 2 + 20 * (1 - a), P = 70, QS = 380, sc = 0.97f + 0.03f * a;
   gfx_opacity_push(a); gfx_scale_push(sc, sc, SB_W / 2, SB_H / 2);
-  gfx_shadow(x, y + 30, CW, CH, 36, 80, BLACK_A(150)); gfx_rrect(x, y, CW, CH, 36, RGBA(30, 27, 40, 244)); gfx_rrect_v(x, y, CW, CH, 36, WHITE_A(18), WHITE_A(0)); gfx_ring(x, y, CW, CH, 36, 1, WHITE_A(26));
+  gfx_shadow(x, y + 30, CW, CH, 36, 80, BLACK_A(150)); gfx_rrect(x, y, CW, CH, 36, TINT(30, 27, 40, 244)); gfx_rrect_v(x, y, CW, CH, 36, WHITE_A(18), WHITE_A(0)); gfx_ring(x, y, CW, CH, 36, 1, WHITE_A(26));
   text_draw(T("Share logs"), x + P, y + P, 56, 800, WHITE_A(255), -1, 0, ALIGN_LEFT);
   text_draw_wrapped(T("Scan the code and describe the issue."), x + P, y + P + 90, CW - 3 * P - QS, 4, 30, 500, WHITE_A(215), 0, ALIGN_LEFT, 42);
   text_draw(T("Log code"), x + P, y + CH - P - 160, 26, 700, WHITE_A(160), 0.6f, 0, ALIGN_LEFT);

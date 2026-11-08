@@ -135,5 +135,9 @@ void app_quit(void);
 int  app_quitting(void);
 
 /* the page colour */
-#define PAGE RGB(12, 11, 17)
+extern int UI_NOIR; /* the theme: 1 black and gold (the default), 0 classic (purple glass); Settings › Appearance › Theme */
+void theme_apply(void);
+#define PAGE (UI_NOIR ? RGB(8, 8, 9) : RGB(12, 11, 17))
+/* a dark purple-tinted colour of the classic look; the black and gold one takes it neutral (same lightness, no tint) */
+#define TINT(r, g, b, a) (UI_NOIR ? RGBA(((r) + (g)) / 2, ((r) + (g)) / 2, ((r) + (g)) / 2, a) : RGBA(r, g, b, a))
 #endif

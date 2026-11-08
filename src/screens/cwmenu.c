@@ -57,7 +57,7 @@ static float fx_c(float u) { return ease_apply(EASE_STD, u < 0 ? 0 : u > 1 ? 1 :
 static void fx_icon_at(float u, float a, float fromX, float fromY) {
   float lx = topNav.chipX[NAV_LIB] + topNav.chipW[NAV_LIB] / 2, ly = 50, e = fx_c(u);
   float cx = fromX + (lx - fromX) * e, cy = fromY + (ly - fromY) * e - 110 * sinf(3.14159f * e), sc = 1 - 0.45f * e;
-  gfx_opacity_push(a); gfx_scale_push(sc, sc, cx, cy); gfx_shadow(cx - 29, cy - 21, 58, 58, 29, 20, BLACK_A(110)); gfx_circle(cx, cy, 29, RGBA(16, 14, 22, 212)); gfx_circle(cx, cy, 19, ACC); icon_draw(FX.icon, cx - 13, cy - 13, 26, WHITE_A(255)); gfx_scale_pop(); gfx_opacity_pop();
+  gfx_opacity_push(a); gfx_scale_push(sc, sc, cx, cy); gfx_shadow(cx - 29, cy - 21, 58, 58, 29, 20, BLACK_A(110)); gfx_circle(cx, cy, 29, TINT(16, 14, 22, 212)); gfx_circle(cx, cy, 19, ACC); icon_draw(FX.icon, cx - 13, cy - 13, 26, WHITE_A(255)); gfx_scale_pop(); gfx_opacity_pop();
 }
 /* added: the chip, with the title's small poster in it, leaves as a bubble of liquid glass for the Library tab. It bends
    the backdrop under it wherever it is (more as it goes faster), stretches the way it moves and wobbles as it slows, the
@@ -125,7 +125,7 @@ static void fx_draw(void) {
   float a = in * (1 - go) * (FX.kind == 3 ? 1 - fx_e((t - 0.66f) / 0.24f) : 1), cx = FX.px, cy = FX.py;
   if (a > 0.003f) {
     float x = cx - cw / 2, y = cy - ch / 2; gfx_opacity_push(a); gfx_scale_push(sc, sc, cx, cy);
-    lglass_shell(x, y, cw, ch, ch / 2, RGBA(16, 14, 22, 205), 1); /* glass */
+    lglass_shell(x, y, cw, ch, ch / 2, TINT(16, 14, 22, 205), 1); /* glass */
     gfx_circle(x + ch / 2, cy, 19, ACC); icon_draw(FX.icon, x + ch / 2 - 13, cy - 13, 26, WHITE_A(255));
     if (fold < 0.99f) { gfx_opacity_push(1 - fold); text_draw(FX.text, x + ch + 4, cy - text_line_height(24) / 2.0f, 24, 600, WHITE_A(245), 0.1f, cw - ch - 14, ALIGN_LEFT); gfx_opacity_pop(); }
     gfx_scale_pop(); gfx_opacity_pop(); }

@@ -314,7 +314,9 @@ float lift_begin_z(unsigned long long key, int focused, float hold, float x, flo
 }
 void lift_end(unsigned long long key, float x, float y, float w, float h, float r) {
   LiftE *e = lift_find(key, 0);
-  if (e && e->k.v * liftDim > 0.002f) { float k = e->k.v * liftDim;
+  if (e && e->k.v * liftDim > 0.002f && UI_NOIR) { float k = e->k.v * liftDim; /* the black and gold theme: a gold frame round the focused card, no glare */
+    gfx_ring(x - 5, y - 5, w + 10, h + 10, r + 5, 3.5f, col_alpha(ACC | 0xff000000u, k)); }
+  else if (e && e->k.v * liftDim > 0.002f) { float k = e->k.v * liftDim;
     gfx_rrect_v(x, y, w, h, r, WHITE_A((int)(24 * k)), WHITE_A(0)); /* the glass: light from above, faint, in the shape itself */
     float p = (float)((app_now() - e->t0) / GLARE_DUR);
     /* the glare's one pass, then it rests, faint, near the far edge for as long as the focus stays: the focused card is

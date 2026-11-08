@@ -70,10 +70,11 @@ static const Opt SKIPO[] = { { "button", "Show a button" }, { "auto", "Automatic
 static const Opt CLOCKO[] = { { "24", "24-hour" }, { "12", "12-hour" } };
 static const Opt HROWS[] = { { "8", "8" }, { "12", "12" }, { "16", "16" }, { "24", "24" } }; /* the addons' catalogs on Home (stremio.c: home_rows) */
 static const Opt APPICON[] = { { "origin", "Origin" }, { "classic", "Classic" } };
+static const Opt THEMEO[] = { { "noir", "Black and gold" }, { "classic", "Classic" } };
 static const Opt ACCENT_OPTS[] = { { "logo", "From the logo" }, { "adaptive", "From the artwork" }, { "purple", "Purple" }, { "violet", "Violet" }, { "fuchsia", "Fuchsia" }, { "pink", "Pink" }, { "rose", "Rose" }, { "red", "Red" }, { "orange", "Orange" }, { "amber", "Amber" }, { "gold", "Gold" }, { "lime", "Lime" }, { "green", "Green" }, { "emerald", "Emerald" }, { "teal", "Teal" }, { "cyan", "Cyan" }, { "sky", "Sky" }, { "blue", "Blue" }, { "indigo", "Indigo" }, { "graphite", "Graphite" } };
 #define NCAT 11
 #define MAXROWS 48
-static Setting playBase[13], playS[14], subsBase[18], subsS[18], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[8], picS[6], accS[8];
+static Setting playBase[13], playS[14], subsBase[18], subsS[18], audS[6], lookS[7], langS[3], keyS[4], addonS[40], acctS[1], supS[8], picS[5], accS[8];
 static Cat cats[NCAT]; static int ncat; /* (Keys leaves when this build carries every key) */
 static int cat_of(const Setting *opts) { for (int i = 0; i < ncat; i++) if (cats[i].opts == opts) return i; return -1; }
 
@@ -170,11 +171,11 @@ static int about_opts(void) {
 }
 /* Reset all settings: the keys of the settings (and the small choices made on the way: keyboard, sort, picture shape)
    removed, so each reads its default again. Not touched: the account, library, addons, keys, the app's language. */
-static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "betaUpdates", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
+static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "betaUpdates", "theme", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
   "bingeWatch", "enableNextVideo", "blurUnseen", "clockFmt", "defaultAudioTrack", "dtsMode", "audioPassthrough", "dv7Convert", "enableDefaultAudioTrack", "homeRows",
   "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "skipShowSec", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
   "subsFollow", "subsFont", "subsLang", "subsOutline", "subsOutlineColor", "subsOutlineWidth", "subsPos", "subsShadow", "subsShadowDist",
-  "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "filmEnhance", "brightBoost", "darkSee", "voiceClear", "evenVolume", "subsNoSdh", "kbLang", "libSort", NULL };
+  "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "brightBoost", "darkSee", "voiceClear", "evenVolume", "subsNoSdh", "kbLang", "libSort", NULL };
 static void enter(const void *p); static void show_cat(int i, int dir);
 static void do_reset(void *ud) { (void)ud;
   for (int i = 0; RESET_KEYS[i]; i++) store_remove(RESET_KEYS[i]);
@@ -259,17 +260,17 @@ static void build(void) {
   set_s(&audS[3], "uiSound", "Interface sounds", "A soft click as you move between titles", OO, 2, "true");
   set_s(&audS[4], "uiSoundVol", "Interface sound level", "Of the TV\xe2\x80\x99s volume", SVOL, 10, "30");
   set_s(&picS[0], "animeEnhance", "Anime upscale", "Anime only: the TV's Super Resolution, gradation and line work tuned for drawn pictures on the way to 4K. Also on a button in the player", UPL, 4, "A");
-  set_s(&picS[1], "filmEnhance", "Upscale films and series", "Sharper detail from the TV's own processor, the frame rate untouched. Also on a button in the player", UPL, 4, "off");
-  set_s(&picS[2], "brightBoost", "Brightness", "The screen's light raised while you watch, energy saving off", OO, 2, "false");
-  set_s(&picS[3], "darkSee", "See in the dark", "Dark scenes clearer in a bright room: the TV's AI brightness for dark areas and a slight lift of black", OO, 2, "false");
-  set_s(&picS[4], "voiceClear", "Clear voice", "Speech clearer through the TV's own dialogue enhancer; stereo and Atmos stay as they are", OO, 2, "true");
-  set_s(&picS[5], "evenVolume", "Even volume", "Loud scenes and quiet speech brought closer together", OO, 2, "false");
+  set_s(&picS[1], "brightBoost", "Brightness", "The screen's light raised while you watch, energy saving off", OO, 2, "false");
+  set_s(&picS[2], "darkSee", "See in the dark", "Dark scenes clearer in a bright room: the TV's AI brightness for dark areas and a slight lift of black", OO, 2, "false");
+  set_s(&picS[3], "voiceClear", "Clear voice", "Speech clearer through the TV's own dialogue enhancer; stereo and Atmos stay as they are", OO, 2, "true");
+  set_s(&picS[4], "evenVolume", "Even volume", "Loud scenes and quiet speech brought closer together", OO, 2, "false");
   int naud = 6; { Setting t = audS[5]; for (int i = 5; i > 2; i--) audS[i] = audS[i - 1]; audS[2] = t; } /* anime's right under the films' */
 #ifdef SB_ANDROID
   for (int i = 0; i < naud; i++) if (!strcmp(audS[i].k, "dtsMode")) /* (no DTS converter here: in its place, where Dolby and DTS are decoded) */
     set_s(&audS[i], "audioPassthrough", "Dolby and DTS to a sound bar", "On: sent as they are to a sound bar or receiver (HDMI eARC). Off: the TV decodes them, sound from any speakers", OO, 2, "false");
 #endif
-  set_s(&lookS[0], "accent", "Accent colour", "Dynamic: the colours of the title you open", ACCENT_OPTS, 20, "logo"); /* first, right under its picture */
+  set_s(&lookS[0], "accent", "Accent colour", "Dynamic: the colours of the title you open", ACCENT_OPTS, 20, UI_NOIR ? "gold" : "logo"); /* first, right under its picture */
+  set_s(&lookS[6], "theme", "Theme", "Black and gold, or the classic purple glass", THEMEO, 2, "noir");
   set_s(&lookS[1], "ssDelay", "Screensaver", "After a while without a key, the titles of the moment fill the screen", SS_OPTS, 5, "5");
   set_s(&lookS[2], "clockFmt", "Clock", "The time at the top of the screens and when a film ends", CLOCKO, 2, "12");
   set_s(&lookS[4], "appIcon", "App icon", "On the start screen and in About", APPICON, 2, "origin");
@@ -290,8 +291,8 @@ static void build(void) {
     { "Watch", "Playback", "set_play", "Best match, seek step, next episode, skip intro", NULL, playS, 8, 0 }, /* (the count: play_layout) */
     { "Watch", "Subtitles", "set_subs", "Automatic, in sync, sound descriptions, language, size, font, outline, shadow, height", "subs", subsS, 18, 0 }, /* (the count: subs_layout) */
     { "Watch", "Audio", "set_aud", "Audio language, anime, Dolby and DTS, interface sounds", NULL, audS, naud, 0 },
-    { "Watch", "Picture and sound", "p_asp", "Upscale, brightness, see in the dark, clear voice. Needs Homebrew Channel root", NULL, picS, 6, 0 },
-    { "Screens", "Appearance", "set_look", "Accent colour, app icon, clock, catalogs on Home, motion", "look", lookS, 6, 0 },
+    { "Watch", "Picture and sound", "p_asp", "Anime upscale, brightness, see in the dark, clear voice. Needs Homebrew Channel root", NULL, picS, 5, 0 },
+    { "Screens", "Appearance", "set_look", "Theme, accent colour, app icon, clock, catalogs on Home, motion", "look", lookS, 7, 0 },
     { "Screens", "Language", "set_lang", "The app, and titles and descriptions", NULL, langS, nl, 0 },
     { "Account and system", "Accounts", "set_acct", "Switch between your Stremio accounts on this TV", NULL, accS, nacc, 0 },
     { "Account and system", "Addons", "set_addon", "", NULL, addonS, na, 0 },
@@ -350,12 +351,13 @@ int settings_apply_pref(const char *k, const char *v) {
   if (!strcmp(k, "bgTrailer")) play_layout();
   if (!strcmp(k, "subsOutline") || !strcmp(k, "subsShadow")) subs_layout();
   if (!strcmp(k, "accent")) accent_apply();
+  if (!strcmp(k, "theme")) { theme_apply(); accent_apply(); }
   if (!strcmp(k, "homeRows")) app_refresh_boards();
   if (!strcmp(k, "metaLang")) board_invalidate(); /* the cards' names again, in the new language */ /* (Home and Discover share the catalogs out again) */
   return 1;
 }
 static void ab_tick(void) {
-  { const char *m = store_get("accent", "logo"), *d = !strcmp(m, "logo") ? "Dynamic: the colours of the logo of the title you open" : !strcmp(m, "adaptive") ? "Dynamic: the colours of the poster of the title you open" : "One colour everywhere in the app"; /* the accent row says what its choice does */
+  { const char *m = store_get("accent", UI_NOIR ? "gold" : "logo"), *d = !strcmp(m, "logo") ? "Dynamic: the colours of the logo of the title you open" : !strcmp(m, "adaptive") ? "Dynamic: the colours of the poster of the title you open" : "One colour everywhere in the app"; /* the accent row says what its choice does */
     if (strcmp(lookS[0].ds, d)) { snprintf(lookS[0].ds, sizeof lookS[0].ds, "%s", d); S.dirty = 1; } }
   best_tick();
   /* (the row's words are made here, translated, with the kept speed in them) */
@@ -388,6 +390,7 @@ static void set_val(Setting *o, const char *v, int dir) {
   if (!strncmp(o->k, "adOn_", 5)) { board_invalidate(); { int a = cat_of(addonS); if (a >= 0) cats[a].n = addon_opts(); } return; } /* an addon on/off here: rows, metadata and streams follow */
   if (!strcmp(o->k, "bingeWatch")) store_set("enableNextVideo", v);
   if (!strcmp(o->k, "accent")) accent_apply();
+  if (!strcmp(o->k, "theme")) { theme_apply(); accent_apply(); }
   if (!strcmp(o->k, "betaUpdates")) update_check(1); /* on or off: what is offered now */
   if (!strcmp(o->k, "homeRows")) app_refresh_boards(); /* Home and Discover share the catalogs out again */
   if (!strcmp(o->k, "metaLang")) board_invalidate(); /* the cards' names again, in the new language */
@@ -622,7 +625,7 @@ static void preview_subs(float x, float y, float w, float h) {
    words sweep from English into the language, an accent line running ahead of them */
 static void tmdb_card(float x, float y, float w, float h, const char *tag, const char *ti, const char *ds, int lit, float a) {
   int rtl = app_rtl(), al = rtl ? ALIGN_RIGHT : ALIGN_LEFT; float pw = 104, ph = 156, px = rtl ? x + w - 16 - pw : x + 16, tx = rtl ? px - 18 : px + pw + 18, tw = w - pw - 50;
-  gfx_rrect(x, y, w, h, 16, lit ? RGBA(16, 14, 24, 214) : RGBA(16, 14, 24, 170)); gfx_ring(x, y, w, h, 16, lit ? 2 : 1, lit ? col_alpha(ACC, 0.85f) : WHITE_A(36));
+  gfx_rrect(x, y, w, h, 16, lit ? TINT(16, 14, 24, 214) : TINT(16, 14, 24, 170)); gfx_ring(x, y, w, h, 16, lit ? 2 : 1, lit ? col_alpha(ACC, 0.85f) : WHITE_A(36));
   const char *pu = demo_art("demo3.poster.webp"); GLuint pt = img_get_shaped(pu, (int)pw, (int)ph, 10, 0);
   if (!ph_picture(pt, px, y + (h - ph) / 2, pw, ph, 10, WHITE_A(lit ? 255 : 150))) ph_box(px, y + (h - ph) / 2, pw, ph, 10);
   float ty = y + 16; text_draw(tag, tx, ty, 18, 700, lit ? ACC3 : WHITE_A(150), 1.0f, tw, al); ty += text_line_height(18) + 8;
@@ -657,7 +660,7 @@ static void preview_keys(float x, float y, float w, float h) {
 static Tween lookShift; /* the page's row moving aside for the title's picture (the dynamic modes) */
 static Item lookIt[4]; static char lookLogo[4][512]; static int lookN = -1; static Tween lookSel; static int lookSelSet; static uint32_t lookFrom[2], lookTo[2]; static double lookAt; static int lookCur = -1;
 static void preview_look(float x, float y, float w, float h) {
-  const char *a = store_get("accent", "logo"); int rtl = app_rtl(), dyn = !strcmp(a, "logo") || !strcmp(a, "adaptive"), logoMode = !strcmp(a, "logo"); float t = (float)app_now();
+  const char *a = store_get("accent", UI_NOIR ? "gold" : "logo"); int rtl = app_rtl(), dyn = !strcmp(a, "logo") || !strcmp(a, "adaptive"), logoMode = !strcmp(a, "logo"); float t = (float)app_now();
   if (lookN <= 0) { static double tried; if (app_now() - tried > 1.5) { char rn[8]; tried = app_now(); lookN = board_sample(lookIt, 4, rn, 0); for (int i = 0; i < lookN; i++) sb_logo_of(&lookIt[i], lookLogo[i], sizeof lookLogo[i]); } }
   /* the colour shown: the accent, or (dynamic) each title's own in turn; a title still being read keeps the last one */
   static const uint32_t STAND[4][2] = { { 0xffe0634a, 0xffffa38f }, { 0xff3d8bfd, 0xff9cc4ff }, { 0xff19b38a, 0xff7fe3c6 }, { 0xffd4a017, 0xfff3d27a } }; /* (while a title's own colour is read) */
@@ -696,10 +699,16 @@ static void preview_look(float x, float y, float w, float h) {
   /* the bar, as the app draws it: one piece of liquid glass behind the three tabs, a light wandering it and bending the
      picture under it, and the focus gliding from tab to tab as accent glass that stretches as it goes */
   static const char *TB[3] = { "Discover", "Home", "Library" }; float tbw[3], tot = 0; for (int i = 0; i < 3; i++) { tbw[i] = text_width(T(TB[i]), 20, 700, 0) + 28; tot += tbw[i]; }
-  float txx = mx + mw / 2 - tot / 2, tyy = y + 30, ch = 40, cx0 = txx - 6, cwid = tot + 12; GLuint gt = prev_glass(w, h);
+  float txx = mx + mw / 2 - tot / 2, tyy = y + 30, ch = 40, cx0 = txx - 6, cwid = tot + 12;
+  if (UI_NOIR) { /* the black and gold bar: plain words, the focus a solid block gliding between them (no glass to sample) */
+    static Tween fx, fw; static int seen; int fi = (int)(t / 2.2f) % 3; float px = txx; for (int i = 0; i < fi; i++) px += tbw[i];
+    if (!seen) { tween_set(&fx, px); tween_set(&fw, tbw[fi]); seen = 1; } else { if (fx.to != px) tween_to(&fx, px, 0.32f, GLIDE_EASE); if (fw.to != tbw[fi]) tween_to(&fw, tbw[fi], 0.32f, GLIDE_EASE); } tween_tick(&fx, app_dt()); tween_tick(&fw, app_dt());
+    gfx_rrect(fx.v, tyy - 17, fw.v, 34, 8, c1); int lum = (int)((c1 >> 16 & 255) * 3 + (c1 >> 8 & 255) * 6 + (c1 & 255)) / 10; uint32_t on = lum > 150 ? RGB(14, 14, 14) : WHITE_A(250);
+    float tx3 = txx; for (int i = 0; i < 3; i++) { int f = i == fi; text_draw(T(TB[i]), tx3 + tbw[i] / 2, tyy - text_line_height(20) / 2.0f, 20, f ? 700 : 500, f ? on : WHITE_A(170), 0, 0, ALIGN_CENTER); tx3 += tbw[i]; } }
+  else { GLuint gt = prev_glass(w, h);
   { float su = 0.5f + 0.4f * (0.55f * sinf(t * 0.27f) + 0.3f * sinf(t * 0.43f + 2.0f) + 0.15f * sinf(t * 0.71f + 4.4f)), svv = 0.32f + 0.1f * sinf(t * 0.33f + 1.0f);
     gfx_shadow(cx0, tyy - ch / 2 + 6, cwid, ch, ch / 2, 20, BLACK_A(64));
-    if (gt) { gfx_liquid_spot(su, svv, 1.0f); prev_liquid(gt, x, y, w, h, cx0, tyy - ch / 2, cwid, ch, fminf(ch * 0.5f, 16), 0); gfx_rrect(cx0, tyy - ch / 2, cwid, ch, ch / 2, RGBA(10, 10, 16, 18)); }
+    if (gt) { gfx_liquid_spot(su, svv, 1.0f); prev_liquid(gt, x, y, w, h, cx0, tyy - ch / 2, cwid, ch, fminf(ch * 0.5f, 16), 0); gfx_rrect(cx0, tyy - ch / 2, cwid, ch, ch / 2, TINT(10, 10, 16, 18)); }
     lglass_light(su - 0.12f); lglass_shell(cx0, tyy - ch / 2, cwid, ch, ch / 2, 0, 0.85f); lglass_light(0);
     gfx_rrect(cx0, tyy - ch / 2, cwid, ch, ch / 2, col_alpha(c1, 0.08f)); }
   { static Tween fx, fw; static float sv, lx; static int seen; int fi = (int)(t / 2.2f) % 3; float px = txx; for (int i = 0; i < fi; i++) px += tbw[i]; /* the focus moves on every 2.2 s */
@@ -707,7 +716,7 @@ static void preview_look(float x, float y, float w, float h) {
     float x0 = lx; lglass_stretch(&sv, &lx, fx.v, app_dt()); float dir = fx.v > x0 ? 1 : fx.v < x0 ? -1 : 0, sw = fw.v * (1 + 0.22f * sv), sh = 34 * (1 - 0.10f * sv), ppx = fx.v + fw.v / 2 - sw / 2, ppy = tyy - sh / 2;
     if (gt) prev_liquid(gt, x, y, w, h, ppx, ppy, sw, sh, fminf(sh * 0.6f, 20) * (1 + 0.25f * sv), -dir * sv * 4.0f / w);
     gfx_rrect_v(ppx, ppy, sw, sh, sh / 2, col_alpha(c2, 0.46f), col_alpha(c1, 0.36f)); gfx_rrect_v(ppx, ppy, sw, sh, sh / 2, WHITE_A(40), WHITE_A(0)); gfx_ring(ppx, ppy, sw, sh, sh / 2, 1.2f, WHITE_A(70));
-    float tx3 = txx; for (int i = 0; i < 3; i++) { int f = i == fi; text_draw(T(TB[i]), tx3 + tbw[i] / 2, tyy - text_line_height(20) / 2.0f, 20, f ? 700 : 500, f ? WHITE_A(250) : WHITE_A(170), 0, 0, ALIGN_CENTER); tx3 += tbw[i]; } }
+    float tx3 = txx; for (int i = 0; i < 3; i++) { int f = i == fi; text_draw(T(TB[i]), tx3 + tbw[i] / 2, tyy - text_line_height(20) / 2.0f, 20, f ? 700 : 500, f ? WHITE_A(250) : WHITE_A(170), 0, 0, ALIGN_CENTER); tx3 += tbw[i]; } } }
   const char *pl = T("Play"), *sn = T1("Season {n}", "n", "1"); float plw = 40 + text_width(pl, 20, 700, 0) + 18, snw = text_width(sn, 18, 600, 0) + 30;
   float ey = mid - 6, eh = 40, ex = mx + mw / 2 - (plw + 18 + 46 + 18 + snw) / 2; /* centred under the tabs */
   gfx_scale_push(pulse, pulse, mx + mw / 2, ey);
@@ -723,7 +732,7 @@ static void preview_look(float x, float y, float w, float h) {
   /* the colours: the ring glides to the one chosen, the chosen one grows */
   int sel = 0; for (int i = 0; i < 20; i++) if (!strcmp(ACCENT_OPTS[i].v, a)) sel = i;
   if (!lookSelSet) { tween_set(&lookSel, (float)sel); lookSelSet = 1; } else if (lookSel.to != sel) tween_to(&lookSel, (float)sel, 0.32f, GLIDE_EASE); tween_tick(&lookSel, app_dt());
-  gfx_rrect(x + 14, sy, w - 28, sh, 32, RGBA(18, 16, 26, 200)); gfx_ring(x + 14, sy, w - 28, sh, 32, 1, WHITE_A(36));
+  gfx_rrect(x + 14, sy, w - 28, sh, 32, TINT(18, 16, 26, 200)); gfx_ring(x + 14, sy, w - 28, sh, 32, 1, WHITE_A(36));
   float step = (w - 28 - 40) / 20.0f, ccy = sy + sh / 2;
   #define SWX(i) (rtl ? x + w - 34 - step / 2 - (i) * step : x + 34 + step / 2 + (i) * step)
   for (int i = 0; i < 20; i++) { float near = 1 - fabsf(i - lookSel.v); near = near < 0 ? 0 : near; float ccx = SWX(i), r = 12 + 4 * near;
@@ -778,8 +787,8 @@ static void pick_outside(int a, int b) { (void)a; (void)b; close_pick(); }
 static void line(const char *s, float x, float y, float L, int px, int wt, uint32_t c, float tr, float maxW, int al) { text_draw(s, x, y + (L - text_line_height(px)) / 2, px, wt, c, tr, maxW, al); }
 /* the edges of a scrolled list fade where there is more to see: the panel's own colour laid over them */
 static void edge_fades(float x, float y, float w, float h, int top, int bottom) {
-  if (top) gfx_rrect_v(x, y, w, 40, 0, RGBA(21, 19, 28, 170), RGBA(21, 19, 28, 0));
-  if (bottom) gfx_rrect_v(x, y + h - 72, w, 72, 0, RGBA(21, 19, 28, 0), RGBA(21, 19, 28, 170));
+  if (top) gfx_rrect_v(x, y, w, 40, 0, TINT(21, 19, 28, 170), TINT(21, 19, 28, 0));
+  if (bottom) gfx_rrect_v(x, y + h - 72, w, 72, 0, TINT(21, 19, 28, 0), TINT(21, 19, 28, 170));
 }
 /* the support row: its words on the start side, larger, and the code to scan on a white tile on the other, always
    there (OK shows it bigger, on a card) */
@@ -863,7 +872,7 @@ static void draw(void) {
   gfx_offset_pop(); gfx_opacity_pop(); gfx_clip_pop(); gfx_offset_pop();
   /* ---- the panel: see-through, the drifting light shows faintly ---- */
   float px = MX(PNX, PNW), clx = MX(CLX, CLW);
-  gfx_rrect(px, WY, PNW, COLH, 24, RGBA(21, 19, 28, 150)); gfx_rrect_v(px, WY, PNW, COLH, 24, WHITE_A(10), WHITE_A(0)); gfx_ring(px, WY, PNW, COLH, 24, 1, WHITE_A(22)); /* glassy: the glows show a little through it */
+  gfx_rrect(px, WY, PNW, COLH, 24, TINT(21, 19, 28, 150)); gfx_rrect_v(px, WY, PNW, COLH, 24, WHITE_A(10), WHITE_A(0)); gfx_ring(px, WY, PNW, COLH, 24, 1, WHITE_A(22)); /* glassy: the glows show a little through it */
   float oa = fa * S.loA.v * (1 - S.pkA.v), ox = -56 * S.pkX.v * (rtl ? -1 : 1);
   if (oa > 0.001f) { const Cat *c = &cats[S.shown]; int inZ = S.zone != 0 && S.cat == S.shown;
     gfx_offset_push(ox, fy); gfx_clip_push(clx, CLY, CLW, CLH); gfx_opacity_push(oa); gfx_offset_push(0, CLY + S.optsY.v);
@@ -886,7 +895,7 @@ static void draw(void) {
   if (S.pkA.v > 0.001f && S.idx < cats[S.cat].n) { const Setting *o = &cats[S.cat].opts[S.idx]; float a = S.pkA.v, dx = 56 * (1 - S.pkX.v) * (rtl ? -1 : 1);
     if (S.zone == 2) { hit_act(0, 0, SB_W, SB_H, pick_outside, 0, 0); hit_shield(px, WY, PNW, COLH); }
     gfx_opacity_push(a * fa); gfx_offset_push(dx, 0);
-    gfx_rrect(px, WY, PNW, COLH, 24, RGBA(21, 19, 28, 196));
+    gfx_rrect(px, WY, PNW, COLH, 24, TINT(21, 19, 28, 196));
     line(o->raw ? o->lb : T(o->lb), rtl ? clx + CLW - 24 : clx + 24, CLY, HEADH, 38, 700, WHITE_A(255), -0.5f, CLW - 48, al);
     gfx_clip_push(clx, PKY, CLW, PKH); gfx_offset_push(0, PKY + S.pickY.v);
     hl_draw(&S.hp, clx, CLW, 0);

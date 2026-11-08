@@ -1,25 +1,25 @@
 {
-  "version": "2.0.1",
+  "version": "2.1.0",
   "items": [
     {
-      "icon": "play",
-      "title": "Stremio Origin 2.0 Ultra",
-      "text": "A major update: a second player, voice search and the film's own frame rate on Google TV, faster addons everywhere."
+      "icon": "set_look",
+      "title": "Black and gold",
+      "text": "A new look on LG webOS: black pages, gold on what you select, and the tabs written across the top of the screen."
     },
     {
-      "icon": "p_src",
-      "title": "Every film plays",
-      "text": "On Google TV, VLC takes over by itself for any file, picture or sound the TV can't play: from the same point, your language kept."
+      "icon": "check",
+      "title": "Lighter and quicker",
+      "text": "Smaller to install, and less for the TV to draw: flat panels instead of blurred glass, so pages move smoothly."
     },
     {
-      "icon": "mic",
-      "title": "Search by voice",
-      "text": "On Google TV, press Search on your remote in Search, or the microphone key, and say a title in English or Arabic."
+      "icon": "restart",
+      "title": "Beta updates",
+      "text": "Settings, About, Beta updates: try new versions before everyone. Turn it off and only the regular releases come."
     },
     {
-      "icon": "p_aud",
-      "title": "Picture in step, sound everywhere",
-      "text": "The screen follows the film's frame rate when Match content frame rate allows it. Dolby and DTS sound from any speakers."
+      "icon": "eye",
+      "title": "The classic look, any time",
+      "text": "Settings, Appearance, Theme brings back the purple glass whenever you want it."
     }
   ],
   "support": {

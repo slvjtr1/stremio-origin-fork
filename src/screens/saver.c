@@ -70,8 +70,8 @@ static void bake(SsLayer *l, GLuint tex, float asp) {
   gfx_target_begin(&l->t, RGB(0, 0, 0));
   float u0, v0, u1, v1; img_cover_uv(asp, SB_W / SB_H, 0, &u0, &v0, &u1, &v1);
   gfx_image(tex, 0, 0, SB_W, SB_H, 0, WHITE_A(128), u0, v0, u1, v1);                     /* the picture at half strength */
-  gfx_rrect_v(0, SB_H * 0.4f, SB_W, SB_H * 0.27f, 0, RGBA(10, 6, 24, 0), RGBA(10, 6, 24, 77));  /* the vignette rising from the bottom */
-  gfx_rrect_v(0, SB_H * 0.67f, SB_W, SB_H * 0.33f + 1, 0, RGBA(10, 6, 24, 77), RGBA(10, 6, 24, 199));
+  gfx_rrect_v(0, SB_H * 0.4f, SB_W, SB_H * 0.27f, 0, TINT(10, 6, 24, 0), TINT(10, 6, 24, 77));  /* the vignette rising from the bottom */
+  gfx_rrect_v(0, SB_H * 0.67f, SB_W, SB_H * 0.33f + 1, 0, TINT(10, 6, 24, 77), TINT(10, 6, 24, 199));
   gfx_rrect_h(0, 0, SB_W * 0.3f, SB_H, 0, BLACK_A(82), BLACK_A(0));                      /* darker edges */
   gfx_rrect_h(SB_W * 0.7f, 0, SB_W * 0.3f, SB_H, 0, BLACK_A(0), BLACK_A(82));
   gfx_rrect_h(0, 0, SB_W * 0.55f, SB_H, 0, BLACK_A(89), BLACK_A(0));

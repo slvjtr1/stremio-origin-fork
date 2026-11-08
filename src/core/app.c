@@ -127,7 +127,7 @@ static const uint32_t ACCENTS[18][4] = {
   { 0xef4444, 0xfca5a5, 0xfecaca, 0xb91c1c },
   { 0xf97316, 0xfdba74, 0xfed7aa, 0xc2410c },
   { 0xf59e0b, 0xfcd34d, 0xfde68a, 0xb45309 },
-  { 0xeab308, 0xfde047, 0xfef08a, 0xa16207 },
+  { 0xd6b46e, 0xe9d19c, 0xf4e7c6, 0x8f6f34 }, /* gold: champagne, as the black and gold theme wears it */
   { 0x84cc16, 0xbef264, 0xd9f99d, 0x4d7c0f },
   { 0x22c55e, 0x86efac, 0xbbf7d0, 0x15803d },
   { 0x10b981, 0x6ee7b7, 0xa7f3d0, 0x047857 },
@@ -137,7 +137,9 @@ static const uint32_t ACCENTS[18][4] = {
   { 0x3b82f6, 0x93b4ff, 0xc4d6ff, 0x1d4ed8 },
   { 0x6366f1, 0xa5b4fc, 0xc7d2fe, 0x4338ca },
   { 0x9aa3b5, 0xd3d8e2, 0xeef0f4, 0x525a6c } }; /* (round the wheel, then graphite: a cool glassy grey; purple, the first, is the dynamic modes' default) */
-#define ACC_DEFAULT ACCENTS[0]
+#define ACC_DEFAULT (UI_NOIR ? ACCENTS[8] : ACCENTS[0])
+int UI_NOIR = 1;
+void theme_apply(void) { UI_NOIR = strcmp(store_get("theme", "noir"), "classic") != 0; }
 const uint32_t *settings_accent_rgb(int i) { return ACCENTS[i < 0 ? 0 : i > 17 ? 17 : i]; }
 static const uint32_t TINT_GREY[4] = { 0x9aa6bd, 0xc1c9d8, 0xe1e5ee, 0x5d6880 };
 static uint32_t accFrom[5], accTo[5]; static Timer1 accFade; static int accSet;
@@ -159,7 +161,7 @@ static void accent_tick(float dt) {
   ACC = col_mix(accFrom[0], accTo[0], k); ACC2 = col_mix(accFrom[1], accTo[1], k); ACC3 = col_mix(accFrom[2], accTo[2], k); ACC_D = col_mix(accFrom[3], accTo[3], k); ACC_FG = col_mix(accFrom[4], accTo[4], k);
 }
 uint32_t acc_a(float a) { return col_alpha(ACC, a); }
-static const char *accent_mode(void) { const char *a = store_get("accent", "logo"); if (!strcmp(a, "duo")) a = "adaptive"; return a; }
+static const char *accent_mode(void) { const char *a = store_get("accent", UI_NOIR ? "gold" : "logo"); if (!strcmp(a, "duo")) a = "adaptive"; return a; }
 int accent_dynamic(void) { const char *a = accent_mode(); return !strcmp(a, "adaptive") || !strcmp(a, "logo"); }
 static const uint32_t *fixed_accent(void) { const char *a = accent_mode(); for (int i = 0; i < 18; i++) if (!strcmp(a, ACCENT_KEYS[i])) return ACCENTS[i]; return ACCENTS[0]; }
 /* a swatch made usable as an accent: its own hue and character, lightness/saturation brought into range */
@@ -307,8 +309,8 @@ static float lgPushX, lgPushY, lgBase[4]; /* the next piece is taking up an edge
 static float lg_drift_at(float ph);
 void app_clock_draw(float right, float y, float alpha) {
   static float W; if (W <= 0) W = text_width("00:00", 38, 600, -0.6f); float x0 = right - W; if (alpha < 1) gfx_opacity_push(alpha);
-  { float ph = 76, pw = W + 52, px = x0 - 26, py = y + text_line_height(38) / 2 - ph / 2; /* a glass pill behind it, the bar's circles' sister */
-    if (clockLiquid) { lgSeed = 3; lg_glass(px, py, pw, ph, ph / 2, ACC, 0.85f); } else { lglass_light(lg_drift_at(113.0f)); lglass_shell(px, py, pw, ph, ph / 2, RGBA(14, 14, 22, 120), 0.85f); } lglass_light(0); }
+  if (!UI_NOIR) { float ph = 76, pw = W + 52, px = x0 - 26, py = y + text_line_height(38) / 2 - ph / 2; /* a glass pill behind it, the bar's circles' sister (the black and gold theme: the digits alone) */
+    if (clockLiquid) { lgSeed = 3; lg_glass(px, py, pw, ph, ph / 2, ACC, 0.85f); } else { lglass_light(lg_drift_at(113.0f)); lglass_shell(px, py, pw, ph, ph / 2, TINT(14, 14, 22, 120), 0.85f); } lglass_light(0); }
   { static float cw = -1, cwTo = -1; float tw = text_width(clockTxt, 38, 600, -0.6f); if (cw < 0) cw = tw; cwTo = tw; cw += (cwTo - cw) * fminf(1, DT * 8); x0 += (W - cw) / 2; } /* the time centred in its pill (gliding when its width changes) */
   float k = clockAnim.on ? ease_apply(EASE_IN_OUT, timer_x(&clockAnim)) : 1;
   size_t n = 0; if (k < 1) while (clockTxt[n] && clockTxt[n] == clockOld[n]) n++; else n = strlen(clockTxt);
@@ -330,7 +332,9 @@ static int chipCur(int i) {
   return t == SCR || (t == SCR_HOME && (SCR == SCR_DETAIL || SCR == SCR_SIM));
 }
 static int chipFocused(int i) { return topNav.active && topNav.idx == i && !update_pill_focused(); } /* the update notice holds the highlight */
+static void noir_layout(void);
 static void topnav_layout(void) {
+  if (UI_NOIR) { noir_layout(); return; }
   int nt = app_nav_last() - NAV_DISC + 1; float w[4], tot = 0;
   for (int i = 0; i < nt; i++) { int f = chipFocused(NAV_DISC + i) || chipCur(NAV_DISC + i); w[i] = text_width(chipLabel(NAV_DISC + i), 32, f ? 700 : 400, 0) + 80; tot += w[i] + 18; }
   float x = SB_W / 2 - (tot - 18) / 2;
@@ -433,11 +437,11 @@ static void lg_glass(float x, float y, float w, float h, float r, uint32_t tint,
     seenF[sd] = FRAME; curUv[sd][0] = u0; curUv[sd][1] = v0; curUv[sd][2] = u1; curUv[sd][3] = v1; if (fadeK[sd] > 0) fadeK[sd] -= DT / 0.5f;
     float pull = fminf(h * 0.5f, 30) * (1 + 0.5f * pk); /* (pushed harder, the lens bends more) */
     float ok = fadeK[sd] > 0 ? fadeK[sd] * fadeK[sd] * (3 - 2 * fadeK[sd]) : 0;
-    if (t) { float na = oldT[sd] ? 1 : 1 - ok; if (na < 0.999f) { gfx_rrect(x, y, w, h, r, RGBA(16, 16, 24, (int)(fminf(110 * k, 200) * ok))); gfx_opacity_push(na); }
+    if (t) { float na = oldT[sd] ? 1 : 1 - ok; if (na < 0.999f) { gfx_rrect(x, y, w, h, r, TINT(16, 16, 24, (int)(fminf(110 * k, 200) * ok))); gfx_opacity_push(na); }
       gfx_liquid_spot(su, sv, spotK); gfx_liquid(t, x, y, w, h, r, pull, fminf(k, 1), u0, v0, u1, v1); if (na < 0.999f) gfx_opacity_pop(); }
-    else gfx_rrect(x, y, w, h, r, RGBA(16, 16, 24, (int)(fminf(110 * k, 200) * (oldT[sd] ? 1 - ok : 1))));
+    else gfx_rrect(x, y, w, h, r, TINT(16, 16, 24, (int)(fminf(110 * k, 200) * (oldT[sd] ? 1 - ok : 1))));
     if (ok > 0.004f && oldT[sd]) { gfx_opacity_push(ok); gfx_liquid_spot(su, sv, spotK); gfx_liquid(oldT[sd], x, y, w, h, r, pull, fminf(k, 1), oldUv[sd][0], oldUv[sd][1], oldUv[sd][2], oldUv[sd][3]); gfx_opacity_pop(); }
-    if (t || ok > 0.004f) gfx_rrect(x, y, w, h, r, RGBA(10, 10, 16, (int)(fminf(18 * k, 50)))); }
+    if (t || ok > 0.004f) gfx_rrect(x, y, w, h, r, TINT(10, 10, 16, (int)(fminf(18 * k, 50)))); }
   gfx_rrect(x, y, w, h, r, col_alpha(tint | 0xff000000u, 0.08f * k));
   gfx_rrect_v(x, y, w, h, r, WHITE_A((int)(fminf(28 * k, 70))), WHITE_A(0));
   gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(fminf(34 * k, 90))));
@@ -478,6 +482,52 @@ static void chip_act(int i, int b) { (void)b; Scr tg = chipScr(i); Scr cur = (SC
   if (tg == SCR_SEARCH || tg == SCR_SET) topnav_key(K_OK); /* opens it, the highlight inside */
   else if (i != ci || !app_is_board(SCR)) { topNav.idx = -1; topnav_switch(i); }
   else topnav_enter_content(); }
+/* ---- the black and gold bar: a black fade under it, Settings and Search as plain icons, the tabs as words; the focus a
+   gold block that glides between them, the page shown underlined in gold; no glass (nothing read back, nothing baked) ---- */
+#define NB_Y 52.0f /* the bar's middle */
+static void noir_layout(void) {
+  int rtl = app_rtl(); float x = 48; /* the icons, then a hairline, then the tabs from the start side */
+  for (int i = NAV_SET; i <= NAV_SEARCH; i++) { topNav.chipX[i] = rtl ? SB_W - x - 64 : x; topNav.chipW[i] = 64; x += 64 + 12; }
+  x += 28;
+  for (int i = NAV_DISC; i <= app_nav_last(); i++) { float w = text_width(chipLabel(i), 30, 700, 0.2f) + 44; topNav.chipX[i] = rtl ? SB_W - x - w : x; topNav.chipW[i] = w; x += w + 8; }
+  topNav.laidOut = 1;
+}
+static void noir_icon(int i, const char *icon, uint32_t key, float rot) {
+  float sh = i == NAV_SEARCH ? update_search_shift(topNav.chipX[NAV_SEARCH], topNav.chipX[NAV_SET]) : 0, sf = i == NAV_SEARCH ? search_fade(sh) : 1;
+  if (sf <= 0.001f) return; if (sf < 0.999f) gfx_opacity_push(sf);
+  float x = topNav.chipX[i] + sh, y = NB_Y - 32, f = topNav.cornerF[i].v; int nd = chipFocused(i);
+  if (nd) gfx_offset_push(nudge_x(&topNav.nudge), nudge_y(&topNav.nudge));
+  if (f > 0.001f) gfx_rrect(x, y, 64, 64, 14, col_alpha(ACC | 0xff000000u, f)); /* focused: the gold block */
+  static Tween lit[2]; tween_to(&lit[i], chipCur(i) ? 1 : 0, 0.22f, EASE_CSS_EASE); tween_tick(&lit[i], DT);
+  uint32_t idle = col_mix(WHITE_A(170), ACC | 0xff000000u, lit[i].v); /* the page it opens, shown: the icon in gold */
+  icon_draw_rot(icon, x + 14, y + 14, 36, col_mix(idle, ACC_FG | 0xff000000u, f), rot);
+  if (i == NAV_SET && update_avail()) { float bx = app_rtl() ? x + 10 : x + 64 - 10, by = y + 10; gfx_circle(bx, by, 6.5f, PAGE); gfx_circle(bx, by, 4, ACC2); } /* an update is waiting */
+  float d = (1 - topNav.dotK[i].v) * (i == NAV_SET ? 1 - update_dot_hide() : 1); /* the remote's colour key: a short line under it */
+  if (d > 0.001f) gfx_rrect(x + 32 - 9, y + 64 + 4, 18, 3, 1.5f, col_alpha(key | 0xff000000u, 0.85f * d));
+  if (nd) gfx_offset_pop();
+  if (sf < 0.999f) gfx_opacity_pop();
+}
+static void noir_bar(float nx, float ny) {
+  int rtl = app_rtl();
+  { float sx = rtl ? topNav.chipX[NAV_SEARCH] - 20 : topNav.chipX[NAV_SEARCH] + 64 + 20; gfx_rect(sx, NB_Y - 18, 1.5f, 36, WHITE_A(40)); } /* the icons and the tabs set apart */
+  /* the focus: one gold block, gliding from tab to tab */
+  float pa = topNav.pill.v;
+  if (pa > 0.001f) { gfx_opacity_push(pa); gfx_offset_push(nx, ny); gfx_rrect(topNav.px.v, NB_Y - 29, topNav.pw.v, 58, 12, ACC | 0xff000000u); gfx_offset_pop(); gfx_opacity_pop(); }
+  for (int i = NAV_DISC; i <= app_nav_last(); i++) {
+    int cur = chipCur(i), f = chipFocused(i); float x = topNav.chipX[i], w = topNav.chipW[i];
+    static Tween em[4], fo[4]; Tween *e = &em[i - NAV_DISC], *g = &fo[i - NAV_DISC];
+    tween_to(e, cur ? 1 : 0, 0.22f, EASE_CSS_EASE); tween_tick(e, DT); tween_to(g, f ? 1 : 0, 0.18f, EASE_CSS_EASE); tween_tick(g, DT);
+    if (f) gfx_offset_push(nx, ny);
+    float ty = NB_Y - text_line_height(30) / 2.0f;
+    uint32_t c = col_mix(col_mix(WHITE_A(150), WHITE_A(255), e->v), ACC_FG | 0xff000000u, g->v);
+    text_draw(chipLabel(i), x + w / 2, ty, 30, cur || f ? 700 : 500, c, 0.2f, 0, ALIGN_CENTER);
+    if (e->v > 0.001f) { float uw = (w - 44) * (0.4f + 0.6f * e->v); gfx_rrect(x + w / 2 - uw / 2, NB_Y + 24, uw, 3, 1.5f, col_alpha(ACC | 0xff000000u, e->v * (1 - g->v))); } /* the page shown: underlined in gold */
+    if (f) gfx_offset_pop();
+  }
+  update_pill_draw(topNav.chipX[NAV_SET]);
+  noir_icon(NAV_SEARCH, "nav_search", RGB(0x2f, 0xd6, 0x6b), 0);
+  noir_icon(NAV_SET, "nav_set", RGB(0xef, 0x3b, 0x3b), topNav.setRot.v);
+}
 void topnav_draw(void) {
   if (!topNav.laidOut) topnav_paint();
   int signin = SCR == SCR_LOGIN; float pg = revpanel_page_k(); /* the reviews risen into the title page: the bar goes up and away for its buttons */
@@ -486,7 +536,8 @@ void topnav_draw(void) {
   static float barOut, barV; { float want = btr_melt() > 0.04f ? 1.0f : 0.0f, w = 11.0f, dt = DT > 0.05f ? 0.05f : DT; barV += (w * w * (want - barOut) - 2 * w * barV) * dt; barOut += barV * dt; if (fabsf(want - barOut) < 0.002f && fabsf(barV) < 0.01f) { barOut = want; barV = 0; } } /* its own motion: a spring that starts softly, travels and settles (half a second), turning back smoothly from wherever it is */
   float mt = barOut < 0 ? 0 : barOut > 1 ? 1 : barOut, ma = mt < 0.15f ? 0 : mt > 0.75f ? 1 : (mt - 0.15f) / 0.6f, rv = ease_apply(EASE_CSS_EASE, app_reveal_x(0, 0.4f)) * (1 - ma * ma * (3 - 2 * ma)); rv *= 1 - pg; if (rv < 1) gfx_opacity_push(rv); /* the background trailer: the bar rises out of the screen, fading across the middle of its way, and comes back as it goes */ float lift = -70 * pg - 140 * mt; if (lift < 0) gfx_offset_push(0, lift);
   float nx = nudge_x(&topNav.nudge), ny = nudge_y(&topNav.nudge);
-  if (!signin) {
+  if (!signin && UI_NOIR) { gfx_rrect_v(0, 0, SB_W, 190, 0, BLACK_A(215), BLACK_A(0)); noir_bar(nx, ny); } /* (a fade from the top: the words read over any backdrop) */
+  else if (!signin) {
     /* the tabs' capsule: one piece of glass behind the three, brighter while the bar has the focus */
     { static Tween lit; tween_to(&lit, topNav.active ? 1 : 0, 0.3f, EASE_CSS_EASE); tween_tick(&lit, DT);
       float cx0 = SB_W, cx1 = 0; for (int j = NAV_DISC; j <= app_nav_last(); j++) { if (topNav.chipX[j] < cx0) cx0 = topNav.chipX[j]; if (topNav.chipX[j] + topNav.chipW[j] > cx1) cx1 = topNav.chipX[j] + topNav.chipW[j]; } cx0 -= 8; cx1 += 8;
@@ -911,7 +962,7 @@ void app_refresh_boards(void) { extern void board_invalidate(void); extern void 
 void app_init(void) {
   vig_tex(0); vig_tex(1); /* both shadings made at start: the first title page would make its own mid-zoom */
   topNav.want = -1; NOW = SDL_GetTicks() / 1000.0; lastIn = NOW; lastNav = NOW; bgMode = 0; tween_set(&toastA, 0);
-  accent_apply(); accent_tick(0); sync_init(); btr_init(); castlink_start();
+  theme_apply(); accent_apply(); accent_tick(0); sync_init(); btr_init(); castlink_start();
 }
 static void amb_bake(void);
 float anim_speed = 0.83f;
@@ -963,6 +1014,7 @@ void app_ambient_guide(int mode) { ambGuide = mode; }
 /* the phone's words landed: the glows surge in towards the middle and spring back */
 void app_glow_kick(void) { orbs_pulse(ORB_PHONE, 1); }
 static void ambient_draw(void) {
+  if (UI_NOIR) return; /* (the black and gold theme: a plain black page, no glows) */
   int srch = SCR == SCR_SEARCH && !ambGuide, want = SCR == SCR_SET || srch || ambGuide == 1; Orbs *o = orbs_app();
   if (want && !ambIn) { ambIn = 1; if (ambA.v < 0.02f) orbs_place(o, srch, 4); } /* arriving: out of the middle, wide, to their corners */
   if (!want) ambIn = 0;
@@ -977,6 +1029,7 @@ static void ambient_draw(void) {
 static GfxTarget ambT; static int ambTOk = -1, ambTFresh;
 static int amb_glass_on(void) { return welcome_is_open() || ((SCR == SCR_SET || SCR == SCR_SEARCH) && ambA.v > 0.001f); }
 static void amb_bake(void) {
+  if (UI_NOIR) { ambTFresh = 0; return; }
   { static int no = -1; if (no < 0) no = getenv("SB_NOAMB") != NULL; if (no) { ambTFresh = 0; return; } } /* (development: measuring) */
   if (!amb_glass_on()) { ambTFresh = 0; return; }
   if (ambTOk < 0) ambTOk = gfx_target_create(&ambT, 384, 216);
@@ -1012,7 +1065,7 @@ static void lg_bake(void) {
   lgOk = 1; lgAt = NOW;
 }
 static void lg_tick(void) {
-  if (SCR == SCR_LOGIN || player_open()) return;
+  if (UI_NOIR || SCR == SCR_LOGIN || player_open()) return; /* (no glass in the black and gold theme: nothing to bake) */
   int want = !lgOk || lgGen != bgGen || lgScr != (int)SCR || bgFade.on || app_reveal_x(0.05f, 0.7f) < 1; /* (each frame while the backdrop fades: the glass fades with it) */
   if (want) { lgGen = bgGen; lgScr = (int)SCR; lg_bake(); }
 }
