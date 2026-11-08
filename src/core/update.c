@@ -35,7 +35,7 @@
 
 #define UPD_GH "https://api.github.com/repos/slvjtr1/stremio-origin-fork/releases?per_page=8" /* this build's own releases */
 #define UPD_MAN "https://slvjtr1.github.io/stremio-origin-fork/api/apps/" SB_APP_ID "/manifest.json" /* the site's Homebrew manifest: when GitHub does not answer */
-typedef struct { char ver[24], url[512], sha[72]; char notes[5][256]; int nnotes; } Rel;
+typedef struct { char ver[24], url[512], sha[72]; char notes[5][256]; int nnotes, beta; } Rel; /* beta: a GitHub pre-release (only with Settings › About › Beta updates on) */
 static struct {
   char cur[24], appinfo[1200]; int read; Rel avail; int has, state; char msg[240]; unsigned serial;
   int pill, pf; double hideAt, openAt; Tween pa, slide, dot; unsigned long job; int started;
@@ -124,7 +124,7 @@ static void done(const Rel *best, int manual) {
   if (best && U.cur[0] && ver_cmp(best->ver, U.cur) > 0) {
     U.avail = *best; U.has = 1; U.state = UPD_AVAIL; store_set("updVer", best->ver);
     fprintf(stderr, "[update] %s available (running %s)\n", best->ver, U.cur);
-    quiet = !manual && is_fix(best->ver, U.cur) && !getenv("SB_UPD_NOQUIET");
+    quiet = !manual && !best->beta && is_fix(best->ver, U.cur) && !getenv("SB_UPD_NOQUIET"); /* (a beta never installs itself: it is asked for) */
 #ifdef SB_ANDROID
     quiet = 0; /* (Android's installer asks first: every update is the notice) */
 #endif
@@ -159,9 +159,10 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
   (void)len; int manual = (int)(size_t)ud; Rel best; int has = 0; memset(&best, 0, sizeof best);
   cJSON *list = st == 200 ? cJSON_Parse((const char *)body) : NULL, *r, *a;
   const char *pre = SB_APP_ID "_"; size_t pl = strlen(pre);
-  cJSON *arr = cJSON_IsArray(list) ? list : NULL; reached = arr != NULL;
+  cJSON *arr = cJSON_IsArray(list) ? list : NULL; reached = arr != NULL; int beta = update_beta();
   cJSON_ArrayForEach(r, arr) {
-    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(r, "draft")) || cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(r, "prerelease"))) continue;
+    int isPre = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(r, "prerelease"));
+    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(r, "draft")) || (isPre && !beta)) continue; /* betas only for those who asked for them */
     cJSON_ArrayForEach(a, cJSON_GetObjectItemCaseSensitive(r, "assets")) {
       cJSON *nm = cJSON_GetObjectItemCaseSensitive(a, "name"), *dg = cJSON_GetObjectItemCaseSensitive(a, "digest"), *du = cJSON_GetObjectItemCaseSensitive(a, "browser_download_url");
       if (!cJSON_IsString(nm) || !cJSON_IsString(dg) || !cJSON_IsString(du)) continue;
@@ -171,7 +172,7 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
       if (strncmp(dg->valuestring, "sha256:", 7) || !is_hex64(dg->valuestring + 7)) continue;
       char ver[24]; snprintf(ver, sizeof ver, "%.*s", used, n + pl);
       if (has && ver_cmp(ver, best.ver) <= 0) continue;
-      memset(&best, 0, sizeof best); has = 1; snprintf(best.ver, sizeof best.ver, "%s", ver); snprintf(best.url, sizeof best.url, "%s", du->valuestring); snprintf(best.sha, sizeof best.sha, "%s", dg->valuestring + 7);
+      memset(&best, 0, sizeof best); has = 1; best.beta = isPre; snprintf(best.ver, sizeof best.ver, "%s", ver); snprintf(best.url, sizeof best.url, "%s", du->valuestring); snprintf(best.sha, sizeof best.sha, "%s", dg->valuestring + 7);
       cJSON *b = cJSON_GetObjectItemCaseSensitive(r, "body"); best.nnotes = notes_from(cJSON_IsString(b) ? b->valuestring : NULL, best.notes);
     }
   }
@@ -180,6 +181,15 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
   if (!has) { done(NULL, manual); return; } /* (the site's manifest names the TV's package only) */
 #endif
   if (has) done(&best, manual); else { const char *mf = getenv("SB_UPD_MAN"); net_get_timeout(mf ? mf : UPD_MAN, 15000, on_manifest, ud); } /* GitHub away or out of requests: the site (SB_UPD_MAN: development) */
+}
+int update_beta(void) { return !strcmp(store_get("betaUpdates", "false"), "true"); }
+int update_avail_beta(void) { return U.has && U.avail.beta; }
+int update_running_beta(void) {
+#ifdef SB_BETA
+  return 1;
+#else
+  return 0;
+#endif
 }
 void update_check(int manual) {
   read_current();
@@ -283,7 +293,7 @@ int update_pill_key(int k, int onSettings) {
 }
 static void pill_click(int a, int b) { (void)a; (void)b; if (U.kind == 1) notice_ok(); else update_open(); }
 static const char *pill_lb(void) { return U.kind == 1 ? U.n.lb : T("Update available"); }
-static const char *pill_badge(void) { return U.kind == 1 ? U.n.badge : U.avail.ver; }
+static const char *pill_badge(void) { static char b[48]; if (U.kind == 1) return U.n.badge; if (!U.avail.beta) return U.avail.ver; snprintf(b, sizeof b, "%s %s", U.avail.ver, T("beta")); return b; }
 /* the capsule: the words, for an update its version (plain), then the remote's red key drawn as on the remote: the key that takes you there */
 #define KEY_W 46.0f
 #define KEY_H 26.0f

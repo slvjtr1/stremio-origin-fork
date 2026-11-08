@@ -16,6 +16,9 @@ const char *update_note(int i);
 int         update_state(void);
 const char *update_msg(void);               /* the install's progress or error ("" = none) */
 unsigned    update_serial(void);            /* changes whenever any of the above does */
+int         update_beta(void);              /* Settings › About › Beta updates: pre-releases offered too */
+int         update_avail_beta(void);        /* the version offered is a beta */
+int         update_running_beta(void);      /* this build is a beta */
 
 /* the notice: "Update available <ver>" sliding out of the Settings icon for 10 s */
 int   update_pill_focused(void);

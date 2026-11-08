@@ -73,7 +73,7 @@ static const Opt APPICON[] = { { "origin", "Origin" }, { "classic", "Classic" } 
 static const Opt ACCENT_OPTS[] = { { "logo", "From the logo" }, { "adaptive", "From the artwork" }, { "purple", "Purple" }, { "violet", "Violet" }, { "fuchsia", "Fuchsia" }, { "pink", "Pink" }, { "rose", "Rose" }, { "red", "Red" }, { "orange", "Orange" }, { "amber", "Amber" }, { "gold", "Gold" }, { "lime", "Lime" }, { "green", "Green" }, { "emerald", "Emerald" }, { "teal", "Teal" }, { "cyan", "Cyan" }, { "sky", "Sky" }, { "blue", "Blue" }, { "indigo", "Indigo" }, { "graphite", "Graphite" } };
 #define NCAT 11
 #define MAXROWS 48
-static Setting playBase[13], playS[14], subsBase[18], subsS[18], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[7], picS[6], accS[8];
+static Setting playBase[13], playS[14], subsBase[18], subsS[18], audS[6], lookS[6], langS[3], keyS[4], addonS[40], acctS[1], supS[8], picS[6], accS[8];
 static Cat cats[NCAT]; static int ncat; /* (Keys leaves when this build carries every key) */
 static int cat_of(const Setting *opts) { for (int i = 0; i < ncat; i++) if (cats[i].opts == opts) return i; return -1; }
 
@@ -158,8 +158,10 @@ static void acc_relayout(void) { for (int i = 0; i < ncat; i++) if (cats[i].opts
 static unsigned aboutSeen;
 static int about_opts(void) {
   int n = 0; const char *av = update_avail(); int st = update_state(); aboutSeen = update_serial();
+  if (av && update_avail_beta()) { static char bv[48]; snprintf(bv, sizeof bv, "%s %s", av, T("beta")); av = bv; } /* (said as one) */
   if (av) { Setting *s = &supS[n++]; set_act(s, "__upd", st == UPD_INSTALLING ? T1("Installing version {v}…", "v", av) : T1("Install version {v}", "v", av), update_msg()[0] ? update_msg() : T("Downloads, checks and installs it; the app opens again by itself")); s->raw = 1; }
   { Setting *s = &supS[n++]; set_act(s, "__check", T("Check for updates"), st == UPD_CHECKING ? T("Checking for updates…") : st == UPD_ERROR ? T("Could not check for updates") : av ? T1("Version {v} is available", "v", av) : st == UPD_NONE ? T("You have the latest version") : ""); s->raw = 1; }
+  set_s(&supS[n++], "betaUpdates", "Beta updates", "New versions to try before everyone. They may have problems", OO, 2, "false");
   set_act(&supS[n++], "__logs", "Share logs", "Share the code and describe the issue");
   if (welcome_support_url()[0]) set_act(&supS[n++], "__support", "Support the project", "A star on GitHub helps others find it"); /* its codes in view (sized as if last) */
   set_s(&supS[n++], "nerdStats", "Stats for nerds", "Memory, storage and frame times in a corner of the screen", OO, 2, "false"); /* under it: the list scrolls to it */
@@ -168,7 +170,7 @@ static int about_opts(void) {
 }
 /* Reset all settings: the keys of the settings (and the small choices made on the way: keyboard, sort, picture shape)
    removed, so each reads its default again. Not touched: the account, library, addons, keys, the app's language. */
-static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
+static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "betaUpdates", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
   "bingeWatch", "enableNextVideo", "blurUnseen", "clockFmt", "defaultAudioTrack", "dtsMode", "audioPassthrough", "dv7Convert", "enableDefaultAudioTrack", "homeRows",
   "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "skipShowSec", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
   "subsFollow", "subsFont", "subsLang", "subsOutline", "subsOutlineColor", "subsOutlineWidth", "subsPos", "subsShadow", "subsShadowDist",
@@ -386,6 +388,7 @@ static void set_val(Setting *o, const char *v, int dir) {
   if (!strncmp(o->k, "adOn_", 5)) { board_invalidate(); { int a = cat_of(addonS); if (a >= 0) cats[a].n = addon_opts(); } return; } /* an addon on/off here: rows, metadata and streams follow */
   if (!strcmp(o->k, "bingeWatch")) store_set("enableNextVideo", v);
   if (!strcmp(o->k, "accent")) accent_apply();
+  if (!strcmp(o->k, "betaUpdates")) update_check(1); /* on or off: what is offered now */
   if (!strcmp(o->k, "homeRows")) app_refresh_boards(); /* Home and Discover share the catalogs out again */
   if (!strcmp(o->k, "metaLang")) board_invalidate(); /* the cards' names again, in the new language */
   /* only the row changes: a value slides in from the side pressed */
@@ -750,7 +753,7 @@ static void preview_about(float x, float y, float w) {
   float sh = 16 + text_line_height(26), bh = text_line_height(46) + 2 + text_line_height(31) + 6 + text_line_height(28) + 14 + sh, hd = about_hd(), ty = y + 28 + hd / 2 - bh / 2, tx = rtl ? ix - 30 : ix + AB_ICO + 30;
   text_draw("Stremio Origin", tx, ty, 46, 800, WHITE_A(255), -0.8f, 0, al); ty += text_line_height(46) + 2;
   text_draw("Best fork for Stremio Origin", tx, ty, 31, 800, ACC2, 0, 0, al); ty += text_line_height(31) + 6; /* (this fork's own line, under the name) */
-  text_draw(T1("Version {v}", "v", update_current()[0] ? update_current() : "…"), tx, ty, 28, 500, WHITE_A(200), 0, 0, al); ty += text_line_height(28) + 14;
+  { static char cv[48]; snprintf(cv, sizeof cv, "%s%s%s", update_current()[0] ? update_current() : "…", update_running_beta() ? " " : "", update_running_beta() ? T("beta") : ""); text_draw(T1("Version {v}", "v", cv), tx, ty, 28, 500, WHITE_A(200), 0, 0, al); ty += text_line_height(28) + 14; }
   float sw = 40 + text_width(stt, 26, 700, 0), sx = rtl ? tx - sw : tx; gfx_rrect(sx, ty, sw, sh, sh / 2, av ? ACC : WHITE_A(24)); text_draw(stt, sx + 20, ty + sh / 2 - text_line_height(26) / 2.0f, 26, 700, av ? ACC_FG : WHITE_A(230), 0, 0, ALIGN_LEFT);
   { const char *wl = T("What\xe2\x80\x99s new"); float ww = 40 + 26 + 10 + text_width(wl, 26, 700, 0), wx = rtl ? sx - 14 - ww : sx + sw + 14; int f = wnBtn; /* the version's page again */
     if (f) { gfx_rrect(wx, ty, ww, sh, sh / 2, ACC); gfx_ring_out(wx, ty, ww, sh, sh / 2, 3, acc_a(0.35f)); } else { gfx_rrect(wx, ty, ww, sh, sh / 2, WHITE_A(14)); gfx_ring(wx, ty, ww, sh, sh / 2, 1, WHITE_A(46)); }

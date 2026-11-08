@@ -36,7 +36,8 @@ OPT="-O2 -fno-strict-aliasing -ffunction-sections -fdata-sections"
 if [ -n "${SB_FP:-}" ]; then OPT="$OPT -fno-omit-frame-pointer -marm"; fi  # SB_FP=1: frame pointers for the profiler
 if [ -n "${SB_ASAN:-}" ]; then OPT="-O1 -g -fsanitize=address -fno-omit-frame-pointer"; B="$B-asan"; mkdir -p "$B/tp" "$B/obj"; fi  # SB_ASAN=1 tools/build.sh mac: a sanitizer build in build/mac-asan
 APPID="${APPID:-tv.stremioorigin.app}"
-CFLAGS="$OPT -std=c11 -D_GNU_SOURCE -DSB_APP_ID=\"$APPID\" -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers $TFLAGS -I$ROOT/src -I$TP/freetype/include -I$TP/harfbuzz/src -I$TP/fribidi/lib -I$TP/config/fribidi -I$TP/cjson -I$TP/stb -I$TP/qrcodegen -I$TP/webp -I$TP/crypto -I$TP/libass"
+BETA="${BETA:-}"   # BETA=1: a beta build (Settings › About says so)
+CFLAGS="$OPT -std=c11 -D_GNU_SOURCE -DSB_APP_ID=\"$APPID\" -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers $TFLAGS ${BETA:+-DSB_BETA=1} -I$ROOT/src -I$TP/freetype/include -I$TP/harfbuzz/src -I$TP/fribidi/lib -I$TP/config/fribidi -I$TP/cjson -I$TP/stb -I$TP/qrcodegen -I$TP/webp -I$TP/crypto -I$TP/libass"
 
 # ---- built-in keys ------------------------------------------------------------------------
 # The app's own TMDB key comes from a private file outside the repo, KEYS=$ORIGIN_BUILD/keys.env
@@ -83,7 +84,7 @@ fi
 # ---- the app -------------------------------------------------------------------------------
 echo "== app ($TARGET)"
 OBJS=()
-STAMP="$B/obj/.appid"; if [ "$(cat "$STAMP" 2>/dev/null)" != "$APPID" ]; then rm -f "$B"/obj/*.o; echo "$APPID" > "$STAMP"; fi
+STAMP="$B/obj/.appid"; if [ "$(cat "$STAMP" 2>/dev/null)" != "$APPID${BETA:+ beta}" ]; then rm -f "$B"/obj/*.o; echo "$APPID${BETA:+ beta}" > "$STAMP"; fi
 for f in "$TP"/crypto/*.c; do   # SHA-256, AES, GCM, PBKDF2 (log sharing): small, built beside the app rather than into libtp.a
   o="$B/tp/crypto_$(basename "${f%.c}").o"; if [ ! -f "$o" ] || [ "$f" -nt "$o" ]; then $CC -w $OPT -I$TP/crypto -c "$f" -o "$o"; fi; OBJS+=("$o")
 done

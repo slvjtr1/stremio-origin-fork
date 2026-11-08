@@ -9,6 +9,8 @@
 # With ORIGIN_SIGNING set (a properties file kept outside the repository, ports/androidtv/NOTES.md), the Android TV
 # APK too: dist/app.stremioorigin.tv_<version>.apk and .sha256, the name the Android TV app's updater looks for.
 # No git, no push: review, then commit, push and make the release yourself. The version must go up every time.
+# BETA=1: a beta, for LG webOS only: the IPK alone (publish it as a GitHub pre-release); the site's Homebrew listing
+# and the Android TV app are left as they are, so only those who turned on Settings › About › Beta updates get it.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VER="${1:?usage: tools/release.sh VERSION}"
@@ -34,6 +36,7 @@ SHA=$("$PY" -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').
 ( cd "$ROOT/dist" && printf '%s *%s\n' "$SHA" "$(basename "$IPK")" > "$(basename "$IPK").sha256" )
 mkdir -p "$ROOT/dist/dbg/$VER" && { cp "$ROOT/build/webos/stremioorigin.dbg" "$ROOT/dist/dbg/$VER/" 2>/dev/null || true; } # kept per version: a shared crash report names its code from it (getlogs)
 # ---- the site: the Homebrew Channel repository and the update manifest ----------------------------------------
+if [ -z "${BETA:-}" ]; then
 SITE="$ROOT/docs"; mkdir -p "$SITE"
 cp "$ROOT/pkg/largeIcon.png" "$SITE/icon.png"
 "$PY" - "$SITE" "$ID" "$VER" "$SHA" "$ROOT/assets/whatsnew.json" <<'EOF'
@@ -65,9 +68,10 @@ open(os.path.join(d, 'full_description.html'), 'w', encoding='utf-8', newline='\
   '<p>Site: <a href="%s/">%s</a> · Source: <a href="%s">%s</a></p>\n' % (base, base, src, src))
 print('site updated:', pid, ver)
 EOF
+else echo "== beta: the site's Homebrew listing left as it is"; fi
 ls -l "$IPK"; cat "$IPK.sha256"
 # ---- Android TV ---------------------------------------------------------------------------------
-if [ -n "${ORIGIN_SIGNING:-}" ] && [ -x "$ROOT/ports/androidtv/gradlew" ]; then
+if [ -z "${BETA:-}" ] && [ -n "${ORIGIN_SIGNING:-}" ] && [ -x "$ROOT/ports/androidtv/gradlew" ]; then
   APK="$ROOT/dist/app.stremioorigin.tv_${VER}.apk"; rm -f "$APK" "$APK.sha256"
   for a in arm64 armv7; do abi=$([ $a = arm64 ] && echo arm64-v8a || echo armeabi-v7a); [ -f "$ROOT/build/android/$abi/libsbengine.so" ] || "$ROOT/tools/build-engine.sh" android-$a; done
   ( cd "$ROOT/ports/androidtv" && [ -d deps/SDL ] || ./fetch-deps.sh )
