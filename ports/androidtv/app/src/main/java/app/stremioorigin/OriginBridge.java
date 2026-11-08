@@ -34,6 +34,14 @@ public final class OriginBridge {
             case "open": ui.post(() -> { try { Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(a)); i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); x.startActivity(i); }
                 catch (Exception e) { Toast.makeText(x, "No browser on this TV", Toast.LENGTH_SHORT).show(); } }); break;
             case "install": install(x, a, b); break;
+            /* Search by voice: Android's speech page (Google's on Google TV), in the app's language; what was said comes back
+               through OriginActivity.onActivityResult. b: the words for a TV without one */
+            case "voice": ui.post(() -> { try { Intent i = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                    i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH);
+                    i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ar".equals(a) ? "ar-SA" : "en-US");
+                    i.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                    x.startActivityForResult(i, OriginActivity.VOICE); }
+                catch (Exception e) { Toast.makeText(x, b != null ? b : "Voice search isn't available on this TV", Toast.LENGTH_SHORT).show(); } }); break;
             /* the app's main loop ended (Home's "press again to exit"): the activity goes, and the process with it, so the
                next start is a clean one */
             case "exit": ui.post(() -> { x.finishAndRemoveTask(); ui.postDelayed(() -> System.exit(0), 400); }); break;

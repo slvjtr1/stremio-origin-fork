@@ -285,6 +285,7 @@ int main(int argc, char **argv) {
         if (k == K_BACK && e.key.keysym.sym == SDLK_ESCAPE && e.type == SDL_KEYDOWN && SCR == SCR_LOGIN) app_quit();
         if (k) app_key(k, e.type == SDL_KEYDOWN, e.key.repeat); }
       else if (e.type == SDL_TEXTINPUT) app_text(e.text.text);
+      else if (e.type == SDL_USEREVENT && e.user.code == SB_EV_TEXT) { if (e.user.data1) { app_text((const char *)e.user.data1); free(e.user.data1); } }
       else if (script && (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL)) {} /* a scripted run: the real mouse stays out */
       else if (e.type == SDL_MOUSEMOTION) { if (e.motion.x || e.motion.y) app_pointer_move(e.motion.x * SB_W / w, e.motion.y * SB_H / h); }
       else if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) { if (e.button.button == SDL_BUTTON_LEFT) app_pointer_button(e.type == SDL_MOUSEBUTTONDOWN, e.button.x * SB_W / w, e.button.y * SB_H / h); }

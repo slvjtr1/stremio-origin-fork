@@ -1,19 +1,20 @@
 {
   "id": "tv.stremioorigin.app",
-  "version": "1.5.4",
+  "version": "2.0.0",
   "type": "native",
   "title": "Stremio Origin",
   "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
   "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
   "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
   "rootRequired": false,
-  "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v1.5.4/tv.stremioorigin.app_1.5.4_arm.ipk",
+  "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v2.0.0/tv.stremioorigin.app_2.0.0_arm.ipk",
   "ipkHash": {
-    "sha256": "c32df5e515fb55e4e0f8d708afc260b6064b7079b11a3a22f4a8dc8a33a398eb"
+    "sha256": "86df4fcaa906270458e702033641e05deb1cf7023d40d2f8bdffd8f426eb923d"
   },
   "notes": [
-    "Now on Google TV: Stremio Origin for Google TV and Android TV, on TVs and boxes from 2020 on: the same app, your accounts and settings, updates from inside the app.",
-    "Made for its remote: The D-pad, OK and Back do everything. Captions, Audio and Info keys go straight to their lists; Menu opens Settings, Search opens Search.",
-    "Sound and picture as made: On Google TV, Dolby Atmos, DTS and TrueHD go to your receiver as they are, and the screen follows the film's frame rate."
+    "Stremio Origin 2.0 Ultra: A major update: a second player, voice search and the film's own frame rate on Google TV, faster addons everywhere.",
+    "Every film plays: On Google TV, VLC takes over by itself for any file, picture or sound the TV can't play: from the same point, your language kept.",
+    "Search by voice: On Google TV, press Search on your remote in Search, or the microphone key, and say a title in English or Arabic.",
+    "Picture in step, sound everywhere: The screen follows the film's frame rate when Match content frame rate allows it. Dolby and DTS sound from any speakers."
   ]
 }

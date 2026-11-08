@@ -21,7 +21,7 @@ import java.util.Locale;
    reads the volatile fields, as ExoPlayer's. Subtitles stay the app's own (VLC's are off). */
 final class OriginVlc {
     private static LibVLC lib; private static MediaPlayer mp; private static SurfaceView view; private static View.OnLayoutChangeListener sizer;
-    static volatile int st, vw, vh, audCur = -1; static volatile long pos, dur; static volatile String err = "", tracks = "";
+    static volatile int st, vw, vh, audCur = -1; static volatile long pos, dur; static volatile float fps; static volatile String err = "", tracks = "";
     private static final ArrayList<Integer> audIds = new ArrayList<>(); /* the app's audio index -> VLC's track id */
     private static String wantLang = ""; private static boolean langDone; private static float bufPct = 100;
 
@@ -38,7 +38,7 @@ final class OriginVlc {
             o.add("--avcodec-threads=0");
             lib = new LibVLC(c, o); mp = new MediaPlayer(lib);
         } catch (Throwable t) { err = "VLC_INIT_FAILED"; st = 6; stop(); return false; }
-        view = v; wantLang = lang == null ? "" : lang; langDone = wantLang.isEmpty(); err = ""; st = 1; vw = vh = 0; pos = at; dur = 0; tracks = ""; audCur = -1; audIds.clear(); bufPct = 100;
+        view = v; wantLang = lang == null ? "" : lang; langDone = wantLang.isEmpty(); err = ""; st = 1; vw = vh = 0; fps = 0; pos = at; dur = 0; tracks = ""; audCur = -1; audIds.clear(); bufPct = 100;
         IVLCVout vo = mp.getVLCVout(); vo.setVideoView(v);
         vo.attachViews((out, w, h, visW, visH, sarN, sarD) -> { int ww = visW > 0 ? visW : w, hh = visH > 0 ? visH : h; if (sarN > 0 && sarD > 0 && sarN != sarD) ww = ww * sarN / sarD; vw = ww; vh = hh; });
         if (v.getWidth() > 0 && v.getHeight() > 0) vo.setWindowSize(v.getWidth(), v.getHeight());
@@ -65,7 +65,7 @@ final class OriginVlc {
         }
         if (view != null && sizer != null) view.removeOnLayoutChangeListener(sizer); sizer = null; view = null;
         if (lib != null) { try { lib.release(); } catch (Throwable t) { } lib = null; }
-        st = 0; vw = vh = 0; pos = dur = 0; tracks = ""; audCur = -1; audIds.clear();
+        st = 0; vw = vh = 0; fps = 0; pos = dur = 0; tracks = ""; audCur = -1; audIds.clear();
     }
     /* 4 times a second, from OriginVideo's clock */
     static void tick() {
@@ -112,7 +112,9 @@ final class OriginVlc {
             sb.append(n).append('\t').append(lang).append('\t').append(clean(d.name)).append('\t').append(cod).append('\t').append(ch).append('\t').append(0).append('\n');
             audIds.add(d.id); n++;
         }
-        if (m != null) m.release();
+        if (m != null) { for (int i = 0; i < m.getTrackCount(); i++) { IMedia.Track t = m.getTrack(i); /* the picture's frame rate (the display follows it) */
+                if (t instanceof IMedia.VideoTrack) { IMedia.VideoTrack v = (IMedia.VideoTrack) t; if (v.frameRateDen > 0 && v.frameRateNum > 0) { fps = (float) v.frameRateNum / v.frameRateDen; break; } } }
+            m.release(); }
         tracks = sb.toString(); audCur = sel;
         if (pick >= 0) { langDone = true; if (pick != cur) mp.setAudioTrack(pick); } /* the language the app had chosen, kept */
     }

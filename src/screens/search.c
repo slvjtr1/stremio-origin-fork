@@ -16,6 +16,12 @@
 #include "core/hit.h"
 #include "core/tmdb.h"
 #include "core/store.h"
+#ifdef SB_ANDROID
+#include "platform/android/android.h"
+#define HASMIC 1 /* Google TV: a microphone key, Search by voice */
+#else
+#define HASMIC 0
+#endif
 
 #define SKEYS "abcdefghijklmnopqrstuvwxyz1234567890"
 #define NK 36
@@ -25,10 +31,12 @@ static const char *const AKEYS[36] = { "ا", "ب", "ت", "ث", "ج", "ح", "خ",
 #define K_BKSP (NK + 1)
 #define K_CLR (NK + 2)
 #define K_LANG (NK + 3)
-#define NKEYS (NK + 4)
-static const int LASTCOL[4] = { 0, 1, 4, 5 };       /* the last row's keys by column: the language, Space (three wide), backspace, Clear */
-static int last_key(int c) { return c <= 0 ? K_LANG : c <= 3 ? K_SPACE : c == 4 ? K_BKSP : K_CLR; }
-static int last_idx(int ki) { return ki == K_LANG ? 0 : ki == K_SPACE ? 1 : ki == K_BKSP ? 2 : 3; }
+#define K_MIC (NK + 4)
+#define NKEYS (NK + 4 + HASMIC)
+#define SPACE_END (HASMIC ? 2 : 3)
+static const int LASTCOL[5] = { 0, 1, HASMIC ? 3 : 4, HASMIC ? 4 : 5, 5 }; /* the last row's keys by column: the language, Space (three wide; two with the microphone), the microphone, backspace, Clear */
+static int last_key(int c) { return c <= 0 ? K_LANG : c <= SPACE_END ? K_SPACE : HASMIC && c == 3 ? K_MIC : c == 4 ? K_BKSP : K_CLR; }
+static int last_idx(int ki) { return ki == K_LANG ? 0 : ki == K_SPACE ? 1 : ki == K_MIC ? 2 : ki == K_BKSP ? 2 + HASMIC : 3 + HASMIC; }
 #define SCOLS 6
 #define SMAX 24
 #define NCAT 16
@@ -60,7 +68,14 @@ static void type_key(int ki) {
   else if (ki == K_BKSP) { if (n) { n--; while (n && ((unsigned char)q[n] & 0xc0) == 0x80) n--; q[n] = 0; } } /* backspace (a whole letter) */
   else if (ki == K_CLR) q[0] = 0;                                                  /* clear */
   else if (ki == K_LANG) { S.ar = !S.ar; store_set("kbLang", S.ar ? "ar" : "en"); return; } /* English / Arabic */
+  else if (ki == K_MIC) { search_voice(); return; }
   set_q(q);
+}
+/* Search by voice (Google TV): Android's speech page, in the keyboard's language; what was said comes back as text_in */
+void search_voice(void) {
+#ifdef SB_ANDROID
+  android_cmd("voice", S.ar ? "ar" : "en", T("Voice search isn't available on this TV"), 0);
+#endif
 }
 static void results_draw_state(void) {
   if (S.ri >= S.items.n) S.ri = S.items.n ? S.items.n - 1 : 0; if (S.si >= S.nsug) S.si = S.nsug ? S.nsug - 1 : 0;
@@ -194,7 +209,7 @@ static int key(int k) {
 static void key_rect(int ki, float *x, float *y, float *w) {
   float kx = LEFT_X, ky = TOP_Y + 76 + 18;
   if (ki < NK) { *x = kx + (ki % SCOLS) * 92; *y = ky + (ki / SCOLS) * 74; *w = 84; }
-  else { int c0 = LASTCOL[last_idx(ki)], c1 = ki == K_SPACE ? 3 : c0; *x = kx + c0 * 92; *y = ky + rows_of() * 74; *w = (c1 - c0 + 1) * 92 - 8; }
+  else { int c0 = LASTCOL[last_idx(ki)], c1 = ki == K_SPACE ? SPACE_END : c0; *x = kx + c0 * 92; *y = ky + rows_of() * 74; *w = (c1 - c0 + 1) * 92 - 8; }
   if (app_rtl()) *x = SB_W - *x - *w;
 }
 /* the text art of the results around the focus, for their pages (drawn there at 520x175): ready when one opens */
@@ -241,6 +256,7 @@ static void draw(void) {
     else if (i == K_CLR) text_draw(T("Clear"), x + w / 2 + nx, y + (66 - text_line_height(22)) / 2 + ny, 22, 700, fg, 0, w - 10, ALIGN_CENTER);
     else if (i == K_LANG) text_draw(S.ar ? "EN" : "ع", x + w / 2 + nx, y + (66 - text_line_height(26)) / 2 + ny, 26, 700, fg, 0, w - 10, ALIGN_CENTER); /* the other language's: what pressing it gives */
     else if (i == K_SPACE) text_draw(T("Space"), x + w / 2 + nx, y + (66 - text_line_height(24)) / 2 + ny, 24, 700, fg, 0.4f, w - 16, ALIGN_CENTER);
+    else if (i == K_MIC) icon_draw("mic", x + w / 2 - 15 + nx, y + 18 + ny, 30, fg);
     else icon_draw("backspace", x + w / 2 - 15 + nx, y + 18 + ny, 30, fg); }
   /* the right side: hint, suggestions, the grid */
   float rx = rtl ? SB_W - RIGHT_X : RIGHT_X, ry = TOP_Y; int al = rtl ? ALIGN_RIGHT : ALIGN_LEFT;
@@ -280,4 +296,14 @@ static void draw(void) {
   gfx_offset_pop(); gfx_opacity_pop(); gfx_clip_pop();
   gfx_offset_pop(); gfx_opacity_pop();
 }
+#ifdef SB_ANDROID
+static void text_in(const char *t) { /* what was said: the whole query, looked up at once */
+  char q[128]; snprintf(q, sizeof q, "%s", t); size_t n = strlen(q); while (n && (q[n - 1] == ' ' || q[n - 1] == '.')) q[--n] = 0; if (!n) return;
+  ptr_off(); S.zone = 0; snprintf(S.q, sizeof S.q, "%s", q); S.livePending = 0; typedAt = app_now(); live(); hist_add(S.q);
+}
+#endif
+#ifdef SB_ANDROID
+Screen searchScreen = { enter, leave, key, tick, draw, focused, NULL, text_in };
+#else
 Screen searchScreen = { enter, leave, key, tick, draw, focused, NULL, NULL };
+#endif

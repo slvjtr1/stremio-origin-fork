@@ -29,6 +29,12 @@
 #include "screens/board.h"
 #include "screens/login.h"
 #include "screens/splash.h"
+#include "screens/search.h"
+#ifdef SB_ANDROID
+#define VOICE_KEY 1 /* green / Search on the Search page: by voice */
+#else
+#define VOICE_KEY 0
+#endif
 #include "core/castlink.h"
 #include "platform/plat.h"
 #include <SDL2/SDL.h>
@@ -883,8 +889,11 @@ static void key_dispatch(int k, int repeat) {
   if (k == K_OK && repeat) { return; } /* repeats of a held OK: the hold timer decides */
   if (k == K_OK || k == K_BACK) sound_play(SND_FOCUS); /* a press: the same tap as a move */
   if (k == K_OK) orbs_pulse(ORB_OK, 0.6f); else if (k == K_BACK) orbs_pulse(ORB_BACK, 0.6f);
-  else if (k == K_RED || k == K_GREEN) { int back = SCR == (k == K_RED ? SCR_SET : SCR_SEARCH) && colorFromSet; orbs_pulse(back ? ORB_BACK : k == K_RED ? ORB_RED : ORB_GREEN, back ? 0.8f : 1); } /* (its own page: they breathe out as it leaves) */
+  else if (k == K_RED || k == K_GREEN) { int back = SCR == (k == K_RED ? SCR_SET : SCR_SEARCH) && colorFromSet && !(VOICE_KEY && k == K_GREEN); orbs_pulse(back ? ORB_BACK : k == K_RED ? ORB_RED : ORB_GREEN, back ? 0.8f : 1); } /* (its own page: they breathe out as it leaves) */
   if (app_overlay) { if (k == K_OK && menuGuard) return; app_overlay->key(k); return; }
+#ifdef SB_ANDROID
+  if (k == K_GREEN && SCR == SCR_SEARCH) { search_voice(); return; } /* the remote's Search key on Search: by voice */
+#endif
   if (k == K_BACK) { app_back(); return; }
   if (k == K_EXIT) { app_quit(); return; }
   if ((k == K_RED || k == K_GREEN) && SCR != SCR_LOGIN) { if (k == K_RED && update_notice_key()) { sound_play(SND_TAB); return; } /* a notice out: red takes you to what it is about */

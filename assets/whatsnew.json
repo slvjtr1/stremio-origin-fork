@@ -1,20 +1,25 @@
 {
-  "version": "1.5.4",
+  "version": "2.0.0",
   "items": [
     {
       "icon": "play",
-      "title": "Now on Google TV",
-      "text": "Stremio Origin for Google TV and Android TV, on TVs and boxes from 2020 on: the same app, your accounts and settings, updates from inside the app."
+      "title": "Stremio Origin 2.0 Ultra",
+      "text": "A major update: a second player, voice search and the film's own frame rate on Google TV, faster addons everywhere."
     },
     {
-      "icon": "g_dpad",
-      "title": "Made for its remote",
-      "text": "The D-pad, OK and Back do everything. Captions, Audio and Info keys go straight to their lists; Menu opens Settings, Search opens Search."
+      "icon": "p_src",
+      "title": "Every film plays",
+      "text": "On Google TV, VLC takes over by itself for any file, picture or sound the TV can't play: from the same point, your language kept."
+    },
+    {
+      "icon": "mic",
+      "title": "Search by voice",
+      "text": "On Google TV, press Search on your remote in Search, or the microphone key, and say a title in English or Arabic."
     },
     {
       "icon": "p_aud",
-      "title": "Sound and picture as made",
-      "text": "On Google TV, Dolby Atmos, DTS and TrueHD go to your receiver as they are, and the screen follows the film's frame rate."
+      "title": "Picture in step, sound everywhere",
+      "text": "The screen follows the film's frame rate when Match content frame rate allows it. Dolby and DTS sound from any speakers."
     }
   ],
   "support": {

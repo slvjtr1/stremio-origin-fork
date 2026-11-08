@@ -17,6 +17,7 @@ void plat_window_size(int *w, int *h, Uint32 *flags);
 int plat_map_key(const SDL_KeyboardEvent *e);
 /* 1 when the platform types text for us (a keyboard on the Mac); 0 = the app shows its own keyboard */
 int plat_text_input(void);
+#define SB_EV_TEXT 0x5458 /* an SDL_USEREVENT's code: words for the page (data1, malloc'd: the main loop frees it), as voice search's */
 /* the device's name for logs ("LG webOS 4.4.2 OLED55C9") */
 const char *plat_device_name(void);
 /* the device's RAM in MB (0 when unknown): picks the picture budget and the drawing size */

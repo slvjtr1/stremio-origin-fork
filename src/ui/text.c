@@ -54,7 +54,7 @@ static int face_load(int fam) { /* a subtitle font's file, read once (from eithe
   int i = fam - FAM_SUB; if (i < 0 || i >= TEXT_NFACES) return 0;
   pthread_mutex_lock(&facemu);
   if (!faceTried[i]) { faceTried[i] = 1; char p[1200]; snprintf(p, sizeof p, "%s/fonts/%s", assetRoot, FACE_FILES[i]); unsigned char *d = NULL; long n = read_file(p, &d);
-    if (n > 0) { fontLen[fam] = n; fontData[fam] = d; } else fprintf(stderr, "[text] no font at %s\n", p); }
+    if (n > 0) { fontLen[fam] = n; fontData[fam] = d; } else { free(d); fprintf(stderr, "[text] no font at %s\n", p); } }
   int ok = fontData[fam] != NULL; pthread_mutex_unlock(&facemu); return ok;
 }
 static float sscale = 1.0f;  /* surface pixels per layout unit: glyphs are rasterised at that resolution */

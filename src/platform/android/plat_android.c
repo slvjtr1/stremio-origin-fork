@@ -105,6 +105,13 @@ JNIEXPORT void JNICALL Java_app_stremioorigin_OriginActivity_nativeKey(JNIEnv *e
   ev.key.timestamp = SDL_GetTicks(); ev.key.keysym.unused = KEY_MARK | (Uint32)k;
   SDL_PushEvent(&ev);
 }
+/* OriginActivity.nativeText: words for the page on the screen (voice search), to the main loop as SB_EV_TEXT with its own copy */
+JNIEXPORT void JNICALL Java_app_stremioorigin_OriginActivity_nativeText(JNIEnv *env, jclass cls, jstring s) {
+  (void)cls; if (!s) return; const char *t = (*env)->GetStringUTFChars(env, s, NULL); if (!t) return;
+  char *c = strdup(t); (*env)->ReleaseStringUTFChars(env, s, t); if (!c) return;
+  SDL_Event ev; memset(&ev, 0, sizeof ev); ev.type = SDL_USEREVENT; ev.user.code = SB_EV_TEXT; ev.user.data1 = c;
+  if (SDL_PushEvent(&ev) != 1) free(c);
+}
 int plat_text_input(void) { return 0; } /* the app's own keyboard: made for the D-pad (and the phone, through Your phone as a keyboard) */
 const char *plat_device_name(void) {
   if (!devName[0]) {

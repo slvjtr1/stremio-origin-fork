@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Build;
+import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -35,7 +37,8 @@ import java.util.Locale;
    main looper; what the native side reads back is kept in volatile fields, updated from the player.
    - Sound: the TV's own decoders by default; with Settings › Audio › Dolby and DTS to a sound bar, Dolby Digital (Plus,
      Atmos), DTS and TrueHD go on as they are when the HDMI takes them (back to the decoders if the sound stalls).
-   - The picture's frame rate: the display follows the film's when Android TV's "Match content frame rate" is on.
+   - The picture's frame rate: the display follows the film's (24, 25, 50...) when Android TV's "Match content frame rate"
+     allows it, also with a short blank while the TV changes mode; for both players.
    - Subtitles are the app's own: ExoPlayer's text tracks are switched off. */
 public final class OriginVideo {
     private static final Handler ui = new Handler(Looper.getMainLooper());
@@ -88,7 +91,7 @@ public final class OriginVideo {
         p = new ExoPlayer.Builder(act, rf).setMediaSourceFactory(new DefaultMediaSourceFactory(new DefaultDataSource.Factory(act, http)))
             .setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true).build();
-        p.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS);
+        p.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF); /* (asked here, see rate(): ExoPlayer's own asks only for a seamless change, which most TVs never make) */
         p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
         p.setVideoSurfaceView(view);
         p.addListener(new Player.Listener() {
@@ -118,8 +121,8 @@ public final class OriginVideo {
     /* the position and the buffer, 4 times a second, as long as a player exists */
     private static void tick() {
         if (p == null) { ticking = false; return; }
-        if (vlc) { OriginVlc.tick(); ui.postDelayed(OriginVideo::tick, 250); return; }
-        pos = p.getCurrentPosition(); long d = p.getDuration(); dur = d > 0 ? d : 0; buf = p.getBufferedPosition(); sync();
+        if (vlc) { OriginVlc.tick(); rate(OriginVlc.fps); ui.postDelayed(OriginVideo::tick, 250); return; }
+        pos = p.getCurrentPosition(); long d = p.getDuration(); dur = d > 0 ? d : 0; buf = p.getBufferedPosition(); sync(); rate(fps); /* (again once the surface is there) */
         watch();
         ui.postDelayed(OriginVideo::tick, 250);
     }
@@ -168,7 +171,7 @@ public final class OriginVideo {
         vlc = OriginVlc.start(act, view, lastUrl, at, play, lang);
         if (!vlc) { err = why; st = 6; if (p != null) p.setVideoSurfaceView(view); }
     }
-    private static void vlcOff() { if (vlc) { vlc = false; OriginVlc.stop(); if (p != null) p.setVideoSurfaceView(view); } }
+    private static void vlcOff() { boolean was = OriginVlc.on(); vlc = false; if (was) { OriginVlc.stop(); if (p != null) p.setVideoSurfaceView(view); } }
     public static void passthrough(boolean on) { wantPass = on; }
     private static String codec(String m) {
         if (m == null) return "";
@@ -211,22 +214,48 @@ public final class OriginVideo {
     /* the frame rate and the HDR kind of the picture playing */
     private static void video() {
         if (p == null) return; Format f = p.getVideoFormat(); if (f == null) return;
-        fps = f.frameRate > 0 ? f.frameRate : 0;
+        fps = f.frameRate > 0 ? f.frameRate : 0; rate(fps);
         String h = "none"; ColorInfo c = f.colorInfo;
         if (MimeTypes.VIDEO_DOLBY_VISION.equals(f.sampleMimeType) || (f.codecs != null && (f.codecs.startsWith("dvh") || f.codecs.startsWith("dva")))) h = "DolbyVision";
         else if (c != null && c.colorTransfer == C.COLOR_TRANSFER_ST2084) h = "HDR10";
         else if (c != null && c.colorTransfer == C.COLOR_TRANSFER_HLG) h = "HLG";
         hdr = h;
     }
+    /* the display's refresh rate asked for the film's own (0: the TV's usual one again). Android 12 and later: also a
+       change that isn't seamless, as the TV's "Match content frame rate" setting allows; Android 11: a seamless one */
+    private static float rateSet;
+    private static void rate(float f) {
+        if (Build.VERSION.SDK_INT < 30 || view == null || f == rateSet || (f > 0 && (f < 10 || f > 121))) return;
+        Surface s = view.getHolder().getSurface(); if (s == null || !s.isValid()) return;
+        try {
+            if (Build.VERSION.SDK_INT >= 31) s.setFrameRate(f, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, f > 0 ? Surface.CHANGE_FRAME_RATE_ALWAYS : Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
+            else s.setFrameRate(f, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+            rateSet = f;
+        } catch (Throwable t) { rateSet = f; }
+    }
 
-    public static void load(String url) { final boolean wp = wantPass; ui.post(() -> {
-        vlcOff(); vlcTried = false;
-        if (p != null && builtPass != wp) { p.release(); p = null; } /* (the setting changed: a player made for it) */
-        wantPass = wp; ensure(); if (p == null) return; err = ""; st = 1; vw = vh = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; view.setVisibility(View.VISIBLE);
-        lastUrl = url; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0; lastPos = -1;
-        p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().clearOverridesOfType(C.TRACK_TYPE_AUDIO).build());
-        p.setVideoSurfaceView(view); p.setMediaItem(item(url)); p.prepare(); p.setPlayWhenReady(true); }); }
-    public static void unload() { ui.post(() -> { vlcOff(); if (p != null) { p.stop(); p.clearMediaItems(); } st = 0; vw = vh = 0; pos = dur = buf = 0; tracks = ""; audCur = -1; unsup = 0; if (view != null) view.setVisibility(View.INVISIBLE); }); }
+    /* load and unload come from SDL's thread and run later on the main looper: until then the native side reads a new film
+       opening (or none), never the last film's end or error (gate; seq: the latest call, so an older one doesn't open it) */
+    private static volatile int gate, seq;
+    public static void load(String url) {
+        final boolean wp = wantPass; final int my = ++seq;
+        vlc = false; err = ""; st = 1; vw = vh = 0; pos = dur = buf = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; gate = 1;
+        ui.post(() -> {
+            vlcOff(); vlcTried = false;
+            if (p != null && builtPass != wp) { p.release(); p = null; } /* (the setting changed: a player made for it) */
+            wantPass = wp; ensure();
+            if (p == null) { err = "PLAYER_INIT_FAILED"; st = 6; if (seq == my) gate = 0; return; }
+            err = ""; st = 1; vw = vh = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; view.setVisibility(View.VISIBLE);
+            lastUrl = url; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0; lastPos = -1;
+            p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().clearOverridesOfType(C.TRACK_TYPE_AUDIO).build());
+            p.setVideoSurfaceView(view); p.setMediaItem(item(url)); p.prepare(); p.setPlayWhenReady(true);
+            if (seq == my) gate = 0;
+        });
+    }
+    public static void unload() {
+        ++seq; vlc = false; st = 0; vw = vh = 0; pos = dur = buf = 0; tracks = ""; audCur = -1; unsup = 0; gate = 2;
+        ui.post(() -> { vlcOff(); if (p != null) { p.stop(); p.clearMediaItems(); } st = 0; vw = vh = 0; pos = dur = buf = 0; fps = 0; tracks = ""; audCur = -1; unsup = 0; lastUrl = null; rate(0); if (view != null) view.setVisibility(View.INVISIBLE); });
+    }
     public static void play() { ui.post(() -> { if (vlc) OriginVlc.play(); else if (p != null) p.setPlayWhenReady(true); }); }
     public static void pause() { ui.post(() -> { if (vlc) OriginVlc.pause(); else if (p != null) p.setPlayWhenReady(false); }); }
     public static void seek(long ms) { if (vlc) OriginVlc.pos = ms; else pos = ms; ui.post(() -> { if (vlc) OriginVlc.seek(ms); else if (p != null) p.seekTo(ms); }); }
@@ -243,14 +272,14 @@ public final class OriginVideo {
     public static long position() { return vlc ? OriginVlc.pos : pos; }
     public static long duration() { return vlc ? OriginVlc.dur : dur; }
     public static long buffered() { return vlc ? OriginVlc.pos : buf; }
-    public static int state() { return vlc ? OriginVlc.st : st; }
+    public static int state() { int g = gate; return g == 1 ? 1 : g == 2 ? 0 : vlc ? OriginVlc.st : st; }
     public static int width() { return vlc ? OriginVlc.vw : vw; }
     public static int height() { return vlc ? OriginVlc.vh : vh; }
-    public static String error() { return vlc ? OriginVlc.err : err; }
+    public static String error() { return gate != 0 ? "" : vlc ? OriginVlc.err : err; }
     public static String audioTracks() { return vlc ? OriginVlc.tracks : tracks; }
     public static int audioCurrent() { return vlc ? OriginVlc.audCur : audCur; }
     public static int audioUnsupported() { return vlc ? 0 : unsup; }
-    public static float fps() { return vlc ? 0 : fps; }
+    public static float fps() { return vlc ? OriginVlc.fps : fps; }
     public static String hdr() { return vlc ? "" : hdr; }
     private OriginVideo() {}
 }

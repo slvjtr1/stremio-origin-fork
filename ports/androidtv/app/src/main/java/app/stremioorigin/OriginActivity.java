@@ -1,5 +1,6 @@
 package app.stremioorigin;
 
+import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.os.Bundle;
@@ -21,6 +22,15 @@ public class OriginActivity extends SDLActivity {
 
     /* one key, already the app's code, into the app's event queue (src/platform/android/plat_android.c) */
     static native void nativeKey(int k, int down, int repeat);
+    /* words for the page on the screen (what was said to voice search) */
+    static native void nativeText(String s);
+    static final int VOICE = 41;
+    @Override protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != VOICE || res != RESULT_OK || data == null) return;
+        java.util.ArrayList<String> r = data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);
+        if (r != null && !r.isEmpty() && r.get(0) != null && !r.get(0).trim().isEmpty()) { try { nativeText(r.get(0).trim()); } catch (UnsatisfiedLinkError e) { } }
+    }
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
