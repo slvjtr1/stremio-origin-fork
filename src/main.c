@@ -1,4 +1,5 @@
 #include "core/tvtune.h"
+#include "core/downloads.h"
 #include <stdint.h>
 #include <math.h>
 /* Stremio Origin, native. The window, the GL context, the frame loop; everything else is in
@@ -280,6 +281,7 @@ int main(int argc, char **argv) {
     while (SDL_PollEvent(&e)) {
       if (getenv("SB_EVLOG") || frame < 120) if (e.type == SDL_QUIT || e.type == SDL_KEYDOWN || e.type == SDL_KEYUP || e.type == SDL_WINDOWEVENT) fprintf(stderr, "[ev] type=%d%s sc=%d sym=%d win=%d\n", e.type, e.type == SDL_QUIT ? " QUIT" : "", e.type == SDL_KEYDOWN || e.type == SDL_KEYUP ? e.key.keysym.scancode : 0, e.type == SDL_KEYDOWN || e.type == SDL_KEYUP ? e.key.keysym.sym : 0, e.type == SDL_WINDOWEVENT ? e.window.event : 0);
       if (e.type == SDL_QUIT) { fprintf(stderr, "[exit] SDL_QUIT\n"); app_quit(); }
+      else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_BACKSPACE && SDL_IsTextInputActive() && SCR == SCR_SEARCH) app_text("\b"); /* the TV keyboard's own delete key */
       else if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) { int k = plat_map_key(&e.key);
         if (k == K_BACK && e.key.keysym.sym == SDLK_ESCAPE && e.type == SDL_KEYDOWN && SCR == SCR_LOGIN) app_quit();
         if (k) app_key(k, e.type == SDL_KEYDOWN, e.key.repeat); }
@@ -399,7 +401,7 @@ int main(int argc, char **argv) {
   }
   fprintf(stderr, "[exit] after %d frames\n", frame);
   p2p_shutdown(); /* the engine's threads end and its buffer files go */
-  tvtune_quit(); /* the TV's picture and sound as they were */
+  dl_shutdown(); tvtune_quit(); /* the TV's picture and sound as they were */
   store_flush();
 #ifdef SB_ANDROID
   android_cmd("exit", NULL, NULL, 0); /* the activity and its process go: the next start is a clean one */

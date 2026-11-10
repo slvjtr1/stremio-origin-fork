@@ -137,6 +137,7 @@ int  app_quitting(void);
 /* the page colour */
 extern int UI_NOIR; /* the theme: 1 Modern (black and gold, the default), 0 Classic (purple glass); Settings › Appearance › Theme */
 extern int UI_TONE;  /* Modern's background: 0 black, 1 graphite, 2 midnight */
+extern int UI_GLASS;  /* Liquid glass: clear panels with a lit edge (no blur) */
 extern int UI_CORNER; /* the cards' corners: 0 round, 1 soft, 2 square */
 void theme_apply(void);
 uint32_t ui_page(void);

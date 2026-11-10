@@ -1,6 +1,7 @@
 /* The streams sheet: an opaque side sheet from the right edge with soft leading corners and a shadow over the page's
    glass, a sentence-case heading, calm rows and the gliding accent highlight under the focus. */
 #include "screens/streams.h"
+#include "core/downloads.h"
 #include <SDL2/SDL.h>
 #include "screens/sheet.h"
 #include "core/app.h"
@@ -171,6 +172,7 @@ static int key(int k) {
   else if (k == K_RIGHT) nudge_start(&S.nudge, k);
   else if (k == K_OK) { if (S.idx < S.n && S.kind[S.idx] != R_PLAIN) { S.holding = 1; S.swelled = 0; S.holdAt = app_now(); } /* a tap plays it, held: its details */
     else if (S.idx < S.n) play(S.idx); }
+  else if (k == K_YELLOW && dl_drive() && S.idx < S.n) dl_start(S.items[S.idx], S.type, S.id, S.vid, S.ep[0] ? S.ep : S.title); /* kept on the USB drive (its size and the room checked first) */
   else if (k == K_LEFT || k == K_BACK) streams_close(0);
   return 1;
 }

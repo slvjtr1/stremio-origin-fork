@@ -69,9 +69,19 @@ void sglass_bake(SGlass *g, float x, float y, float w, float h) {
   g->ok = 1; tween_to(&g->a, 1, 0.3f, EASE_IN_OUT);
   if (getenv("SB_SLOWLOG")) fprintf(stderr, "[glass] bake %dx%d in %u ms\n", W, H, SDL_GetTicks() - tb0);
 }
+/* Liquid glass in the Modern look (Settings › Appearance): a clear dark pane that lets the page show through, a soft light
+   falling in from its top and a bright line where its upper edge catches it. Four plain shapes: nothing is read back
+   from the screen and nothing is blurred, so it costs the TV no more than the flat panel does */
+static void clear_glass(float x, float y, float w, float h, float r, float a, float dense) {
+  if (a <= 0.004f) return;
+  gfx_rrect(x, y, w, h, r, col_alpha(SHEET, dense * a));
+  gfx_rrect_v(x, y, w, fminf(h, fmaxf(h * 0.55f, 2 * r)), r, WHITE_A((int)(20 * a)), WHITE_A(0));
+  gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(30 * a)));
+  if (r > 0) { gfx_clip_push(x, y, w, r + 4); gfx_ring(x, y, w, h, r, 1.3f, WHITE_A((int)(70 * a))); gfx_clip_pop(); }
+}
 void sglass_tick(SGlass *g, float dt) { tween_tick(&g->a, dt); }
 void sglass_draw(const SGlass *g, float x, float y, float w, float h, float r) {
-  if (UI_NOIR) { gfx_rrect(x, y, w, h, r, SHEET); gfx_ring(x, y, w, h, r, 1, NOIR_EDGE); return; }
+  if (UI_NOIR) { if (UI_GLASS) { clear_glass(x, y, w, h, r, 1, 0.80f); return; } gfx_rrect(x, y, w, h, r, SHEET); gfx_ring(x, y, w, h, r, 1, NOIR_EDGE); return; }
   if (!(g->ok && g->a.v >= 0.999f && gfx_opacity_now() >= 0.999f)) gfx_rrect(x, y, w, h, r, SHEET); /* (under the glass once it is fully in: hidden) */
   if (g->ok && g->a.v > 0.001f) gfx_image(g->t.tex, x, y, w, h, r, WHITE_A((int)(255 * g->a.v + 0.5f)), 0, 1, 1, 0);
   if (r > 0) { gfx_clip_push(x, y, w, r + 6); gfx_ring(x, y, w, h, r, 1.2f, WHITE_A(38)); gfx_clip_pop(); } /* light catching its top edge */
@@ -88,6 +98,7 @@ float lightAt; /* where the light on the next pieces of glass is, along their to
 void lglass_light(float at) { lightAt = at; }
 void lglass_shell(float x, float y, float w, float h, float r, uint32_t body, float k) {
   if (k <= 0.004f) return;
+  if (UI_NOIR && UI_GLASS) { clear_glass(x, y, w, h, r, fminf(k, 1), 0.55f); return; }
   if (UI_NOIR) { float a = fminf(k, 1); int ba = (int)(body >> 24); /* a solid dark plate, a little more opaque than the glass was; its edge a hairline */
     gfx_rrect(x, y, w, h, r, RGBA(22, 22, 23, (int)(a * (ba ? fminf(255, 90 + ba) : 150)))); gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(26 * a))); return; }
   gfx_shadow(x, y + h * 0.18f, w, h, r, fminf(h * 0.6f, 40), BLACK_A((int)(70 * fminf(k, 1))));
@@ -136,6 +147,7 @@ void lglass_liquid(GLuint t, float x, float y, float w, float h, float r, float 
   float n = (float)seed, tm = (float)app_now() * (1 + 0.13f * n) + 17.0f * n, p = 2.39f * n; /* (as the bar's pieces: each its own pace and phase) */
   float su = 0.5f + 0.4f * (0.55f * sinf(tm * 0.27f + p) + 0.3f * sinf(tm * 0.43f + 2.0f + 1.7f * p) + 0.15f * sinf(tm * 0.71f + 4.4f + 2.3f * p)), sv = 0.32f + 0.1f * sinf(tm * 0.33f + 1.0f + p);
   lglass_light(su - 0.12f);
+  if (UI_NOIR && UI_GLASS) { clear_glass(x, y, w, h, r, fminf(k, 1), 0.62f); (void)dark; return; }
   if (UI_NOIR) { gfx_rrect(x, y, w, h, r, RGBA(14, 14, 15, (int)(225 * fminf(k, 1)))); gfx_ring(x, y, w, h, r, 1, WHITE_A((int)(26 * fminf(k, 1)))); (void)dark; return; }
   if (!t) { lglass_shell(x, y, w, h, r, TINT(14, 14, 22, 120), k); return; }
   gfx_shadow(x, y + 12, w, h, r, 40, BLACK_A((int)(64 * fminf(k, 1))));

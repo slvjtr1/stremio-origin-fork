@@ -16,6 +16,7 @@ void tvtune_start(int anime);          /* a title starts (main thread): tuned on
 void tvtune_stop(void);                /* it stops: put back */
 void tvtune_cycle(int anime);          /* the player's button: the next level, applied at once */
 int  tvtune_poll(char *msg, size_t cap); /* 1 once with the notice to show (the upscale level the TV took) */
+void tvtune_boost(void);               /* a torrent this TV cannot keep up with: the apps left open behind this one are closed (once a film, player.c) */
 int  tvtune_state(void);               /* -1 not known yet, 0 no root here, 1 the TV takes it */
 void tvtune_tick(void);                /* per frame (main thread): the store follows the worker */
 void tvtune_quit(void);                /* the app closing: put back at once */

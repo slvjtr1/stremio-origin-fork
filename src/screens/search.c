@@ -3,6 +3,7 @@
    (its first answer is nearly always the one meant), then every installed catalog that searches (Cinemeta's films and
    series when none does), each answering on its own time. */
 #include "screens/search.h"
+#include <SDL2/SDL.h>
 #include "core/keys.h"
 #include "core/i18n.h"
 #include "ui/gfx.h"
@@ -48,7 +49,7 @@ static int last_idx(int ki) { return ki == K_LANG ? 0 : ki == K_SPACE ? 1 : ki =
 #define RIGHT_X (72.0f + 620)
 #define GRID_W (SB_W - 72 - RIGHT_X)
 static struct {
-  int zone; /* 0 kb, 1 sug, 2 res */ int kr, kc, si, ri; char q[128]; unsigned tok; int built; int ar; /* the keyboard in Arabic */ int hist; /* the chips are the recent searches */
+  int zone; /* 0 kb, 1 sug, 2 res, 3 the search bar */ int sys; /* typing with the TV's own keyboard */ Tween kbHide; int kr, kc, si, ri; char q[128]; unsigned tok; int built; int ar; /* the keyboard in Arabic */ int hist; /* the chips are the recent searches */
   ItemList items; char sug[6][128]; int nsug; int loading, final;
   ItemList top, cat[NCAT]; int topDone, ncat, catDone[NCAT], topFail, catFail[NCAT], allFailed; double liveAt, catAt; int livePending, catPending;
   Tween kfx, kfy, kfw, caretX; double caretAt; int caretSeen; /* (the text cursor's glide and breath) */
@@ -58,7 +59,7 @@ static struct {
 } S;
 static int rows_of(void) { return (NK + SCOLS - 1) / SCOLS; }
 static int key_at(int r, int c) { if (r < rows_of()) return r * SCOLS + c; return last_key(c); }
-static void live(void);
+static void live(void); static void sys_stop(void); static void ptr_off(void);
 static double typedAt;
 static void set_q(const char *q) { snprintf(S.q, sizeof S.q, "%s", q); S.liveAt = app_now() + 0.26; S.livePending = 1; typedAt = app_now(); }
 static void type_key(int ki) {
@@ -174,14 +175,29 @@ static void cat_go(void) {
 static void enter(const void *p) { (void)p;
   if (S.q[0] && leftAt && app_now() - leftAt > 600) { S.q[0] = 0; itemlist_clear(&S.items); S.zone = 0; S.livePending = 0; S.tok++; S.loading = 0; } /* back after ten minutes: a fresh search, the recent ones under it */
   S.zone = (S.zone == 2 && S.items.n) ? 2 : 0; timer_start(&S.in, 0.42f); { const char *kl = store_get("kbLang", NULL); S.ar = kl ? !strcmp(kl, "ar") : !strcmp(i18n_lang(), "ar"); } if (!S.q[0]) hist_show(); results_draw_state(); }
-static void leave(void) { leftAt = app_now(); } /* Search keeps its query and results for when you come back (for ten minutes) */
+static void leave(void) { leftAt = app_now(); sys_stop(); if (S.zone == 3) S.zone = 0; } /* Search keeps its query and results for when you come back (for ten minutes) */
 static const Item *focused(void) { return S.zone == 2 && S.ri < S.items.n ? &S.items.items[S.ri] : NULL; }
+/* The search bar. OK on it: the TV's own keyboard comes up (pointer, voice and all) and the app's keys slide away;
+   Back, OK or Down: the app's keys again */
+static void sys_stop(void) { if (S.sys) { S.sys = 0; SDL_StopTextInput(); } }
+static void sys_start(void) { S.sys = 1; S.zone = 3; SDL_StartTextInput(); }
+static void sys_text(const char *t) {
+  if (!S.sys || !t) return; char q[128]; snprintf(q, sizeof q, "%s", S.q); size_t n = strlen(q);
+  for (; *t; t++) { if (*t == '\b') { if (n) { n--; while (n && (q[n] & 0xc0) == 0x80) n--; q[n] = 0; } } else if ((unsigned char)*t >= 0x20 && n + 5 < sizeof q) { q[n++] = *t; q[n] = 0; } }
+  while (n && (q[n - 1] & 0xc0) == 0x80 && n + 1 >= sizeof q) q[--n] = 0;
+  set_q(q);
+}
+static void box_focus(int i, int b) { (void)i; (void)b; ptr_off(); if (!S.sys) S.zone = 3; }
 static int key(int k) {
   int rows = rows_of(), C = SGC; int z0 = S.zone, kr0 = S.kr, kc0 = S.kc, si0 = S.si, ri0 = S.ri;
+  if (S.sys) { if (k == K_BACK || k == K_OK || k == K_DOWN) { sys_stop(); S.zone = k == K_OK && S.items.n ? 2 : 0; if (S.zone == 2) { S.ri = 0; hist_add(S.q); } } return 1; }
+  if (S.zone == 3) {
+    if (k == K_OK) sys_start(); else if (k == K_DOWN) S.zone = 0; else if (k == K_UP) { topnav_focus(); return 1; } else if (k == K_RIGHT) { if (S.nsug) { S.zone = 1; S.si = 0; } else if (S.items.n) { S.zone = 2; S.ri = 0; } } else if (k == K_BACK) return 0;
+    return 1; }
   if (S.zone == 0) {
     if (k == K_LEFT) { if (S.kr == rows) { int i = last_idx(last_key(S.kc)); S.kc = LASTCOL[i > 0 ? i - 1 : 0]; } else S.kc = S.kc > 0 ? S.kc - 1 : 0; }
     else if (k == K_RIGHT) { int edge = S.kr == rows ? last_key(S.kc) == K_CLR : S.kc >= SCOLS - 1; if (edge) { if (S.nsug) { S.zone = 1; S.si = 0; } else if (S.items.n) { S.zone = 2; S.ri = 0; } } else if (S.kr == rows) S.kc = LASTCOL[last_idx(last_key(S.kc)) + 1]; else S.kc++; }
-    else if (k == K_UP) { if (S.kr > 0) S.kr--; else { topnav_focus(); return 1; } }
+    else if (k == K_UP) { if (S.kr > 0) S.kr--; else { S.zone = 3; return 1; } } /* the search bar, above the keys */
     else if (k == K_DOWN) { if (S.kr < rows) S.kr++; }
     else if (k == K_OK) type_key(key_at(S.kr, S.kc));
     else if (k == K_BACK) return 0;
@@ -236,7 +252,9 @@ static void draw(void) {
   gfx_opacity_push(S.in.on ? ia : 1); gfx_offset_push(0, S.in.on ? iy : 0); /* the pieces rise in; the grid only fades (its own scroll stays) */
   /* the query box */
   float qx = rtl ? SB_W - LEFT_X - 552 : LEFT_X, qy = TOP_Y;
-  gfx_rrect(qx, qy, 552, 76, 20, WHITE_A(18)); gfx_ring(qx, qy, 552, 76, 20, 1, WHITE_A(26));
+  { int bf = act && S.zone == 3; hit_add(qx, qy, 552, 76, box_focus, NULL, 0, 0);
+    gfx_rrect(qx, qy, 552, 76, 20, WHITE_A(S.sys ? 28 : 18)); gfx_ring(qx, qy, 552, 76, 20, bf ? 3 : 1, bf ? (ACC | 0xff000000u) : WHITE_A(26)); }
+  tween_to(&S.kbHide, S.sys ? 1.0f : 0.0f, 0.32f, EASE_CSS_EASE); tween_tick(&S.kbHide, app_dt());
   icon_draw("search_box", rtl ? qx + 552 - 24 - 32 : qx + 24, qy + 22, 32, WHITE_A(153));
   float tx = rtl ? qx + 552 - 24 - 32 - 16 : qx + 24 + 32 + 16, th = text_line_height(32);
   /* the text cursor: rounded, gliding to where the next letter goes, solid while typing, else a soft slow breath */
@@ -246,7 +264,12 @@ static void draw(void) {
   { float want = S.q[0] ? cw + 4 : 0; if (S.caretX.to != want) { if (!S.caretSeen) tween_set(&S.caretX, want); else tween_to(&S.caretX, want, 0.12f, EASE_OUT); S.caretAt = app_now(); } S.caretSeen = 1;
     double since = app_now() - S.caretAt; float ca = since < 0.6 ? 1 : 0.35f + 0.65f * (0.5f + 0.5f * cosf((float)((since - 0.6) * 6.2832 / 1.1)));
     float cx = rtl ? tx - S.caretX.v - 3 : tx + S.caretX.v; gfx_rrect(cx, qy + 20, 3, 36, 1.5f, col_alpha(ACC2 | 0xff000000u, ca)); }
-  /* the keyboard: the accent block slides under the focused key */
+  /* the keyboard: the accent block slides under the focused key. With the TV's keyboard up it sinks and fades away,
+     and one line says how to get it back; at rest, one line under it says the bar opens the TV's keyboard */
+  { float lx, ly, lw; key_rect(K_LANG, &lx, &ly, &lw); float hx = rtl ? qx + 552 : qx, k = S.kbHide.v; (void)lw;
+    if (k > 0.01f) { gfx_opacity_push(k); text_draw_wrapped(T("Typing with the TV\xe2\x80\x99s keyboard. Back brings these keys again"), hx, qy + 76 + 26, 552, 2, 24, 500, WHITE_A(150), 0, rtl ? ALIGN_RIGHT : ALIGN_LEFT, 32); gfx_opacity_pop(); }
+    if (k < 0.99f) { gfx_opacity_push(1 - k); text_draw_wrapped(T("Tip: go up to the search bar and press OK to type with the TV\xe2\x80\x99s own keyboard"), hx, ly + 66 + 18 + 26 * k, 552, 2, 22, 500, WHITE_A(120), 0, rtl ? ALIGN_RIGHT : ALIGN_LEFT, 30); gfx_opacity_pop(); } }
+  if (S.kbHide.v < 0.99f) { gfx_opacity_push(1 - S.kbHide.v); gfx_offset_push(0, 26 * S.kbHide.v);
   for (int i = 0; i < NKEYS; i++) { float x, y, w; key_rect(i, &x, &y, &w); hit_add(x, y, w, 66, key_focus, NULL, i, 0); gfx_rrect(x, y, w, 66, 14, WHITE_A(15)); } /* every key's plate, under the accent too: no hole where it glides to */
   if (act && S.zone == 0) { gfx_offset_push(nudge_x(&S.nudge), nudge_y(&S.nudge)); gfx_rrect(S.kfx.v, S.kfy.v, S.kfw.v, 66, 14, ACC); gfx_offset_pop(); }
   for (int i = 0; i < NKEYS; i++) { float x, y, w; key_rect(i, &x, &y, &w); int f = act && S.zone == 0 && key_at(S.kr, S.kc) == i;
@@ -258,6 +281,7 @@ static void draw(void) {
     else if (i == K_SPACE) text_draw(T("Space"), x + w / 2 + nx, y + (66 - text_line_height(24)) / 2 + ny, 24, 700, fg, 0.4f, w - 16, ALIGN_CENTER);
     else if (i == K_MIC) icon_draw("mic", x + w / 2 - 15 + nx, y + 18 + ny, 30, fg);
     else icon_draw("backspace", x + w / 2 - 15 + nx, y + 18 + ny, 30, fg); }
+  gfx_offset_pop(); gfx_opacity_pop(); }
   /* the right side: hint, suggestions, the grid */
   float rx = rtl ? SB_W - RIGHT_X : RIGHT_X, ry = TOP_Y; int al = rtl ? ALIGN_RIGHT : ALIGN_LEFT;
   if (S.q[0] && !S.items.n && !S.final) { /* the loading line */
@@ -303,7 +327,8 @@ static void text_in(const char *t) { /* what was said: the whole query, looked u
 }
 #endif
 #ifdef SB_ANDROID
-Screen searchScreen = { enter, leave, key, tick, draw, focused, NULL, text_in };
+static void text_any(const char *t) { if (S.sys) sys_text(t); else text_in(t); }
+Screen searchScreen = { enter, leave, key, tick, draw, focused, NULL, text_any };
 #else
-Screen searchScreen = { enter, leave, key, tick, draw, focused, NULL, NULL };
+Screen searchScreen = { enter, leave, key, tick, draw, focused, NULL, sys_text };
 #endif

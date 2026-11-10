@@ -908,8 +908,12 @@ void player_chapters(const char *url, const PlayerChapter *list, int n) {
   sk_done();
 }
 
+static int mem_low(void) { /* MemAvailable under 120 MB (read at most every 5 s) */
+  static double at; static int low; if (now_() - at < 5) return low; at = now_(); low = 0;
+  FILE *f = fopen("/proc/meminfo", "r"); if (!f) return 0; char ln[128]; long kb = -1; while (fgets(ln, sizeof ln, f)) if (sscanf(ln, "MemAvailable: %ld", &kb) == 1) break; fclose(f);
+  low = kb >= 0 && kb < 120 * 1024; return low; }
 /* ---- buttons ---- */
-static void up_label(char *o, size_t cap) { const char *lv = tvtune_level(is_anime()); if (!strcmp(lv, "off")) snprintf(o, cap, "%s", T(is_anime() ? "Anime upscale off" : "Upscale off")); else snprintf(o, cap, "%s", T1(is_anime() ? "Anime upscale: {l}" : "Upscale: {l}", "l", T(!strcmp(lv, "A") ? "High" : !strcmp(lv, "B") ? "Medium" : "Low"))); }
+static void up_label(char *o, size_t cap) { const char *lv = tvtune_level(is_anime()); if (!strcmp(lv, "off")) snprintf(o, cap, "%s", T(is_anime() ? "Anime upscale off" : "Upscale off")); else snprintf(o, cap, "%s", T("Anime upscale on")); }
 static int up_index(void) { const char *lv = tvtune_level(is_anime()); return !strcmp(lv, "A") ? 3 : !strcmp(lv, "B") ? 2 : !strcmp(lv, "C") ? 1 : 0; }
 static int btn_index(const char *id);
 static void next_up(void) {
@@ -928,7 +932,7 @@ static void build_btns(void) {
   if (P.isTrailer) { if (trSubsN) B("cc", "p_subs", T("Subtitles"), 0); } /* a trailer's captions: one press on, one off */
   else B("subs", "p_subs", T("Subtitles"), 0);
   if (!P.isTrailer) B("aud", "p_aud", T("Audio"), 0);
-  if (!P.isTrailer && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
+  if (!P.isTrailer && is_anime() && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
   const char *am = !strcmp(P.aspect, "fill") ? "Fill the screen" : !strcmp(P.aspect, "zoom") ? "Zoom" : "Original"; B("asp", "p_asp", T(am), 0);
   #undef B
   P.nbtn = i; if (P.bIdx >= i) P.bIdx = 0; if (fid) for (int k = 0; k < i; k++) if (!strcmp(P.btns[k].id, fid)) P.bIdx = k;
@@ -1921,7 +1925,11 @@ void player_tick(float dt) {
     if (mkv) mkv_set_pos(mkv, t, b > t ? b - t : -1);
     dts_tick();
     if (!P.isTrailer && (!P.embKnown || !P.mkvTracksOk || mkv_state(mkv) == MKV_FALLBACK)) load_emb_tracks(); /* until the file's list settles (the TV's own list may come late) */
-    if (P.isP2p) { p2p_pace(vs == VID_PLAYING, vs == VID_BUFFERING || vs == VID_LOADING, dur()); char ln[160]; int has = p2p_peer_line(ln, sizeof ln); snprintf(P.p2pLine, sizeof P.p2pLine, "%s", has ? ln : "");
+    if (P.isP2p) { /* a torrent the TV cannot keep up with (its fourth stall after the start, or under 120 MB of memory left): the background apps go, once */
+      static int wasBuf, stalls, boosted; static char boostFor[SB_URL_MAX]; if (strcmp(boostFor, P.url)) { snprintf(boostFor, sizeof boostFor, "%s", P.url); stalls = 0; boosted = 0; wasBuf = 0; }
+      int bufNow = vs == VID_BUFFERING && P.liveT0 && now_() - P.liveT0 > 20; if (bufNow && !wasBuf) stalls++; wasBuf = bufNow;
+      if (!boosted && (stalls >= 4 || (vs == VID_PLAYING && mem_low()))) { boosted = 1; fprintf(stderr, "[boost] asked: %d stall(s)%s\n", stalls, mem_low() ? ", memory low" : ""); tvtune_boost(); }
+      p2p_pace(vs == VID_PLAYING, vs == VID_BUFFERING || vs == VID_LOADING, dur()); char ln[160]; int has = p2p_peer_line(ln, sizeof ln); snprintf(P.p2pLine, sizeof P.p2pLine, "%s", has ? ln : "");
       int waiting = (vs == VID_BUFFERING || vs == VID_LOADING) && !paused(); const char *why = p2p_wait_reason(waiting); /* one short reason under the ring once the wait is long */
       if (waiting && P.live && !strcmp(why, T("Waiting for the next pieces…"))) why = ""; /* mid-film the spinner says it alone */
       if (waiting && !P.failed) { if (strcmp(why, status)) set_status(why); } else if (vs == VID_PLAYING && status[0] && !P.failed) set_status(""); } }

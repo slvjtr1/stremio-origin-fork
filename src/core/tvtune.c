@@ -27,6 +27,7 @@ static cJSON *toSave, *saved;
 
 static int is_on(const char *k, const char *d) { return !strcmp(store_get(k, d), "true"); }
 const char *tvtune_level(int anime) {
+  if (!anime) return "off"; /* anime only */
   const char *v = store_get(anime ? "animeEnhance" : "filmEnhance", anime ? "A" : "off");
   if (!strcmp(v, "true")) return "A"; if (!strcmp(v, "false")) return "off"; /* (a switch before it had levels) */
   return !strcmp(v, "A") || !strcmp(v, "B") || !strcmp(v, "C") ? v : "off";
@@ -114,7 +115,7 @@ static void add(Job *j, const char *cat, const char *k, const char *v) { if (j->
 static void addr(Job *j, const char *cat, const char *k, const char *step, int lo, int hi) { if (j->n < MAXW) j->w[j->n++] = (Want){ cat, k, step, 1, lo, hi }; }
 static void wish(Job *j, int anime) {
   const char *lv = tvtune_level(anime); int L = !strcmp(lv, "A") ? 3 : !strcmp(lv, "B") ? 2 : !strcmp(lv, "C") ? 1 : 0;
-  if (L) { j->upscale = 1; snprintf(j->note, sizeof j->note, "%s", T1(anime ? "Anime upscale: {l}" : "Upscale: {l}", "l", T(L == 3 ? "High" : L == 2 ? "Medium" : "Low")));
+  if (L) { j->upscale = 1; snprintf(j->note, sizeof j->note, "%s", T("Anime upscale on"));
     static const char *const SR[4] = { "off", "low", "medium", "high" };
     add(j, "picture", "superResolution", SR[L]);
     if (anime) { /* drawn pictures: clean lines, flat fills without bands, no smearing of fine line work */
@@ -144,12 +145,34 @@ void tvtune_stop(void) {
   if (s) spawn(stop_job, s);
 }
 void tvtune_cycle(int anime) {
-  static const char *const NEXT[4][2] = { { "off", "C" }, { "C", "B" }, { "B", "A" }, { "A", "off" } };
+  static const char *const NEXT[4][2] = { { "off", "A" }, { "C", "off" }, { "B", "off" }, { "A", "off" } };
   const char *cur = tvtune_level(anime); for (int i = 0; i < 4; i++) if (!strcmp(cur, NEXT[i][0])) { store_set(anime ? "animeEnhance" : "filmEnhance", NEXT[i][1]); break; }
   tvtune_stop();
   tvtune_start(anime);
 }
 int tvtune_poll(char *msg, size_t cap) { pthread_mutex_lock(&mu); int n = notice; notice = 0; if (n) snprintf(msg, cap, "%s", noteTxt); pthread_mutex_unlock(&mu); return n; }
+/* ---- room for a heavy torrent ----
+   A weak TV that cannot keep up with a torrent (it keeps stalling, or its memory is nearly gone) is given everything it
+   has: the other apps left open in the background are closed, through the Channel, once for the film. A TV that keeps up
+   is never touched. Only apps are closed (never this one, the home screen or the TV's own services); nothing is changed
+   that needs putting back */
+#ifndef SB_ANDROID
+static void *boost_job(void *ud) {
+  (void)ud; int closed = 0;
+  cJSON *o = sh("luna-send -n 1 -f luna://com.webos.applicationManager/running '{}'"); const cJSON *arr = o ? cJSON_GetObjectItemCaseSensitive(o, "running") : NULL, *a;
+  if (cJSON_IsArray(arr)) cJSON_ArrayForEach(a, arr) { const cJSON *id = cJSON_GetObjectItemCaseSensitive(a, "id"); if (!cJSON_IsString(id)) continue; const char *s = id->valuestring;
+    if (!strcmp(s, SB_APP_ID) || !clean(s) || strpbrk(s, " \"{}[],:") || strstr(s, "home") || strstr(s, "launcher") || strstr(s, "hbchannel") || strstr(s, "com.webos.service") || strstr(s, "inputcommon") || strstr(s, "livetv")) continue;
+    char cmd[400]; snprintf(cmd, sizeof cmd, "luna-send -n 1 luna://com.webos.applicationManager/closeByAppId '{\"id\":\"%s\"}'", s); cJSON *r = sh(cmd); if (r && cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(r, "returnValue"))) closed++; cJSON_Delete(r); }
+  cJSON_Delete(o); fprintf(stderr, "[boost] %d background app(s) closed for this stream\n", closed);
+  return NULL;
+}
+#endif
+void tvtune_boost(void) {
+#ifndef SB_ANDROID
+  pthread_mutex_lock(&mu); int a = avail; pthread_mutex_unlock(&mu); if (a == 0) return; /* (no root here: nothing it can do) */
+  spawn(boost_job, NULL);
+#endif
+}
 int tvtune_state(void) { pthread_mutex_lock(&mu); int a = avail; pthread_mutex_unlock(&mu); return a; }
 static void recover(void) {
   cJSON *s = store_node(SAVED), *o = store_node(SAVED_OLD);

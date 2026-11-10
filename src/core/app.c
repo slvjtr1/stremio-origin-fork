@@ -18,6 +18,8 @@
 #include "ui/text.h"
 #include "ui/img.h"
 #include "ui/icon.h"
+#include "screens/settings.h"
+#include "core/downloads.h"
 #include "ui/palette.h"
 #include "screens/player.h"
 #include "screens/saver.h"
@@ -137,11 +139,12 @@ static const uint32_t ACCENTS[18][4] = {
   { 0x6366f1, 0xa5b4fc, 0xc7d2fe, 0x4338ca },
   { 0x9aa3b5, 0xd3d8e2, 0xeef0f4, 0x525a6c } }; /* (round the wheel, then graphite: a cool glassy grey; purple, the first, is the dynamic modes' default) */
 #define ACC_DEFAULT (UI_NOIR ? ACCENTS[8] : ACCENTS[0])
-int UI_NOIR = 1, UI_TONE, UI_CORNER;
+int UI_NOIR = 1, UI_TONE, UI_CORNER, UI_GLASS;
 void theme_apply(void) {
   UI_NOIR = strcmp(store_get("theme", "noir"), "classic") != 0;
   const char *t = store_get("themeTone", "black"), *c = store_get("cardCorner", "round");
   UI_TONE = !strcmp(t, "graphite") ? 1 : !strcmp(t, "midnight") ? 2 : 0; UI_CORNER = !strcmp(c, "soft") ? 1 : !strcmp(c, "square") ? 2 : 0;
+  UI_GLASS = !strcmp(store_get("glass", "false"), "true");
   icon_set_modern(UI_NOIR);
 }
 uint32_t ui_page(void) { return !UI_NOIR ? RGB(12, 11, 17) : UI_TONE == 1 ? RGB(20, 20, 22) : UI_TONE == 2 ? RGB(6, 9, 17) : RGB(8, 8, 9); }
@@ -498,7 +501,9 @@ static void chip_act(int i, int b) { (void)b; Scr tg = chipScr(i); Scr cur = (SC
    gold block that glides between them, the page shown underlined in gold; no glass (nothing read back, nothing baked) ---- */
 #define NB_Y 52.0f /* the bar's middle */
 static void noir_layout(void) {
-  int rtl = app_rtl(); float x = 48; /* the icons, then a hairline, then the tabs from the start side */
+  int rtl = app_rtl(); float tot = 2 * (64 + 12) + 28; /* the icons, a hairline, the tabs: one group in the middle of the screen */
+  for (int i = NAV_DISC; i <= app_nav_last(); i++) tot += text_width(chipLabel(i), 30, 700, 0.2f) + 44 + 8;
+  float x = (SB_W - (tot - 8)) / 2;
   for (int i = NAV_SET; i <= NAV_SEARCH; i++) { topNav.chipX[i] = rtl ? SB_W - x - 64 : x; topNav.chipW[i] = 64; x += 64 + 12; }
   x += 28;
   for (int i = NAV_DISC; i <= app_nav_last(); i++) { float w = text_width(chipLabel(i), 30, 700, 0.2f) + 44; topNav.chipX[i] = rtl ? SB_W - x - w : x; topNav.chipW[i] = w; x += w + 8; }
@@ -974,7 +979,7 @@ void app_refresh_boards(void) { extern void board_invalidate(void); extern void 
 void app_init(void) {
   vig_tex(0); vig_tex(1); /* both shadings made at start: the first title page would make its own mid-zoom */
   topNav.want = -1; NOW = SDL_GetTicks() / 1000.0; lastIn = NOW; lastNav = NOW; bgMode = 0; tween_set(&toastA, 0);
-  theme_apply(); accent_apply(); accent_tick(0); sync_init(); btr_init();
+  settings_lite_defaults(); theme_apply(); accent_apply(); accent_tick(0); sync_init(); btr_init();
 }
 static void amb_bake(void);
 float anim_speed = 0.83f;
@@ -982,7 +987,7 @@ float anim_speed = 0.83f;
 int app_reduce_motion(void) { static unsigned ser = ~0u; static int on; if (store_serial() != ser) { ser = store_serial(); on = !strcmp(store_get("reduceMotion", "false"), "true"); anim_speed = on ? 0.3f : 0.83f; } return on; }
 void app_tick(float dt) {
   app_reduce_motion(); /* (the knob follows the setting) */
-  tvtune_tick(); accounts_tick();
+  tvtune_tick(); accounts_tick(); dl_pump();
   { static unsigned ss; if (store_serial() != ss) { ss = store_serial(); sub_sdh_hide = strcmp(store_get("subsNoSdh", "true"), "false") != 0; } } /* Settings > Subtitles > Hide sound descriptions */
   DT = dt; NOW = SDL_GetTicks() / 1000.0; FRAME++;
   ptr_frame(); ptr_idle();

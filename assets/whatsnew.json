@@ -1,25 +1,25 @@
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "items": [
     {
       "icon": "set_look",
-      "title": "A new look: Modern",
-      "text": "Black and gold, flat and light, with new line icons and the tabs across the top. Classic stays in Settings, Appearance, Theme."
+      "title": "Lightweight",
+      "text": "A simpler Stremio Origin: one clean black and gold look, the tabs in the middle of the top bar, and a short list of settings."
     },
     {
       "icon": "check",
-      "title": "The right episode, clean sources",
-      "text": "Fake files, programs and sources of another episode are left out, and a pack plays the episode you opened."
+      "title": "Set up for you",
+      "text": "Subtitles in sync, white and easy to read, sources cleaned, the best match first: all on from the start, nothing to adjust."
     },
     {
-      "icon": "play",
-      "title": "Play starts sooner",
-      "text": "The best stream is chosen as soon as a good one is there, addons answer side by side, and a real upscale joins Settings."
+      "icon": "saved",
+      "title": "Downloads",
+      "text": "With a USB drive in the TV, the yellow key on a stream keeps the film or episode on it. Its size and the drive's room are checked first."
     },
     {
-      "icon": "restart",
-      "title": "Safer and lighter",
-      "text": "A smaller app that keeps to itself on your network, and takes its updates only from this project."
+      "icon": "search_box",
+      "title": "The TV's keyboard in Search",
+      "text": "Go up to the search bar and press OK to type with the TV's own keyboard."
     }
   ],
   "support": {
