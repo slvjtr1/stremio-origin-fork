@@ -501,11 +501,11 @@ static void chip_act(int i, int b) { (void)b; Scr tg = chipScr(i); Scr cur = (SC
    gold block that glides between them, the page shown underlined in gold; no glass (nothing read back, nothing baked) ---- */
 #define NB_Y 52.0f /* the bar's middle */
 static void noir_layout(void) {
-  int rtl = app_rtl(); float tot = 2 * (64 + 12) + 28; /* the icons, a hairline, the tabs: one group in the middle of the screen */
+  int rtl = app_rtl(); float tot = 0, x = 48; /* Settings and Search at the start edge; the tabs alone in the middle of the screen */
   for (int i = NAV_DISC; i <= app_nav_last(); i++) tot += text_width(chipLabel(i), 30, 700, 0.2f) + 44 + 8;
-  float x = (SB_W - (tot - 8)) / 2;
   for (int i = NAV_SET; i <= NAV_SEARCH; i++) { topNav.chipX[i] = rtl ? SB_W - x - 64 : x; topNav.chipW[i] = 64; x += 64 + 12; }
-  x += 28;
+  x = (SB_W - (tot - 8)) / 2;
+
   for (int i = NAV_DISC; i <= app_nav_last(); i++) { float w = text_width(chipLabel(i), 30, 700, 0.2f) + 44; topNav.chipX[i] = rtl ? SB_W - x - w : x; topNav.chipW[i] = w; x += w + 8; }
   topNav.laidOut = 1;
 }
@@ -526,7 +526,7 @@ static void noir_icon(int i, const char *icon, uint32_t key, float rot) {
 }
 static void noir_bar(float nx, float ny) {
   int rtl = app_rtl();
-  { float sx = rtl ? topNav.chipX[NAV_SEARCH] - 20 : topNav.chipX[NAV_SEARCH] + 64 + 20; gfx_rect(sx, NB_Y - 18, 1.5f, 36, WHITE_A(40)); } /* the icons and the tabs set apart */
+
   /* the focus: one gold block, gliding from tab to tab */
   float pa = topNav.pill.v;
   if (pa > 0.001f) { gfx_opacity_push(pa); gfx_offset_push(nx, ny); gfx_rrect(topNav.px.v, NB_Y - 29, topNav.pw.v, 58, 12, ACC | 0xff000000u); gfx_offset_pop(); gfx_opacity_pop(); }
