@@ -35,7 +35,6 @@
 #else
 #define VOICE_KEY 0
 #endif
-#include "core/castlink.h"
 #include "platform/plat.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
@@ -138,8 +137,21 @@ static const uint32_t ACCENTS[18][4] = {
   { 0x6366f1, 0xa5b4fc, 0xc7d2fe, 0x4338ca },
   { 0x9aa3b5, 0xd3d8e2, 0xeef0f4, 0x525a6c } }; /* (round the wheel, then graphite: a cool glassy grey; purple, the first, is the dynamic modes' default) */
 #define ACC_DEFAULT (UI_NOIR ? ACCENTS[8] : ACCENTS[0])
-int UI_NOIR = 1;
-void theme_apply(void) { UI_NOIR = strcmp(store_get("theme", "noir"), "classic") != 0; }
+int UI_NOIR = 1, UI_TONE, UI_CORNER;
+void theme_apply(void) {
+  UI_NOIR = strcmp(store_get("theme", "noir"), "classic") != 0;
+  const char *t = store_get("themeTone", "black"), *c = store_get("cardCorner", "round");
+  UI_TONE = !strcmp(t, "graphite") ? 1 : !strcmp(t, "midnight") ? 2 : 0; UI_CORNER = !strcmp(c, "soft") ? 1 : !strcmp(c, "square") ? 2 : 0;
+  icon_set_modern(UI_NOIR);
+}
+uint32_t ui_page(void) { return !UI_NOIR ? RGB(12, 11, 17) : UI_TONE == 1 ? RGB(20, 20, 22) : UI_TONE == 2 ? RGB(6, 9, 17) : RGB(8, 8, 9); }
+uint32_t ui_tint(int r, int g, int b, int a) {
+  if (!UI_NOIR) return RGBA(r, g, b, a);
+  int m = (r + g) / 2;
+  if (UI_TONE == 1) return RGBA(m + 10, m + 10, m + 12, a);
+  if (UI_TONE == 2) return RGBA(m > 3 ? m - 3 : 0, m, m + 10, a);
+  return RGBA(m, m, m, a);
+}
 const uint32_t *settings_accent_rgb(int i) { return ACCENTS[i < 0 ? 0 : i > 17 ? 17 : i]; }
 static const uint32_t TINT_GREY[4] = { 0x9aa6bd, 0xc1c9d8, 0xe1e5ee, 0x5d6880 };
 static uint32_t accFrom[5], accTo[5]; static Timer1 accFade; static int accSet;
@@ -962,7 +974,7 @@ void app_refresh_boards(void) { extern void board_invalidate(void); extern void 
 void app_init(void) {
   vig_tex(0); vig_tex(1); /* both shadings made at start: the first title page would make its own mid-zoom */
   topNav.want = -1; NOW = SDL_GetTicks() / 1000.0; lastIn = NOW; lastNav = NOW; bgMode = 0; tween_set(&toastA, 0);
-  theme_apply(); accent_apply(); accent_tick(0); sync_init(); btr_init(); castlink_start();
+  theme_apply(); accent_apply(); accent_tick(0); sync_init(); btr_init();
 }
 static void amb_bake(void);
 float anim_speed = 0.83f;
@@ -987,7 +999,6 @@ void app_tick(float dt) {
   lift_tick(dt); tabs_warm_tick();
   { static int greeted; if (!greeted && app_splash_done) { greeted = 1; sound_play(SND_START); } } /* start-up: one very faint sound */
   { static int wasP; int po = player_open(); if (po != wasP) { wasP = po; if (po) sound_play(SND_PLAY); sound_quiet(po); } } /* into the player: one faint sound, then the film has the audio alone */
-  castlink_tick(dt); /* (a phone drives the film too: before the app rests under it) */
   player_tick(dt); if (player_open() && player_cover() >= 0.999f) return; /* the app rests while the film plays (not while the player fades over it or away from it) */
   if (screens[SCR] && screens[SCR]->tick) screens[SCR]->tick(dt);
   /* every overlay that has shown keeps ticking after it lets go (its closing motion plays out, and its state settles:

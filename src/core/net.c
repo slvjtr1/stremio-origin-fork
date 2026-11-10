@@ -82,16 +82,22 @@ static Req *queue, *queueTail, *slowQ, *slowTail, *finished, *inflight[11], *fqu
 static pthread_cond_t slowCv = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t fcv = PTHREAD_COND_INITIALIZER;
 static unsigned nextId = 1; static int npending;
-#define WORKERS 11  /* 0-4 take the quick requests (catalogs, details, the account); 5-10 the slow ones (stream addons, up to
+#define WORKERS 15  /* 0-4 take the quick requests (catalogs, details, the account); 5-14 the slow ones (stream addons, up to
                        45 s each): details never wait behind a debrid addon thinking */
 #define SLOW0 5
 
+/* an address or a redirect never leaves the web (no file://, ftp://, gopher://... whatever an addon answers), and an
+   answer kept in memory has an end: nothing the app reads this way is near it, and a TV has little to spare */
+#define WEB_ONLY ((long)(CURLPROTO_HTTP | CURLPROTO_HTTPS))
+#define BODY_MAX ((size_t)48 << 20)
 static size_t on_data(char *p, size_t s, size_t n, void *ud) {
   Req *r = ud; size_t add = s * n;
   if (r->cancelled) return 0;
-  if (r->len + add + 1 > r->cap) { r->cap = (r->len + add + 1) * 2; r->body = realloc(r->body, r->cap); }
+  if (r->len + add > BODY_MAX) { fprintf(stderr, "[net] an answer past %u MB is not read on\n", (unsigned)(BODY_MAX >> 20)); return 0; }
+  if (r->len + add + 1 > r->cap) { size_t nc = (r->len + add + 1) * 2; unsigned char *nb = realloc(r->body, nc); if (!nb) return 0; r->body = (void *)nb; r->cap = nc; }
   memcpy(r->body + r->len, p, add); r->len += add; r->body[r->len] = 0; return add;
 }
+static int on_progress(void *ud, curl_off_t dt, curl_off_t dn, curl_off_t ut, curl_off_t un) { (void)dt; (void)dn; (void)ut; (void)un; return ((Req *)ud)->cancelled; }
 /* net_size: "Content-Range: bytes 0-0/<total>" (a 200 instead: its Content-Length); each redirect starts over */
 static size_t on_header(char *p, size_t s, size_t n, void *ud) {
   Req *r = ud; size_t len = s * n; char h[256]; size_t k = len < sizeof h - 1 ? len : sizeof h - 1; memcpy(h, p, k); h[k] = 0;
@@ -134,7 +140,8 @@ static void perform(Req *r, int slot) {
   if (!c) { r->status = 0; return; } int kept = c == (slot >= 0 && slot < WORKERS ? handles[slot] : NULL);
   struct curl_slist *hs = NULL, *pin = ts_pin(c, r->url);
   f_easy_setopt(c, CURLOPT_URL, r->url); f_easy_setopt(c, CURLOPT_WRITEFUNCTION, on_data); f_easy_setopt(c, CURLOPT_WRITEDATA, r);
-  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+  f_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, on_progress); f_easy_setopt(c, CURLOPT_XFERINFODATA, r); f_easy_setopt(c, CURLOPT_NOPROGRESS, 0L); /* a cancelled request lets go of its worker at once, not when a slow addon finally answers */
+  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 8000L); f_easy_setopt(c, CURLOPT_TIMEOUT_MS, r->timeoutMs > 0 ? r->timeoutMs : 20000L);
   f_easy_setopt(c, CURLOPT_TCP_NODELAY, 1L); f_easy_setopt(c, CURLOPT_TCP_KEEPALIVE, 1L); f_easy_setopt(c, CURLOPT_DNS_CACHE_TIMEOUT, 600L); f_easy_setopt(c, CURLOPT_BUFFERSIZE, 256L * 1024);
   f_easy_setopt(c, CURLOPT_USERAGENT, ua()); if (!r->size) f_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
@@ -317,7 +324,7 @@ unsigned char *net_fetch_sync_hdr(const char *url, const char *hdr, size_t *len,
   CURL *c = f_easy_init(); if (!c) { *status = 0; *len = 0; return NULL; }
   struct curl_slist *hs = hdr ? f_slist_append(NULL, hdr) : NULL, *pin = ts_pin(c, url); if (hs) f_easy_setopt(c, CURLOPT_HTTPHEADER, hs);
   f_easy_setopt(c, CURLOPT_URL, url); f_easy_setopt(c, CURLOPT_WRITEFUNCTION, on_data); f_easy_setopt(c, CURLOPT_WRITEDATA, &r);
-  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 8000L); f_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)timeoutMs);
   f_easy_setopt(c, CURLOPT_USERAGENT, ua()); f_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
   if (caPath[0]) f_easy_setopt(c, CURLOPT_CAINFO, caPath);
@@ -337,7 +344,7 @@ int net_stream_sync(const char *url, int timeoutMs, NetSink sink, void *ud) {
   StreamCtx x = { sink, ud, 0 };
   f_easy_setopt(c, CURLOPT_URL, url); f_easy_setopt(c, CURLOPT_WRITEFUNCTION, stream_data); f_easy_setopt(c, CURLOPT_WRITEDATA, &x);
   f_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, stream_poll); f_easy_setopt(c, CURLOPT_XFERINFODATA, &x); f_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
-  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 8000L); f_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)timeoutMs);
   f_easy_setopt(c, CURLOPT_USERAGENT, ua()); /* no Accept-Encoding: the bytes counted are the bytes that crossed the line */
   if (caPath[0]) f_easy_setopt(c, CURLOPT_CAINFO, caPath);
@@ -359,7 +366,7 @@ int net_pipe_sync(const char *url, const char *headers, int head, NetHdrSink hs,
   f_easy_setopt(c, CURLOPT_URL, url); f_easy_setopt(c, CURLOPT_HEADERFUNCTION, pipe_hdr); f_easy_setopt(c, CURLOPT_HEADERDATA, &x);
   f_easy_setopt(c, CURLOPT_WRITEFUNCTION, pipe_data); f_easy_setopt(c, CURLOPT_WRITEDATA, &x);
   f_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, pipe_poll); f_easy_setopt(c, CURLOPT_XFERINFODATA, &x); f_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
-  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_MAXREDIRS, 8L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 10000L); f_easy_setopt(c, CURLOPT_LOW_SPEED_LIMIT, 1L); f_easy_setopt(c, CURLOPT_LOW_SPEED_TIME, (long)(stallSec > 0 ? stallSec : 60));
   f_easy_setopt(c, CURLOPT_USERAGENT, "Mozilla/5.0 (Web0S; Linux) StremioOrigin"); /* a User-Agent among the headers replaces it */
   f_easy_setopt(c, CURLOPT_BUFFERSIZE, 512L * 1024); /* the video arrives in big reads (curl's own 16 KB: many more wake-ups for the same bytes) */
@@ -406,7 +413,7 @@ int net_range_get(NetRange *h, const char *url, long long start, long len, unsig
   f_easy_setopt(c, CURLOPT_URL, url); f_easy_setopt(c, CURLOPT_RANGE, rg);
   f_easy_setopt(c, CURLOPT_HEADERFUNCTION, range_hdr); f_easy_setopt(c, CURLOPT_HEADERDATA, &r);
   f_easy_setopt(c, CURLOPT_WRITEFUNCTION, range_data); f_easy_setopt(c, CURLOPT_WRITEDATA, &r);
-  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_MAXREDIRS, 5L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+  f_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L); f_easy_setopt(c, CURLOPT_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS, WEB_ONLY); f_easy_setopt(c, CURLOPT_MAXREDIRS, 5L); f_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
   f_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 8000L); f_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)timeoutMs);
   f_easy_setopt(c, CURLOPT_USERAGENT, "Mozilla/5.0 (Web0S; Linux) StremioOrigin"); f_easy_setopt(c, CURLOPT_TCP_KEEPALIVE, 1L);
   if (caPath[0]) f_easy_setopt(c, CURLOPT_CAINFO, caPath);

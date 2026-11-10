@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.5.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
+    implementation("androidx.media3:media3-effect:1.5.1")   // Upscale: frames through the graphics chip (OriginSharp)
     implementation("org.videolan.android:libvlc-all:3.6.2")   // the second player (OriginVlc): what ExoPlayer can't play here
 }
 

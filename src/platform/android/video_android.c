@@ -14,7 +14,7 @@
 #include <string.h>
 
 static jclass cls; static char err[256];
-static jmethodID mPass, mLoad, mUnload, mPlay, mPause, mSeek, mVolume, mWindow, mPos, mDur, mBuf, mState, mW, mH, mErr, mTracks, mAudCur, mSelAud, mFps, mHdr, mUnsup;
+static jmethodID mUp, mPass, mLoad, mUnload, mPlay, mPause, mSeek, mVolume, mWindow, mPos, mDur, mBuf, mState, mW, mH, mErr, mTracks, mAudCur, mSelAud, mFps, mHdr, mUnsup;
 
 static JNIEnv *env(void) { return (JNIEnv *)SDL_AndroidGetJNIEnv(); }
 static int ex(JNIEnv *e) { if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionDescribe(e); (*e)->ExceptionClear(e); return 1; } return 0; }
@@ -37,7 +37,7 @@ int video_init(const char *appId) {
   M(mW, "width", "()I"); M(mH, "height", "()I"); M(mErr, "error", "()Ljava/lang/String;");
   M(mTracks, "audioTracks", "()Ljava/lang/String;"); M(mAudCur, "audioCurrent", "()I"); M(mSelAud, "selectAudio", "(I)V");
   M(mFps, "fps", "()F"); M(mHdr, "hdr", "()Ljava/lang/String;"); M(mUnsup, "audioUnsupported", "()I");
-  M(mPass, "passthrough", "(Z)V");
+  M(mPass, "passthrough", "(Z)V"); M(mUp, "upscale", "(I)V");
 #undef M
   return 1;
 }
@@ -53,6 +53,7 @@ static int calls(jmethodID m, char *out, size_t cap) { /* a String method, copie
 
 void video_load(const char *url) {
   JNIEnv *e = env(); if (!cls) return; err[0] = 0;
+  { const char *u = store_get("gpuUpscale", "off"); (*e)->CallStaticVoidMethod(e, cls, mUp, (jint)(!strcmp(u, "high") ? 3 : !strcmp(u, "medium") ? 2 : !strcmp(u, "low") ? 1 : 0)); ex(e); } /* Settings › Playback › Upscale */
   (*e)->CallStaticVoidMethod(e, cls, mPass, (jboolean)!strcmp(store_get("audioPassthrough", "false"), "true")); ex(e); /* Dolby and DTS: decoded by the TV, or sent as they are (Settings › Audio) */
   jstring s = (*e)->NewStringUTF(e, url); (*e)->CallStaticVoidMethod(e, cls, mLoad, s); (*e)->DeleteLocalRef(e, s); ex(e);
 }

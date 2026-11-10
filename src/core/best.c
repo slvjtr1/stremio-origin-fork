@@ -475,6 +475,11 @@ static void decide(int force) {
   if (!F.done && !force && el < 12) return;
   const Stream **l = F.n ? malloc(F.n * sizeof *l) : NULL; int nl = 0; for (int i = 0; i < F.n; i++) if (!was_skipped(&F.all[i])) l[nl++] = &F.all[i]; /* never one that just failed */
   BestRate r; const Stream *b = best_pick(l, nl, F.dur, NULL, -1, &r); free(l);
+  if (force == 2) { /* some addons still answering: a file that starts at once (debrid, direct) is taken after 4 s when at most one addon
+    is left (7 s otherwise); a torrent after 8 s when one is left. Before, every Play waited the full 12 s for the slowest addon */
+    if (!b || F.done) return; int direct = !b->p2p;
+    if (!(direct ? el >= (F.wait <= 1 ? 4 : 7) : (F.wait == 1 && el >= 8))) return;
+    fprintf(stderr, "[best] chosen early at %.1f s, %d addon(s) still answering\n", el, F.wait); }
   if (!b) { if (!F.done && el < 30) return; F.fin = 1; BestDoneCb cb = F.cb; void *ud = F.ud; fprintf(stderr, "[best] nothing suits this TV (%d streams)\n", F.n); flow_end(); if (cb) cb(NULL, NULL, ud); return; }
   F.fin = 1; char info[2048]; best_stream_info(b, info, sizeof info); if (strlen(info) > 160) info[160] = 0; fprintf(stderr, "[best] %s | %s\n", r.sum, info);
   if (F.status) F.status(r.sum, F.ud);
@@ -510,6 +515,7 @@ void best_tick(void) {
   if (sr) speed_landed(sok, mb);
   if (F.on) { double el = app_now() - F.t0;
     if (!F.said3 && el >= 3) { F.said3 = 1; say(); }
+    { static double lastEarly; if (F.on && !F.fin && !F.done && F.n && el >= 4 && el < 12 && app_now() - lastEarly >= 0.5) { lastEarly = app_now(); decide(2); } }
     if (F.on && !F.t12 && el >= 12.1) { F.t12 = 1; decide(0); }
     if (F.on && !F.t30 && el >= 30.1) { F.t30 = 1; decide(1); } }
 }

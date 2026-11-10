@@ -22,7 +22,8 @@ float meta_draw_p(const MetaParts *p, float x, float y, uint32_t color, int alig
 /* a poster card (264x396) or a wide Continue Watching card (430x242). label: the title under the art (library rows) */
 #define CARD_W 264
 #define CARD_H 396
-#define CARD_R 14
+extern int UI_CORNER; /* Settings › Appearance › Card corners */
+#define CARD_R (UI_CORNER == 2 ? 3 : UI_CORNER == 1 ? 8 : 14)
 #define WIDE_W 430
 #define WIDE_H 242
 #define CARD_GAP 24

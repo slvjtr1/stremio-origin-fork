@@ -3,7 +3,7 @@
 #include <math.h>
 #include <string.h>
 
-#define SHEET (UI_NOIR ? RGB(0x15, 0x15, 0x16) : RGB(0x16, 0x14, 0x1d))
+#define SHEET TINT(0x16, 0x14, 0x1d, 255)
 /* the black and gold theme: every surface flat (a solid near-black, a hairline edge; the accent solid gold), nothing
    baked, blurred or read back: lighter on the TV's GPU */
 #define NOIR_EDGE WHITE_A(26)

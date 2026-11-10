@@ -94,8 +94,10 @@ static unsigned char *rasterise_stroke(Shape *sh, float vb, int px, float sw) {
 
 /* ---- the icon set ---- */
 typedef struct { char name[32]; char *d; float vb, stroke; } IconDef;
-#define MAXDEFS 128
+#define MAXDEFS 192
 static IconDef defs[MAXDEFS]; static int ndefs;
+static short alt[MAXDEFS]; static int modern; /* alt: a name's "m_" twin (-1 none) */
+void icon_set_modern(int on) { modern = on; }
 int icon_exists(const char *name);
 typedef struct { int def, px, rot; AtlasSlot slot; GLuint own; unsigned use; } Cached; /* in the shared pages, or a texture of its own when they are full */
 static Cached cache[192]; static int ncache; static unsigned useTick;
@@ -118,6 +120,7 @@ int icon_init(const char *dir) {
     if (n <= 11 || strncmp(e->d_name, "icons.", 6) || strcmp(e->d_name + n - 5, ".json")) continue;
     snprintf(p, sizeof p, "%s/%s", dir, e->d_name); icon_load(p); }
   if (dd) closedir(dd);
+  for (int i = 0; i < ndefs; i++) { alt[i] = -1; char m[40]; snprintf(m, sizeof m, "m_%s", defs[i].name); for (int k = 0; k < ndefs; k++) if (!strcmp(defs[k].name, m)) { alt[i] = (short)k; break; } }
   return 1;
 }
 int icon_exists(const char *name) { for (int i = 0; i < ndefs; i++) if (!strcmp(defs[i].name, name)) return 1; return 0; }
@@ -143,6 +146,7 @@ static Cached *icon_get(int def, int px, int rot) {
 void icon_draw_rot(const char *name, float x, float y, float size, uint32_t color, float deg) {
   int def = -1; for (int i = 0; i < ndefs; i++) if (!strcmp(defs[i].name, name)) { def = i; break; }
   if (def < 0) return;
+  if (modern && alt[def] >= 0) def = alt[def];
   int px = (int)(size * gfx_scale() + 0.5f); if (px < 4) px = 4; if (px > 512) px = 512;
   /* one picture per size, turned by the GPU (a picture per 6-degree step was a rasterised icon every few frames of a turn) */
   /* a size on the move (a zoom, a press) would be a new picture every frame, each made on the CPU: while it moves, the

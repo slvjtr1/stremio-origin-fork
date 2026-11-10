@@ -127,7 +127,7 @@ static void load_(Img *im) {
   char key[2048]; snprintf(key, sizeof key, "img:%s", im->src);
   size_t len = 0; unsigned char *data = cache_read(key, 14 * 86400, &len);
   int fromNet = 0;
-  if (!data && !strncmp(im->src, "file://", 7)) { FILE *f = fopen(im->src + 7, "rb"); if (f) { fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET); if (n > 0) { data = malloc(n); len = fread(data, 1, n, f); } fclose(f); } } /* a bundled picture */
+  if (!data && !strncmp(im->src, "file://", 7)) { const char *ad = plat_asset_dir(); size_t al = strlen(ad); FILE *f = al && !strncmp(im->src + 7, ad, al) && !strstr(im->src, "/../") ? fopen(im->src + 7, "rb") : NULL; /* the app's own pictures only: never a file an addon names */ if (f) { fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET); if (n > 0) { data = malloc(n); len = fread(data, 1, n, f); } fclose(f); } } /* a bundled picture */
   else if (!data) { int st; data = net_fetch_sync(im->src, &len, &st, 20000); fromNet = 1; }
   if (!data || len < 64) { fprintf(stderr, "[img] failed %s\n", im->src); free(data); im->fails++; im->failAt = mono_s(); im->state = 3; return; }
   dec_enter(); decode_part(im, data, len, fromNet, key); dec_leave();

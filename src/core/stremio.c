@@ -1,3 +1,4 @@
+#include "core/srcfilter.h"
 #include "core/stremio.h"
 #include "core/tmdbcat.h"
 #include "core/tmdb.h"
@@ -712,14 +713,30 @@ static int stream_parse(Stream *o, const cJSON *s, const char *addon) {
   const cJSON *subs = js_arr(s, "subtitles"); o->nsubs = subs ? cJSON_GetArraySize(subs) : 0; if (o->nsubs) stream_subs_keep(o->url[0] ? o->url : o->ext, subs, addon);
   return 1;
 }
-typedef struct { unsigned tok; int pending, total, cancelled, count; StreamPartCb part; StreamDoneCb done; StreamAnsCb ans; void *ud; cJSON *own; } StreamReq;
+typedef struct { unsigned tok; int pending, total, cancelled, count; StreamPartCb part; StreamDoneCb done; StreamAnsCb ans; void *ud; cJSON *own; int clean, series, season, episode; } StreamReq;
 typedef struct { StreamReq *req; int idx; char name[96]; } StreamPart;
 static unsigned streamTok;
+/* Clean sources: programs, archives and too-small files go; for an episode, the sources that name another one go too
+   (unless every source of the addon does: it numbers the series its own way, and is believed). A torrent's address
+   carries the episode, so the right file of a pack is the one played */
+static void streams_clean(StreamGroup *g, const StreamReq *r) {
+  signed char *v = calloc(g->n ? g->n : 1, 1); int hit = 0, miss = 0, out = 0, k = 0;
+  for (int i = 0; i < g->n; i++) { Stream *x = &g->items[i]; if (x->ext[0] && !x->url[0]) continue;
+    if (src_junk(x->name, x->title, x->filename, x->size, r->series)) { v[i] = 2; continue; }
+    if (r->season > 0) { char t[1100]; snprintf(t, sizeof t, "%s\n%s", x->title, x->filename); v[i] = (signed char)src_episode_verdict(t, r->season, r->episode); hit += v[i] > 0; miss += v[i] < 0; } }
+  int believe = !hit && miss == g->n && g->n >= 3;
+  for (int i = 0; i < g->n; i++) { if (v[i] == 2 || (v[i] < 0 && !believe)) { out++; continue; }
+    Stream *x = &g->items[i]; if (x->p2p && r->season > 0) { size_t l = strlen(x->url); if (l + 24 < sizeof x->url) snprintf(x->url + l, sizeof x->url - l, "%sse=%d.%d", x->url[l - 1] == '?' ? "" : "&", r->season, r->episode); }
+    if (k != i) g->items[k] = *x; k++; }
+  if (out) fprintf(stderr, "[streams] %s: %d of %d source(s) left out (not a video, or another episode)\n", g->name, out, g->n);
+  g->n = k; free(v);
+}
 static void streams_answer(StreamPart *p, const cJSON *arr) {
   StreamReq *r = p->req; const cJSON *s;
   StreamGroup g; copy_str(g.name, sizeof g.name, p->name); int na = arr ? cJSON_GetArraySize(arr) : 0; if (!r->ans && na > 40) na = 40; /* the best-stream pick reads all of them, as the web does: a 4K-first addon lists its 1080p files late */
   g.items = calloc(na ? na : 1, sizeof(Stream)); g.n = 0;
   if (arr) cJSON_ArrayForEach(s, arr) { if (g.n >= na) break; if (stream_parse(&g.items[g.n], s, p->name)) g.n++; }
+  if (r->clean) streams_clean(&g, r);
   r->total += g.n; if (g.n) r->part(&g, p->idx, r->ud); else free(g.items);
 }
 static void stream_part_done(StreamPart *p) {
@@ -755,6 +772,7 @@ int sb_stream_addons(const char *type, const char *vid, char (*names)[96], int m
 /* only >= 0: that one of the addons serving the video (in the user's order), alone */
 static unsigned streams_req(const char *type, const char *vid, int only, StreamPartCb part, StreamDoneCb done, StreamAnsCb ans, void *ud) {
   cJSON *a = sb_addons(); StreamReq *r = calloc(1, sizeof *r); r->tok = ++streamTok; r->part = part; r->done = done; r->ans = ans; r->ud = ud;
+  r->clean = strcmp(store_get("cleanSources", "true"), "false") != 0; r->series = type && !strcmp(type, "series"); if (r->series && !src_vid_episode(vid, &r->season, &r->episode)) r->season = r->episode = 0;
   const cJSON *own = video_streams(type, vid);
   if (own && only > 0) own = NULL, a = NULL; /* (its own list is the one group) */
   if (own) { r->own = cJSON_Duplicate(own, 1); StreamPart *p = calloc(1, sizeof *p); p->req = r; copy_str(p->name, sizeof p->name, T("This title")); r->pending = r->count = 1;

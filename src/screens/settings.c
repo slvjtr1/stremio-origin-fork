@@ -51,7 +51,8 @@ static const Opt SVOL[] = { { "10", "10%" }, { "20", "20%" }, { "30", "30%" }, {
 static const Opt LANG_OPTS[] = { { "", "Off" }, { "eng", "English" }, { "ara", "Arabic" }, { "fre", "French" }, { "spa", "Spanish" }, { "ger", "German" }, { "ita", "Italian" }, { "por", "Portuguese" }, { "rus", "Russian" }, { "tur", "Turkish" }, { "pol", "Polish" }, { "dut", "Dutch" }, { "swe", "Swedish" }, { "heb", "Hebrew" }, { "hin", "Hindi" }, { "jpn", "Japanese" }, { "kor", "Korean" }, { "chi", "Chinese" } };
 static const Opt SEEK[] = { { "5", "5s" }, { "10", "10s" }, { "15", "15s" }, { "20", "20s" }, { "30", "30s" } };
 static const Opt AUDL[] = { { "orig", "Original language" }, { "eng", "English" }, { "ara", "Arabic" }, { "jpn", "Japanese" }, { "fre", "French" }, { "spa", "Spanish" }, { "ger", "German" }, { "ita", "Italian" }, { "por", "Portuguese" }, { "rus", "Russian" }, { "tur", "Turkish" }, { "pol", "Polish" }, { "dut", "Dutch" }, { "swe", "Swedish" }, { "heb", "Hebrew" }, { "hin", "Hindi" }, { "kor", "Korean" }, { "chi", "Chinese" } };
-static const Opt UPL[] = { { "off", "Off" }, { "C", "C" }, { "B", "B" }, { "A", "A: the strongest" } };
+static const Opt UPL[] = { { "off", "Off" }, { "C", "Low" }, { "B", "Medium" }, { "A", "High" } };
+static const Opt GUPL[] = { { "off", "Off" }, { "low", "Low" }, { "medium", "Medium" }, { "high", "High" } };
 static const Opt DTSM[] = { { "auto", "Auto" }, { "convert", "Convert" }, { "off", "Off" } }; /* DTS sound: found out by playing, always converted, or left to the TV */
 static const Opt ASPECT[] = { { "fit", "Original" }, { "fill", "Fill the screen" }, { "zoom", "Zoom" } };
 static const Opt SIZES[] = { { "0", "72%" }, { "1", "80%" }, { "2", "100%" }, { "3", "120%" }, { "4", "140%" }, { "5", "160%" }, { "6", "180%" } };
@@ -70,11 +71,13 @@ static const Opt SKIPO[] = { { "button", "Show a button" }, { "auto", "Automatic
 static const Opt CLOCKO[] = { { "24", "24-hour" }, { "12", "12-hour" } };
 static const Opt HROWS[] = { { "8", "8" }, { "12", "12" }, { "16", "16" }, { "24", "24" } }; /* the addons' catalogs on Home (stremio.c: home_rows) */
 static const Opt APPICON[] = { { "origin", "Origin" }, { "classic", "Classic" } };
-static const Opt THEMEO[] = { { "noir", "Black and gold" }, { "classic", "Classic" } };
+static const Opt THEMEO[] = { { "noir", "Modern" }, { "classic", "Classic" } };
+static const Opt TONEO[] = { { "black", "Black" }, { "graphite", "Graphite" }, { "midnight", "Midnight" } };
+static const Opt CORNERO[] = { { "round", "Round" }, { "soft", "Soft" }, { "square", "Square" } };
 static const Opt ACCENT_OPTS[] = { { "logo", "From the logo" }, { "adaptive", "From the artwork" }, { "purple", "Purple" }, { "violet", "Violet" }, { "fuchsia", "Fuchsia" }, { "pink", "Pink" }, { "rose", "Rose" }, { "red", "Red" }, { "orange", "Orange" }, { "amber", "Amber" }, { "gold", "Gold" }, { "lime", "Lime" }, { "green", "Green" }, { "emerald", "Emerald" }, { "teal", "Teal" }, { "cyan", "Cyan" }, { "sky", "Sky" }, { "blue", "Blue" }, { "indigo", "Indigo" }, { "graphite", "Graphite" } };
 #define NCAT 11
 #define MAXROWS 48
-static Setting playBase[13], playS[14], subsBase[18], subsS[18], audS[6], lookS[7], langS[3], keyS[4], addonS[40], acctS[1], supS[8], picS[5], accS[8];
+static Setting playBase[15], playS[16], subsBase[18], subsS[18], audS[6], lookS[9], langS[3], keyS[4], addonS[40], acctS[1], supS[8], picS[6], accS[8];
 static Cat cats[NCAT]; static int ncat; /* (Keys leaves when this build carries every key) */
 static int cat_of(const Setting *opts) { for (int i = 0; i < ncat; i++) if (cats[i].opts == opts) return i; return -1; }
 
@@ -171,9 +174,9 @@ static int about_opts(void) {
 }
 /* Reset all settings: the keys of the settings (and the small choices made on the way: keyboard, sort, picture shape)
    removed, so each reads its default again. Not touched: the account, library, addons, keys, the app's language. */
-static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "betaUpdates", "theme", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
+static const char *const RESET_KEYS[] = { "accent", "animeAudioTrack", "betaUpdates", "theme", "themeTone", "cardCorner", "appIcon", "aspectMode", "autoBest", "bestRow", "bgTrailer", "bgTrailerVol",
   "bingeWatch", "enableNextVideo", "blurUnseen", "clockFmt", "defaultAudioTrack", "dtsMode", "audioPassthrough", "dv7Convert", "enableDefaultAudioTrack", "homeRows",
-  "metaLang", "nerdStats", "searchKnownOnly", "seekStep", "skipIntro", "skipShowSec", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
+  "metaLang", "nerdStats", "cleanSources", "filmEnhance", "gpuUpscale", "searchKnownOnly", "seekStep", "skipIntro", "skipShowSec", "ssDelay", "subsAssStyle", "subsAuto", "subsBgStyle", "subsBold", "subsColor",
   "subsFollow", "subsFont", "subsLang", "subsOutline", "subsOutlineColor", "subsOutlineWidth", "subsPos", "subsShadow", "subsShadowDist",
   "subsShadowSoft", "subsShadowStrength", "subtitleSize", "uiSound", "uiSoundVol", "reduceMotion", "animeEnhance", "brightBoost", "darkSee", "voiceClear", "evenVolume", "subsNoSdh", "kbLang", "libSort", NULL };
 static void enter(const void *p); static void show_cat(int i, int dir);
@@ -191,6 +194,10 @@ static void play_layout(void) {
   int on = strcmp(store_get("bgTrailer", "true"), "false") != 0, n = 0;
   playS[n++] = playBase[4]; /* the best stream first */
   playS[n++] = playBase[9];
+  playS[n++] = playBase[13]; /* what the addons list, cleaned */
+#ifdef SB_ANDROID
+  playS[n++] = playBase[14]; /* the picture through the graphics chip */
+#endif
   for (int i = 0; i < 4; i++) { playS[n++] = playBase[i]; if (i == 1) { playS[n++] = playBase[8]; playS[n++] = playBase[12]; playS[n++] = playBase[10]; } }
   playS[n++] = playBase[11]; /* what Search shows */
   if (on) playS[n++] = playBase[6];
@@ -229,6 +236,8 @@ static void build(void) {
   set_s(&playBase[4], "autoBest", "Play the best stream automatically", "", OO, 2, "false");
   set_s(&playBase[7], "dv7Convert", "Dolby Vision for Blu-ray copies", "Their picture is converted on this TV so it shows in Dolby Vision, not HDR10", OO, 2, "true");
   set_s(&playBase[9], "bestRow", "Best match for this TV", "First in the streams: what this TV plays best, in the title’s own language, subtitles named", OO, 2, "true");
+  set_s(&playBase[14], "gpuUpscale", "Upscale films and series", "Each frame redrawn by the graphics chip: lower resolutions brought up to 1080p and detail sharpened where the picture allows. HD and below; HDR and 4K stay as they are", GUPL, 4, "off");
+  set_s(&playBase[13], "cleanSources", "Clean sources", "Leaves out programs, archives and fake files, and sources of another episode than the one you opened", OO, 2, "true");
   set_s(&playBase[11], "searchKnownOnly", "Search well-known services only", "Results are films and series on Netflix, Prime Video, Disney+ and the like", OO, 2, "true");
   set_s(&playBase[10], "blurUnseen", "Blur unwatched episodes", "Their pictures stay blurred and their stories hidden until you watch them: no spoilers", OO, 2, "false");
   set_s(&playBase[12], "skipShowSec", "Skip button time", "How long the Skip button stays before it goes by itself", SEEK, 5, "10");
@@ -260,6 +269,7 @@ static void build(void) {
   set_s(&audS[3], "uiSound", "Interface sounds", "A soft click as you move between titles", OO, 2, "true");
   set_s(&audS[4], "uiSoundVol", "Interface sound level", "Of the TV\xe2\x80\x99s volume", SVOL, 10, "30");
   set_s(&picS[0], "animeEnhance", "Anime upscale", "Anime only: the TV's Super Resolution, gradation and line work tuned for drawn pictures on the way to 4K. Also on a button in the player", UPL, 4, "A");
+  set_s(&picS[5], "filmEnhance", "Upscale films and series", "The TV's own AI upscaler (Super Resolution) at this strength, with its sharpness and edge enhancer: the picture rebuilt on the way to 4K", UPL, 4, "off");
   set_s(&picS[1], "brightBoost", "Brightness", "The screen's light raised while you watch, energy saving off", OO, 2, "false");
   set_s(&picS[2], "darkSee", "See in the dark", "Dark scenes clearer in a bright room: the TV's AI brightness for dark areas and a slight lift of black", OO, 2, "false");
   set_s(&picS[3], "voiceClear", "Clear voice", "Speech clearer through the TV's own dialogue enhancer; stereo and Atmos stay as they are", OO, 2, "true");
@@ -270,7 +280,9 @@ static void build(void) {
     set_s(&audS[i], "audioPassthrough", "Dolby and DTS to a sound bar", "On: sent as they are to a sound bar or receiver (HDMI eARC). Off: the TV decodes them, sound from any speakers", OO, 2, "false");
 #endif
   set_s(&lookS[0], "accent", "Accent colour", "Dynamic: the colours of the title you open", ACCENT_OPTS, 20, UI_NOIR ? "gold" : "logo"); /* first, right under its picture */
-  set_s(&lookS[6], "theme", "Theme", "Black and gold, or the classic purple glass", THEMEO, 2, "noir");
+  set_s(&lookS[6], "theme", "Theme", "Modern: black and gold, flat and light. Classic: the purple glass", THEMEO, 2, "noir");
+  set_s(&lookS[7], "themeTone", "Background", "The Modern theme's pages: pure black, graphite grey or midnight blue", TONEO, 3, "black");
+  set_s(&lookS[8], "cardCorner", "Card corners", "Posters and pictures: round, soft or square", CORNERO, 3, "round");
   set_s(&lookS[1], "ssDelay", "Screensaver", "After a while without a key, the titles of the moment fill the screen", SS_OPTS, 5, "5");
   set_s(&lookS[2], "clockFmt", "Clock", "The time at the top of the screens and when a film ends", CLOCKO, 2, "12");
   set_s(&lookS[4], "appIcon", "App icon", "On the start screen and in About", APPICON, 2, "origin");
@@ -291,8 +303,8 @@ static void build(void) {
     { "Watch", "Playback", "set_play", "Best match, seek step, next episode, skip intro", NULL, playS, 8, 0 }, /* (the count: play_layout) */
     { "Watch", "Subtitles", "set_subs", "Automatic, in sync, sound descriptions, language, size, font, outline, shadow, height", "subs", subsS, 18, 0 }, /* (the count: subs_layout) */
     { "Watch", "Audio", "set_aud", "Audio language, anime, Dolby and DTS, interface sounds", NULL, audS, naud, 0 },
-    { "Watch", "Picture and sound", "p_asp", "Anime upscale, brightness, see in the dark, clear voice. Needs Homebrew Channel root", NULL, picS, 5, 0 },
-    { "Screens", "Appearance", "set_look", "Theme, accent colour, app icon, clock, catalogs on Home, motion", "look", lookS, 7, 0 },
+    { "Watch", "Picture and sound", "p_asp", "Upscale, brightness, see in the dark, clear voice. Needs Homebrew Channel root", NULL, picS, 6, 0 },
+    { "Screens", "Appearance", "set_look", "Theme, background, accent colour, corners, app icon, clock, motion", "look", lookS, 9, 0 },
     { "Screens", "Language", "set_lang", "The app, and titles and descriptions", NULL, langS, nl, 0 },
     { "Account and system", "Accounts", "set_acct", "Switch between your Stremio accounts on this TV", NULL, accS, nacc, 0 },
     { "Account and system", "Addons", "set_addon", "", NULL, addonS, na, 0 },
@@ -351,7 +363,7 @@ int settings_apply_pref(const char *k, const char *v) {
   if (!strcmp(k, "bgTrailer")) play_layout();
   if (!strcmp(k, "subsOutline") || !strcmp(k, "subsShadow")) subs_layout();
   if (!strcmp(k, "accent")) accent_apply();
-  if (!strcmp(k, "theme")) { theme_apply(); accent_apply(); }
+  if (!strcmp(k, "theme") || !strcmp(k, "themeTone") || !strcmp(k, "cardCorner")) { theme_apply(); accent_apply(); }
   if (!strcmp(k, "homeRows")) app_refresh_boards();
   if (!strcmp(k, "metaLang")) board_invalidate(); /* the cards' names again, in the new language */ /* (Home and Discover share the catalogs out again) */
   return 1;
@@ -390,7 +402,7 @@ static void set_val(Setting *o, const char *v, int dir) {
   if (!strncmp(o->k, "adOn_", 5)) { board_invalidate(); { int a = cat_of(addonS); if (a >= 0) cats[a].n = addon_opts(); } return; } /* an addon on/off here: rows, metadata and streams follow */
   if (!strcmp(o->k, "bingeWatch")) store_set("enableNextVideo", v);
   if (!strcmp(o->k, "accent")) accent_apply();
-  if (!strcmp(o->k, "theme")) { theme_apply(); accent_apply(); }
+  if (!strcmp(o->k, "theme") || !strcmp(o->k, "themeTone") || !strcmp(o->k, "cardCorner")) { theme_apply(); accent_apply(); board_invalidate(); }
   if (!strcmp(o->k, "betaUpdates")) update_check(1); /* on or off: what is offered now */
   if (!strcmp(o->k, "homeRows")) app_refresh_boards(); /* Home and Discover share the catalogs out again */
   if (!strcmp(o->k, "metaLang")) board_invalidate(); /* the cards' names again, in the new language */

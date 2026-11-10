@@ -16,22 +16,22 @@
       "fullDescriptionUrl": "apps/tv.stremioorigin.app/full_description.html",
       "manifest": {
         "id": "tv.stremioorigin.app",
-        "version": "2.0.1",
+        "version": "2.1.0",
         "type": "native",
         "title": "Stremio Origin",
         "appDescription": "Your own Stremio account and addons on your LG TV, in English or Arabic: artwork and full-screen trailers, the best stream in one press, styled subtitles, clean search. Unofficial.",
         "iconUri": "https://slvjtr1.github.io/stremio-origin-fork/icon.png",
         "sourceUrl": "https://github.com/slvjtr1/stremio-origin-fork",
         "rootRequired": false,
-        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v2.0.1/tv.stremioorigin.app_2.0.1_arm.ipk",
+        "ipkUrl": "https://github.com/slvjtr1/stremio-origin-fork/releases/download/v2.1.0/tv.stremioorigin.app_2.1.0_arm.ipk",
         "ipkHash": {
-          "sha256": "66069248d1c79028f5babe8163885482df58c1b2563672989b8d1a454852d320"
+          "sha256": "28e4ea6458f66ec068e918e6929cc0a7f572871ddf3abc9edef3054166070cfc"
         },
         "notes": [
-          "Stremio Origin 2.0 Ultra: A major update: a second player, voice search and the film's own frame rate on Google TV, faster addons everywhere.",
-          "Every film plays: On Google TV, VLC takes over by itself for any file, picture or sound the TV can't play: from the same point, your language kept.",
-          "Search by voice: On Google TV, press Search on your remote in Search, or the microphone key, and say a title in English or Arabic.",
-          "Picture in step, sound everywhere: The screen follows the film's frame rate when Match content frame rate allows it. Dolby and DTS sound from any speakers."
+          "A new look: Modern: Black and gold, flat and light, with new line icons and the tabs across the top. Classic stays in Settings, Appearance, Theme.",
+          "The right episode, clean sources: Fake files, programs and sources of another episode are left out, and a pack plays the episode you opened.",
+          "Play starts sooner: The best stream is chosen as soon as a good one is there, addons answer side by side, and a real upscale joins Settings.",
+          "Safer and lighter: A smaller app that keeps to itself on your network, and takes its updates only from this project."
         ]
       }
     }

@@ -1,5 +1,6 @@
 #include "platform/plat.h"
 #include "platform/mem.h"
+#include "core/srcfilter.h"
 #include "core/p2p.h"
 #include "core/sbengine.h"
 #include "core/store.h"
@@ -70,7 +71,7 @@ static const char *loc_name(int l) { return l == LOC_FLASH ? "flash" : l == LOC_
 static int relocating; static volatile int relocReady; static Prof relocTo; static double relocAt, relocLook; static unsigned relocSerial;
 
 /* the one torrent being resolved / played */
-static struct { int on; char ih[41], magnet[4096]; int want; uint32_t idx; uint64_t size; double t0; P2pCb cb; void *ud; char status[256]; int stage; } R;
+static struct { int on; char ih[41], magnet[4096]; int want, se, ep; uint32_t idx; uint64_t size; double t0; P2pCb cb; void *ud; char status[256]; int stage; } R;
 /* the active one, for stats, pacing and the reason line */
 static struct { char ih[41]; uint64_t size, lastBytes; double lastT, rate, dur, bps; int calm, gentle, playedOnce; double startT0, stallT0, lastWatch, lastReason, reasonLogT, lastReport; int reasonKind; char reason[200]; } A;
 
@@ -316,6 +317,7 @@ void p2p_resolve(const char *url, P2pCb cb, void *ud) {
   p += 40; R.want = -1; if (*p == '/') { p++; if (isdigit((unsigned char)*p)) R.want = atoi(p); }
   int m = snprintf(R.magnet, sizeof R.magnet, "magnet:?xt=urn:btih:%s", R.ih);
   const char *q = strchr(url, '?');
+  { const char *e = q ? strstr(q, "?se=") : NULL; if (!e && q) e = strstr(q, "&se="); if (e && sscanf(e + 4, "%d.%d", &R.se, &R.ep) != 2) R.se = R.ep = 0; } /* the episode opened (Clean sources) */
   while (q && (q = strstr(q, "tr=")) && m < (int)sizeof R.magnet - 600) { /* the addon's own trackers first (already encoded) */
     q += 3; const char *e = strchr(q, '&'); int l = e ? (int)(e - q) : (int)strlen(q);
     char dec[512]; int k = 0; for (int i = 0; i < l && k < 511; i++) { if (q[i] == '%' && i + 2 < l) { dec[k++] = (char)(hexval(q[i + 1]) * 16 + hexval(q[i + 2])); i += 2; } else dec[k++] = q[i]; } dec[k] = 0;
@@ -331,16 +333,31 @@ void p2p_resolve(const char *url, P2pCb cb, void *ud) {
 void p2p_cancel(void) { if (!R.on) return; R.on = 0; R.status[0] = 0; R.cb = NULL; if (E && ENG() == ENG_ON) E->remove(R.ih); idleSince = now_s(); }
 const char *p2p_status(void) { return R.on ? R.status : ""; }
 
-static int is_video(const char *n) { const char *d = strrchr(n, '.'); if (!d) return 0; static const char *ext[] = { ".mp4", ".mkv", ".avi", ".ts", ".m4v", ".webm", ".mov" };
-  for (unsigned i = 0; i < sizeof ext / sizeof *ext; i++) if (!strcasecmp(d, ext[i])) return 1; return 0; }
-/* the requested file when it is a video, else the largest video, else the largest file */
+static int is_video(const char *n) { return src_is_video(n); }
+/* The file to play. An episode asked for (R.se, R.ep): the pack's file that names it, whatever index the addon gave
+   (an index is believed unless its file names another episode and one other names this one). A film: the index when
+   it is a video, else the largest video. Never a program or an archive; -1: nothing here is what was asked, -2: no video */
 static int pick_file(const sbe_file *f, int n, int want) {
+  int nv = 0, big = -1; uint64_t mx = 0;
+  for (int i = 0; i < n; i++) if (is_video(f[i].path)) { nv++; if (f[i].size > mx) { mx = f[i].size; big = i; } }
+  if (!nv) { int b = 0; mx = 0; for (int i = 0; i < n; i++) if (f[i].size > mx) { mx = f[i].size; b = i; } /* (a container the list above does not know: still tried, unless it is a program or an archive) */
+    return n > 0 && !src_is_harmful(f[b].path) ? b : -2; }
+  if (R.se > 0 && nv > 1) {
+    int exact = -1, ne = 0, loose = -1, nl = 0; uint64_t es = 0;
+    for (int i = 0; i < n; i++) { if (!is_video(f[i].path) || f[i].size < (8u << 20)) continue;
+      int v = src_episode_verdict(f[i].path, R.se, R.ep);
+      if (v > 0) { ne++; if (f[i].size > es) { es = f[i].size; exact = i; } } /* (two cuts of it: the larger) */
+      else if (!v && src_episode_loose(f[i].path, R.se, R.ep)) { nl++; loose = i; } }
+    int wv = want >= 0 && want < n && is_video(f[want].path) ? src_episode_verdict(f[want].path, R.se, R.ep) : -2;
+    if (wv == 1 || (wv == 0 && !ne)) return want; /* the addon's file, and nothing says it is another episode */
+    if (ne) return exact;
+    if (nl == 1) return loose;
+    if (want < 0 && !nl && src_episode_verdict(f[big].path, R.se, R.ep) >= 0) return big; /* nothing is numbered: the largest, as before */
+    return -1; /* a pack of other episodes: never one of them in its place */
+  }
   if (want >= 0 && want < n && is_video(f[want].path)) return want;
-  if (want >= 0) { int nv = 0; for (int i = 0; i < n; i++) nv += is_video(f[i].path); if (nv > 1) return -1; } /* a pack without the file asked for: never another episode in its place */
-  int best = -1; uint64_t mx = 0; for (int i = 0; i < n; i++) if (is_video(f[i].path) && f[i].size > mx) { mx = f[i].size; best = i; }
-  if (best >= 0) return best;
-  best = 0; mx = 0; for (int i = 0; i < n; i++) if (f[i].size > mx) { mx = f[i].size; best = i; }
-  return best;
+  if (want >= 0 && nv > 1) return -1; /* a pack without the file asked for: never another one in its place */
+  return big;
 }
 static void fmt_rate(double b, char *o, size_t n) { char v[16];
   if (b >= 1e6) { snprintf(v, sizeof v, "%.1f", b / 1e6); snprintf(o, n, "%s", T1("{n} MB/s", "n", v)); }
@@ -464,7 +481,8 @@ void p2p_pump(void) {
     if (n < 0) return; /* no file list yet: it keeps looking, the line says so */
     if (n > 512) n = 512;
     int idx = pick_file(files, n, R.want);
-    if (idx < 0) { fprintf(stderr, "[p2p] %s: file #%d is not a video of this torrent's %d file(s)\n", R.ih, R.want, n); E->remove(R.ih); fail(T("The file isn’t in this torrent pack")); return; }
+    if (idx < 0) { fprintf(stderr, "[p2p] %s: file #%d / episode %dx%02d is not among this torrent's %d file(s)%s\n", R.ih, R.want, R.se, R.ep, n, idx == -2 ? " (no video at all)" : ""); E->remove(R.ih); fail(idx == -2 ? T("This torrent has no video in it") : T("The file isn’t in this torrent pack")); return; }
+    if (R.want >= 0 && idx != R.want) fprintf(stderr, "[p2p] %s: file #%d names another episode, #%d is %dx%02d\n", R.ih, R.want, idx, R.se, R.ep);
     R.idx = (uint32_t)idx; R.size = files[idx].size; R.stage = 2;
     snprintf(A.ih, sizeof A.ih, "%s", R.ih); A.size = R.size; A.lastWatch = 0;
     { double est = (double)R.size / 5400.0; if (est < 0.4 * MB) est = 0.4 * MB; if (est > 6.0 * MB) est = 6.0 * MB; window_follow(est); } /* a guess from the size (a 90-minute film) until the player knows the length */

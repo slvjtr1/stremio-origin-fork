@@ -35,6 +35,13 @@
 
 #define UPD_GH "https://api.github.com/repos/slvjtr1/stremio-origin-fork/releases?per_page=8" /* this build's own releases */
 #define UPD_MAN "https://slvjtr1.github.io/stremio-origin-fork/api/apps/" SB_APP_ID "/manifest.json" /* the site's Homebrew manifest: when GitHub does not answer */
+/* a package comes from this project's own releases or site, over https, and from nowhere else (whatever a listing says) */
+static int own_url(const char *u) {
+  if (getenv("SB_UPD_GH") || getenv("SB_UPD_MAN")) return 1; /* development: a local stand-in */
+  static const char *const OK[] = { "https://github.com/slvjtr1/stremio-origin-fork/releases/download/", SB_SITE_URL "/" };
+  for (unsigned i = 0; i < sizeof OK / sizeof *OK; i++) if (!strncmp(u, OK[i], strlen(OK[i]))) return !strstr(u, "/../") && !strchr(u, '@');
+  return 0;
+}
 typedef struct { char ver[24], url[512], sha[72]; char notes[5][256]; int nnotes, beta; } Rel; /* beta: a GitHub pre-release (only with Settings › About › Beta updates on) */
 static struct {
   char cur[24], appinfo[1200]; int read; Rel avail; int has, state; char msg[240]; unsigned serial;
@@ -145,7 +152,7 @@ static void on_manifest(int st, const unsigned char *body, size_t len, void *ud)
   cJSON *v = cJSON_GetObjectItemCaseSensitive(m, "version"), *u = cJSON_GetObjectItemCaseSensitive(m, "ipkUrl"), *h = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(m, "ipkHash"), "sha256");
   if (cJSON_IsString(v) && cJSON_IsString(u) && cJSON_IsString(h) && *v->valuestring && *u->valuestring && *h->valuestring) {
     size_t ul = strlen(u->valuestring);
-    if (ul > 8 && !strcmp(u->valuestring + ul - 8, "_arm.ipk")) { /* the listing may name another build under the same id: only this package's kind */
+    if (ul > 8 && !strcmp(u->valuestring + ul - 8, "_arm.ipk") && own_url(u->valuestring)) { /* the listing may name another build under the same id: only this package's kind */
       ok = 1; snprintf(r.ver, sizeof r.ver, "%s", v->valuestring); snprintf(r.url, sizeof r.url, "%s", u->valuestring); snprintf(r.sha, sizeof r.sha, "%s", h->valuestring);
       cJSON *ns = cJSON_GetObjectItemCaseSensitive(m, "notes"), *x;
       if (cJSON_IsArray(ns)) { cJSON_ArrayForEach(x, ns) if (r.nnotes < 5 && cJSON_IsString(x)) snprintf(r.notes[r.nnotes++], 256, "%s", x->valuestring); }
@@ -170,6 +177,7 @@ static void on_releases(int st, const unsigned char *body, size_t len, void *ud)
       if (strncmp(n, pre, pl) || sscanf(n + pl, "%d.%d.%d%n", &x, &y, &z, &used) != 3 || strcmp(n + pl + used, PKG_SUF)) continue; /* ^<appid>_(\d+\.\d+\.\d+)_arm\.ipk$ */
       { const char *q = n + pl; for (int i = 0; i < used; i++) if (!((q[i] >= '0' && q[i] <= '9') || q[i] == '.')) used = -1; if (used < 0) continue; }
       if (strncmp(dg->valuestring, "sha256:", 7) || !is_hex64(dg->valuestring + 7)) continue;
+      if (!own_url(du->valuestring)) continue;
       char ver[24]; snprintf(ver, sizeof ver, "%.*s", used, n + pl);
       if (has && ver_cmp(ver, best.ver) <= 0) continue;
       memset(&best, 0, sizeof best); has = 1; best.beta = isPre; snprintf(best.ver, sizeof best.ver, "%s", ver); snprintf(best.url, sizeof best.url, "%s", du->valuestring); snprintf(best.sha, sizeof best.sha, "%s", dg->valuestring + 7);

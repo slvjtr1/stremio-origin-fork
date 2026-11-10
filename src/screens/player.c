@@ -909,7 +909,7 @@ void player_chapters(const char *url, const PlayerChapter *list, int n) {
 }
 
 /* ---- buttons ---- */
-static void up_label(char *o, size_t cap) { const char *lv = tvtune_level(is_anime()); if (!strcmp(lv, "off")) snprintf(o, cap, "%s", T(is_anime() ? "Anime upscale off" : "Upscale off")); else snprintf(o, cap, "%s", T1(is_anime() ? "Anime upscale {l}" : "Upscale {l}", "l", lv)); }
+static void up_label(char *o, size_t cap) { const char *lv = tvtune_level(is_anime()); if (!strcmp(lv, "off")) snprintf(o, cap, "%s", T(is_anime() ? "Anime upscale off" : "Upscale off")); else snprintf(o, cap, "%s", T1(is_anime() ? "Anime upscale: {l}" : "Upscale: {l}", "l", T(!strcmp(lv, "A") ? "High" : !strcmp(lv, "B") ? "Medium" : "Low"))); }
 static int up_index(void) { const char *lv = tvtune_level(is_anime()); return !strcmp(lv, "A") ? 3 : !strcmp(lv, "B") ? 2 : !strcmp(lv, "C") ? 1 : 0; }
 static int btn_index(const char *id);
 static void next_up(void) {
@@ -928,7 +928,7 @@ static void build_btns(void) {
   if (P.isTrailer) { if (trSubsN) B("cc", "p_subs", T("Subtitles"), 0); } /* a trailer's captions: one press on, one off */
   else B("subs", "p_subs", T("Subtitles"), 0);
   if (!P.isTrailer) B("aud", "p_aud", T("Audio"), 0);
-  if (!P.isTrailer && is_anime() && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
+  if (!P.isTrailer && tvtune_state() != 0) { char ul[48]; up_label(ul, sizeof ul); B("up", "g_spark", ul, 0); } /* the TV's upscale, one press per level (hidden where the TV can't be tuned) */
   const char *am = !strcmp(P.aspect, "fill") ? "Fill the screen" : !strcmp(P.aspect, "zoom") ? "Zoom" : "Original"; B("asp", "p_asp", T(am), 0);
   #undef B
   P.nbtn = i; if (P.bIdx >= i) P.bIdx = 0; if (fid) for (int k = 0; k < i; k++) if (!strcmp(P.btns[k].id, fid)) P.bIdx = k;
@@ -1760,7 +1760,7 @@ void player_choose_best(const char *type, const char *id, const char *vid) {
   bestTok = best_choose(type, P.vid, best_dur(P.meta, type), on_best_status, on_best_done, (void *)(uintptr_t)bestSess);
 }
 void player_play(const Stream *s, const char *type, const char *id, const char *vid, int fromStart) { open_title(type, id); play_stream(s, vid, fromStart ? -1 : 0); }
-/* ---- cast (core/castlink.c): a phone plays a stream here and drives it ---- */
+/* ---- a stream opened with its own subtitles, pictures or position ---- */
 void player_next_subs(const char *const *urls, const char *const *langs, int n) {
   memset(castSubs, 0, sizeof castSubs); if (n > 16) n = 16;
   for (int i = 0; i < n; i++) { SubEntry *e = &castSubs[i]; snprintf(e->url, sizeof e->url, "%s", urls[i]); snprintf(e->lang, sizeof e->lang, "%s", langs[i] && *langs[i] ? langs[i] : "und"); snprintf(e->name, sizeof e->name, "%s", e->lang); e->n = i + 1; e->from = SUB_STREAM; }
@@ -1769,65 +1769,6 @@ void player_next_subs(const char *const *urls, const char *const *langs, int n) 
 void player_next_art(const char *name, const char *poster, const char *bg, const char *logo) {
   snprintf(artName, sizeof artName, "%s", name ? name : ""); snprintf(artPoster, sizeof artPoster, "%s", poster ? poster : ""); snprintf(artBg, sizeof artBg, "%s", bg ? bg : ""); snprintf(artLogo, sizeof artLogo, "%s", logo ? logo : ""); }
 void player_play_at(const Stream *s, const char *type, const char *id, const char *vid, double pos) { open_title(type, id); play_stream(s, vid, pos > 0 ? pos : 0); }
-void player_cast(int cmd, double pos) {
-  if (!P.open || P.closing) return;
-  if (cmd == 1 && !paused()) { video_pause(); save_progress(1); } else if (cmd == 2 && paused()) video_play();
-  else if (cmd == 3 && P.live) video_seek(pos < 0 ? 0 : pos); else if (cmd == 4) close_player(0, 0);
-}
-/* the subtitles and audio as the trays list them, for a phone: ids it hands back as they are ("off", "emb:<track>",
-   "ext1:<n>" the stream's and OpenSubtitles', "ext2:<n>" the addons', audio "<track>" or "conv:<n>" a converted one) */
-char *player_cast_tracks(void) {
-  if (!P.open || P.closing) return NULL;
-  cJSON *j = cJSON_CreateObject(), *sl = cJSON_AddArrayToObject(j, "subs"), *al = cJSON_AddArrayToObject(j, "audio"); char id[48], lb[200];
-  cJSON_AddStringToObject(j, "t", "tracks");
-  for (int i = 0; i < P.nEmb; i++) { cJSON *o = cJSON_CreateObject(); snprintf(id, sizeof id, "emb:%d", P.emb[i].idx); emb_label(i, lb, sizeof lb);
-    cJSON_AddStringToObject(o, "id", id); cJSON_AddStringToObject(o, "label", lb); cJSON_AddStringToObject(o, "lang", P.emb[i].lang); cJSON_AddStringToObject(o, "from", T("Embedded")); cJSON_AddItemToArray(sl, o); }
-  char cur[48] = "off";
-  if (!strncmp(P.curSub, "emb:", 4)) snprintf(cur, sizeof cur, "%s", P.curSub);
-  for (int li = 1; li <= 2; li++) { const SubEntry *l = li == 1 ? P.ext : P.adx; int n = li == 1 ? P.nExt : P.nAdx;
-    for (int i = 0; i < n; i++) { const SubEntry *e = &l[i]; cJSON *o = cJSON_CreateObject(); snprintf(id, sizeof id, "ext%d:%d", li, i); const char *ln = lang_name(e->lang);
-      if (*ln) snprintf(lb, sizeof lb, "%s%s%s", ln, e->label[0] ? " · " : "", e->label); else snprintf(lb, sizeof lb, "%s", T(e->name));
-      cJSON_AddStringToObject(o, "id", id); cJSON_AddStringToObject(o, "label", lb); cJSON_AddStringToObject(o, "lang", e->lang); cJSON_AddStringToObject(o, "from", e->addon[0] ? e->addon : "OpenSubtitles"); cJSON_AddItemToArray(sl, o);
-      if (P.pick.list == li && !strncmp(P.curSub, "ext:", 4) && !strcmp(P.curSub + 4, e->url)) snprintf(cur, sizeof cur, "%s", id); } }
-  cJSON_AddStringToObject(j, "sub", cur);
-  if (P.dts.conv) { MkvAudio ma[16]; int m = mkv ? mkv_audio_tracks(mkv, ma, 16) : 0;
-    for (int i = 0; i < m; i++) { cJSON *o = cJSON_CreateObject(); snprintf(id, sizeof id, "conv:%d", i); const char *ln = lang_name(ma[i].lang); snprintf(lb, sizeof lb, "%s", *ln ? ln : ma[i].lang[0] ? ma[i].lang : T("Audio"));
-      cJSON_AddStringToObject(o, "id", id); cJSON_AddStringToObject(o, "label", lb); cJSON_AddStringToObject(o, "lang", ma[i].lang); cJSON_AddItemToArray(al, o); }
-    snprintf(id, sizeof id, "conv:%d", P.dts.convOrd); cJSON_AddStringToObject(j, "aud", id); }
-  else { VidTrack ts[16]; int n = video_audio_tracks(ts, 16), sel = P.curAud >= 0 ? P.curAud : video_audio_current();
-    for (int i = 0; i < n; i++) { cJSON *o = cJSON_CreateObject(); snprintf(id, sizeof id, "%d", ts[i].idx); const char *ln = lang_name(ts[i].lang);
-      if (*ln) snprintf(lb, sizeof lb, "%s", ln); else if (ts[i].lang[0]) snprintf(lb, sizeof lb, "%s", ts[i].lang); else snprintf(lb, sizeof lb, "%s %d", T("Audio"), i + 1);
-      if (ts[i].name[0] && strcmp(ts[i].name, lb)) { size_t L = strlen(lb); snprintf(lb + L, sizeof lb - L, " · %s", ts[i].name); }
-      cJSON_AddStringToObject(o, "id", id); cJSON_AddStringToObject(o, "label", lb); cJSON_AddStringToObject(o, "lang", ts[i].lang); cJSON_AddItemToArray(al, o); }
-    snprintf(id, sizeof id, "%d", sel); cJSON_AddStringToObject(j, "aud", id); }
-  cJSON_AddNumberToObject(j, "delay", (int)lround(P.subDelay * 1000));
-  char *s = cJSON_PrintUnformatted(j); cJSON_Delete(j); return s;
-}
-/* a phone's pick, as the trays make it: kind "sub" (id or "off"), "audio" (id), "subdelay" (ms, absolute) */
-void player_cast_track(const char *kind, const char *id, int ms) {
-  if (!P.open || P.closing) return;
-  if (!strcmp(kind, "subdelay")) { double v = ms / 1000.0; if (v > 120) v = 120; if (v < -120) v = -120; P.subDelay = fabs(v) < 1e-6 ? 0 : v; P.dlyAt = now_(); refresh_tray(4); return; }
-  if (!strcmp(kind, "sub")) {
-    if (!strcmp(id, "off")) { P.autoSubDone = 1; subs_off(); }
-    else if (!strncmp(id, "emb:", 4)) { P.autoSubDone = 1; set_emb_sub(atoi(id + 4)); }
-    else if (!strncmp(id, "ext1:", 5) || !strncmp(id, "ext2:", 5)) { int li = id[3] - '0', k = atoi(id + 5); const SubEntry *l = li == 1 ? P.ext : P.adx; int n = li == 1 ? P.nExt : P.nAdx; if (k >= 0 && k < n) { P.autoSubDone = 1; set_ext_sub(li, &l[k]); sync_auto_arm(); } }
-    refresh_tray(4); return; }
-  if (!strcmp(kind, "audio")) {
-    if (!strncmp(id, "conv:", 5)) { int ord = atoi(id + 5);
-      if (P.dts.conv == 2 && ord != P.dts.convOrd && ord >= 0) { P.dts.convOrd = ord; P.dts.conv = 1; P.dts.convAt = video_time(); P.dts.convT0 = now_();
-        int fl = conv_flags(ord); P.dts.copyA = !!(fl & HC_COPYAUDIO); video_unload(); P.live = 0; P.liveT0 = 0; hls_conv_start(P.url, ord, fl); fprintf(stderr, "[dts] audio track %d instead (phone)\n", ord); } }
-    else set_audio(atoi(id));
-    refresh_tray(3); }
-}
-int player_cast_state(double *pos, double *du, char *title, int cap) {
-  *pos = *du = 0; if (title && cap) title[0] = 0;
-  if (!P.open || P.closing) return 0;
-  if (title && cap) snprintf(title, (size_t)cap, "%s", P.name);
-  if (P.failed) return 5;
-  VidState vs = video_state(); if (!P.live) return vs == VID_ERROR ? 5 : 1;
-  *pos = video_time(); *du = dur();
-  return vs == VID_ENDED ? 4 : vs == VID_ERROR ? 5 : paused() ? 3 : vs == VID_LOADING || vs == VID_BUFFERING ? 1 : 2;
-}
 static void finish_close(void) { sync_stop(0); gfx_target_free(&handSnap); mo_set(&handA, 0); video_unload(); asssubs_close(); if (mkv) { mkv_close(mkv); mkv = NULL; } p2p_player_closed(); p2pTok++; metaTok++; P.open = 0; P.closing = 0; if (P.meta) cJSON_Delete(P.meta); P.meta = NULL; subs_free(P.cues, P.ncues); free(P.ext); free(P.adx); srcs_free(); cols_clear(); memset(&P, 0, sizeof P); sub_reset(); app_refresh_boards(); }
 static int closeNext, closeSim, closeArt; static double closeAt, closeT0; /* closeArt: closed on the loading screen (its line and words fade as the logo flies back) */
 static void close_player(int goNext, int goSim) {

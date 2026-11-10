@@ -3,23 +3,23 @@
   "items": [
     {
       "icon": "set_look",
-      "title": "Black and gold",
-      "text": "A new look on LG webOS: black pages, gold on what you select, and the tabs written across the top of the screen."
+      "title": "A new look: Modern",
+      "text": "Black and gold, flat and light, with new line icons and the tabs across the top. Classic stays in Settings, Appearance, Theme."
     },
     {
       "icon": "check",
-      "title": "Lighter and quicker",
-      "text": "Smaller to install, and less for the TV to draw: flat panels instead of blurred glass, so pages move smoothly."
+      "title": "The right episode, clean sources",
+      "text": "Fake files, programs and sources of another episode are left out, and a pack plays the episode you opened."
+    },
+    {
+      "icon": "play",
+      "title": "Play starts sooner",
+      "text": "The best stream is chosen as soon as a good one is there, addons answer side by side, and a real upscale joins Settings."
     },
     {
       "icon": "restart",
-      "title": "Beta updates",
-      "text": "Settings, About, Beta updates: try new versions before everyone. Turn it off and only the regular releases come."
-    },
-    {
-      "icon": "eye",
-      "title": "The classic look, any time",
-      "text": "Settings, Appearance, Theme brings back the purple glass whenever you want it."
+      "title": "Safer and lighter",
+      "text": "A smaller app that keeps to itself on your network, and takes its updates only from this project."
     }
   ],
   "support": {

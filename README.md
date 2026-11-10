@@ -33,7 +33,7 @@
 | **Your library, everywhere** | Library, watched episodes and Continue Watching stay in sync with your Stremio account. |
 | **Made for the remote** | Smooth focus and motion, the pointer hides when you use the arrows, and a 12-hour or 24-hour clock. |
 
-Also inside: DTS sound converted on the TV, Dolby Vision on TVs that support it, torrent playback with a buffer sized to your TV, cast and search from your phone, people and reviews on every title, and updates from inside the app.
+Also inside: DTS sound converted on the TV, Dolby Vision on TVs that support it, torrent playback with a buffer sized to your TV, people and reviews on every title, and updates from inside the app.
 
 ## Install
 

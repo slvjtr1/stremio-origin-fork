@@ -21,6 +21,7 @@ static char *read_all(const char *p, size_t *len) {
 static int write_all(const char *p, const void *data, size_t len) {
   static unsigned seq; char tmp[1240]; snprintf(tmp, sizeof tmp, "%s.%u.tmp", p, __sync_add_and_fetch(&seq, 1)); /* the writer thread and the exit flush never share one */
   FILE *f = fopen(tmp, "wb"); if (!f) return 0;
+  chmod(tmp, 0600); /* (the account key is in here: this app alone reads it) */
   size_t w = fwrite(data, 1, len, f); fclose(f);
   if (w != len) { remove(tmp); return 0; }
   return rename(tmp, p) == 0;

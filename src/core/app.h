@@ -135,9 +135,13 @@ void app_quit(void);
 int  app_quitting(void);
 
 /* the page colour */
-extern int UI_NOIR; /* the theme: 1 black and gold (the default), 0 classic (purple glass); Settings › Appearance › Theme */
+extern int UI_NOIR; /* the theme: 1 Modern (black and gold, the default), 0 Classic (purple glass); Settings › Appearance › Theme */
+extern int UI_TONE;  /* Modern's background: 0 black, 1 graphite, 2 midnight */
+extern int UI_CORNER; /* the cards' corners: 0 round, 1 soft, 2 square */
 void theme_apply(void);
-#define PAGE (UI_NOIR ? RGB(8, 8, 9) : RGB(12, 11, 17))
-/* a dark purple-tinted colour of the classic look; the black and gold one takes it neutral (same lightness, no tint) */
-#define TINT(r, g, b, a) (UI_NOIR ? RGBA(((r) + (g)) / 2, ((r) + (g)) / 2, ((r) + (g)) / 2, a) : RGBA(r, g, b, a))
+uint32_t ui_page(void);
+uint32_t ui_tint(int r, int g, int b, int a);
+#define PAGE ui_page()
+/* a dark purple-tinted colour of the classic look; Modern takes it neutral (same lightness) in its background's tone */
+#define TINT(r, g, b, a) ui_tint(r, g, b, a)
 #endif

@@ -77,7 +77,7 @@ public final class OriginVideo {
         if (p != null || act == null) return;
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(20000).setReadTimeoutMs(30000).setUserAgent("StremioOrigin/" + BuildConfig.VERSION_NAME + " (Android TV)");
-        builtPass = wantPass; final boolean pass = builtPass;
+        builtPass = wantPass; final boolean pass = builtPass; builtUp = wantUp;
         /* Dolby and DTS: by default the TV's own decoders make them sound (many Google TV sets say they take them as they
            are and then play nothing from their speakers, the film's clock held with them); passed on as they are only
            when Settings › Audio says a sound bar or receiver is there */
@@ -93,6 +93,9 @@ public final class OriginVideo {
             .setHandleAudioBecomingNoisy(true).build();
         p.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF); /* (asked here, see rate(): ExoPlayer's own asks only for a seamless change, which most TVs never make) */
         p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+        /* Upscale: the frames through the graphics chip (OriginSharp). Asked before the film is prepared; a player made
+           without it never has the extra step in its way */
+        if (builtUp > 0) { try { p.setVideoEffects(java.util.Collections.singletonList(new OriginSharp(builtUp >= 3 ? 1f : builtUp == 2 ? 0.6f : 0.25f))); } catch (Throwable t) { builtUp = 0; } }
         p.setVideoSurfaceView(view);
         p.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int s) { sync(); }
@@ -100,7 +103,9 @@ public final class OriginVideo {
             @Override public void onVideoSizeChanged(VideoSize s) { vw = s.width; vh = s.height; video(); }
             @Override public void onTracksChanged(Tracks t) { listTracks(t); video(); }
             @Override public void onPlayerError(PlaybackException e) {
-                int c = e.errorCode; /* the sound refused as it is: again at once, decoded by the TV */
+                int c = e.errorCode;
+                if (builtUp > 0) { plainHere(); return; } /* whatever went wrong with Upscale on: the same film again without it, before anything else is tried */
+                /* the sound refused as it is: again at once, decoded by the TV */
                 if (builtPass && (c == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED || c == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED)) { decodeHere(); return; }
                 /* a file or a picture or sound ExoPlayer can't read or decode here: VLC plays it, from the same point */
                 if ((c >= 3001 && c <= 3004) || (c >= 4001 && c <= 4005) || (c >= 5001 && c <= 5003) || c == PlaybackException.ERROR_CODE_UNSPECIFIED) { toVlc(e.getErrorCodeName()); return; }
@@ -155,6 +160,16 @@ public final class OriginVideo {
         p.setMediaItem(item(lastUrl)); p.prepare(); if (at > 0) p.seekTo(at); p.setPlayWhenReady(play);
         st = 1; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0;
     }
+    /* the same film again where it was, without Upscale (an HDR or 4K picture, which it leaves alone; or an error with it on) */
+    private static void plainHere() {
+        if (p == null || lastUrl == null || builtUp == 0) return;
+        long at = p.getCurrentPosition(); boolean play = p.getPlayWhenReady(); wantUp = 0;
+        p.release(); p = null; ensure(); if (p == null) return;
+        p.setMediaItem(item(lastUrl)); p.prepare(); if (at > 0) p.seekTo(at); p.setPlayWhenReady(play);
+        st = 1; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0;
+    }
+    private static volatile int wantUp; private static int builtUp;
+    public static void upscale(int level) { wantUp = level < 0 ? 0 : level > 3 ? 3 : level; }
     private static MediaItem item(String url) {
         MediaItem.Builder mi = new MediaItem.Builder().setUri(url); String u = url.toLowerCase(Locale.ROOT);
         if (u.contains(".m3u8")) mi.setMimeType(MimeTypes.APPLICATION_M3U8); else if (u.contains(".mpd")) mi.setMimeType(MimeTypes.APPLICATION_MPD);
@@ -220,6 +235,7 @@ public final class OriginVideo {
         else if (c != null && c.colorTransfer == C.COLOR_TRANSFER_ST2084) h = "HDR10";
         else if (c != null && c.colorTransfer == C.COLOR_TRANSFER_HLG) h = "HLG";
         hdr = h;
+        if (builtUp > 0 && (!"none".equals(h) || f.height > 1088 || f.width > 1920)) ui.post(OriginVideo::plainHere); /* HDR, Dolby Vision and 4K stay exactly as they are */
     }
     /* the display's refresh rate asked for the film's own (0: the TV's usual one again). Android 12 and later: also a
        change that isn't seamless, as the TV's "Match content frame rate" setting allows; Android 11: a seamless one */
@@ -238,12 +254,12 @@ public final class OriginVideo {
        opening (or none), never the last film's end or error (gate; seq: the latest call, so an older one doesn't open it) */
     private static volatile int gate, seq;
     public static void load(String url) {
-        final boolean wp = wantPass; final int my = ++seq;
+        final boolean wp = wantPass; final int my = ++seq, up = wantUp;
         vlc = false; err = ""; st = 1; vw = vh = 0; pos = dur = buf = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; gate = 1;
         ui.post(() -> {
             vlcOff(); vlcTried = false;
-            if (p != null && builtPass != wp) { p.release(); p = null; } /* (the setting changed: a player made for it) */
-            wantPass = wp; ensure();
+            if (p != null && (builtPass != wp || builtUp != up)) { p.release(); p = null; } /* (a setting changed: a player made for it) */
+            wantPass = wp; wantUp = up; ensure();
             if (p == null) { err = "PLAYER_INIT_FAILED"; st = 6; if (seq == my) gate = 0; return; }
             err = ""; st = 1; vw = vh = 0; fps = 0; hdr = ""; tracks = ""; audCur = -1; unsup = 0; view.setVisibility(View.VISIBLE);
             lastUrl = url; movedAt = android.os.SystemClock.uptimeMillis(); readyAt = 0; lastPos = -1;

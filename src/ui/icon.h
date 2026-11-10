@@ -4,6 +4,7 @@
 #define SB_ICON_H
 #include <stdint.h>
 int  icon_init(const char *assetDir);
+void icon_set_modern(int on); /* the Modern theme's line icons ("m_<name>") in place of the filled ones, where one is drawn */
 /* draws icon `name` fitted in a size x size box at (x, y) */
 void icon_draw(const char *name, float x, float y, float size, uint32_t color);
 /* the same, turned by `deg` degrees around its centre */

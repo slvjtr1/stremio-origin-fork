@@ -69,7 +69,6 @@ static void on_crash(int sig, siginfo_t *si, void *uc) {
   fflush(stderr); _exit(4);
 }
 #endif
-#include "core/castlink.h"
 #ifdef SB_ANDROID
 #include "platform/android/android.h"
 #endif
@@ -333,7 +332,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < benchCalls; i++) { gfx_rrect(40 + (i % 40) * 46, 600 + (i / 40) * 46, 40, 40, 8, RGB(160, 80, 60)); gfx_flush(); } /* many calls */
         { extern void bench_uniform(int, int, int); static int nu = -1; if (nu < 0) nu = getenv("SB_BENCHUNI") ? atoi(getenv("SB_BENCHUNI")) : 0; if (nu) { int dw, dh; SDL_GL_GetDrawableSize(win, &dw, &dh); bench_uniform(nu, dw, dh); } }
         if (getenv("SB_BENCHBIG")) for (int i = 0; i < atoi(getenv("SB_BENCHBIG")); i++) { gfx_rect(0, 0, SB_W, SB_H, RGBA(20, 20, 40, 120)); gfx_flush(); } } /* full-screen layers */
-      else { app_draw(); splash_draw(); app_clock_top(); castlink_draw(); nerds_draw(); } }
+      else { app_draw(); splash_draw(); app_clock_top(); nerds_draw(); } }
     Uint32 tB = SDL_GetTicks(); static double accTick, accDraw, accEnd, accPump; accTick += tA - tCpu0; accDraw += tB - tA;
     if (getenv("SB_STATS")) { char fs[96]; snprintf(fs, sizeof fs, "%d fps  %d calls  %d quads  %d MB", fps, gfx_draw_calls(), gfx_quads(), img_used_mb()); text_draw(fs, 1870, 1030, 22, 500, WHITE_A(120), 0, 0, ALIGN_RIGHT); }
     gfx_end();

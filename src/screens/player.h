@@ -46,8 +46,4 @@ int  player_paused(void);
 void player_next_subs(const char *const *urls, const char *const *langs, int n);
 void player_next_art(const char *name, const char *poster, const char *bg, const char *logo); /* the next play's title and pictures while its details load (a phone's) */
 void player_play_at(const Stream *s, const char *type, const char *id, const char *vid, double pos);
-void player_cast(int cmd, double pos);
-int  player_cast_state(double *pos, double *dur, char *title, int cap);
-char *player_cast_tracks(void);                               /* the subtitles and audio as a "tracks" message (malloc'd), NULL when nothing plays */
-void player_cast_track(const char *kind, const char *id, int ms); /* "sub" id|"off", "audio" id, "subdelay" ms: as a pick in the trays */   /* a film open, its picture up and paused */
 #endif
