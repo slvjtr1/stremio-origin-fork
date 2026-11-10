@@ -35,11 +35,17 @@
 
 Also inside: DTS sound converted on the TV, Dolby Vision on TVs that support it, torrent playback with a buffer sized to your TV, people and reviews on every title, and updates from inside the app.
 
+## Status
+
+- **LG webOS:** where the work is now.
+- **Google TV and Android TV:** paused for a short while. Version 2.1.0 stays available and keeps working; no new APK is being made for the moment.
+- **Lightweight (beta, LG webOS):** a simpler edition with one look and a short list of settings. To try it: Settings › About › Beta updates, then Check for updates.
+
 ## Install
 
 For LG TVs running webOS 3 and later (ARM). Tested on webOS 4.4; see [compatibility](docs/compatibility.md).
 
-**Google TV and Android TV (9 or later):** in the [Downloader](https://www.aftvnews.com/downloader/) app, enter the code **2141492**: it downloads the latest APK. Or download [`StremioOrigin-AndroidTV.apk`](https://github.com/slvjtr1/stremio-origin-fork/releases/latest/download/StremioOrigin-AndroidTV.apk) yourself. Allow installs from Downloader when Android asks.
+**Google TV and Android TV (9 or later):** in the [Downloader](https://www.aftvnews.com/downloader/) app, enter the code **2141492**: it downloads the latest APK (2.1.0 while Android work is paused). Or download [`StremioOrigin-AndroidTV.apk`](https://github.com/slvjtr1/stremio-origin-fork/releases/latest/download/StremioOrigin-AndroidTV.apk) yourself. Allow installs from Downloader when Android asks.
 
 **Homebrew Channel (rooted TVs):** add the repository `https://slvjtr1.github.io/stremio-origin-fork/apps.json`, then install Stremio Origin.
 
@@ -66,7 +72,7 @@ New versions install from inside the app: **Settings › About**. Everything els
 
 ```sh
 tools/build.sh webos        # the app
-tools/release.sh 1.2.0      # version, package and checksum in dist/, the site's Homebrew files in docs/
+tools/release.sh X.Y.Z      # version, package and checksum in dist/, the site's Homebrew files in docs/
 ```
 
 ## Credits
